@@ -1,40 +1,50 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import { createClient } from "@supabase/supabase-js";
 
-// ─── DESIGN SYSTEM S10 ────────────────────────────────────────────────────────
-// Inter only. 800 for impact, 600 for structure, 400 for body.
-// Light theme. Lime accent is surgical — one place only.
-// Responsive-first: every layout built for 390px iPhone, scales up.
-// Removed: SVG illustrations (unclear), mixed fonts.
-// Added: Start/End session button, auto rest timers, full responsive.
+// ─── SUPABASE ────────────────────────────────────────────────────────────────
+const SB_URL = import.meta.env.VITE_SUPABASE_URL || "";
+const SB_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || "";
+const sb = SB_URL && SB_KEY ? createClient(SB_URL, SB_KEY) : null;
+const USER_ID = "mascaptain";
 
-const T = {
-  bg: "#F9F9F7",
-  bgDeep: "#F0F0ED",
-  card: "#FFFFFF",
-  ink: "#0A0A09",
-  ink2: "#222220",
-  muted: "#6E6E6A",
-  muted2: "#AEAEA8",
-  border: "#E8E8E4",
-  lime: "#CAFF00",
-  limeDark: "#A8D400",
-  limeBg: "#F4FFB8",
-  green: "#15803D",
-  greenBg: "#F0FDF4",
-  greenBorder: "#86EFAC",
-  orange: "#C2410C",
-  orangeBg: "#FFF7ED",
-  orangeBorder: "#FDBA74",
-  red: "#B91C1C",
-  redBg: "#FEF2F2",
-  blue: "#1D4ED8",
-  shadow: "0 1px 3px rgba(0,0,0,.06), 0 4px 12px rgba(0,0,0,.04)",
-  shadowMd: "0 4px 16px rgba(0,0,0,.08), 0 1px 4px rgba(0,0,0,.04)",
-  shadowLg: "0 8px 32px rgba(0,0,0,.12), 0 2px 8px rgba(0,0,0,.04)",
-  streak: "#D97706",
+// ─── DESIGN TOKENS ───────────────────────────────────────────────────────────
+// Apple Fitness+ dark-first. One accent. No gradients. No decorations.
+const C = {
+  bg:         "#000000",
+  surface:    "#0A0A0A",
+  surface2:   "#111111",
+  surface3:   "#1A1A1A",
+  border:     "#1F1F1F",
+  border2:    "#2A2A2A",
+  ink:        "#FFFFFF",
+  ink80:      "rgba(255,255,255,.80)",
+  ink48:      "rgba(255,255,255,.48)",
+  ink24:      "rgba(255,255,255,.24)",
+  ink12:      "rgba(255,255,255,.12)",
+  accent:     "#0A84FF",   // Apple blue on dark
+  accentDim:  "rgba(10,132,255,.15)",
+  lime:       "#A3E635",   // PH brand — used ONE place only (active day dot)
+  green:      "#30D158",   // Apple green
+  greenDim:   "rgba(48,209,88,.12)",
+  red:        "#FF453A",   // Apple red
+  redDim:     "rgba(255,69,58,.12)",
+  orange:     "#FF9F0A",
+  orangeDim:  "rgba(255,159,10,.12)",
 };
 
-// ─── BASE DATA ────────────────────────────────────────────────────────────────
+// ─── TYPOGRAPHY ──────────────────────────────────────────────────────────────
+// SF Pro Display via system-ui — exact Apple weights: 300/400/600/700
+// No weight 500. Body at 17px. Display at 28–40px with -0.02em spacing.
+const F = "system-ui, -apple-system, 'SF Pro Display', sans-serif";
+
+// ─── EASING ──────────────────────────────────────────────────────────────────
+const EASE_OUT  = "cubic-bezier(0.23, 1, 0.32, 1)";
+const EASE_DRAWER = "cubic-bezier(0.32, 0.72, 0, 1)";
+const T_FAST    = "150ms";
+const T_MED     = "220ms";
+const T_DRAWER  = "340ms";
+
+// ─── PROGRAM DATA ────────────────────────────────────────────────────────────
 const BASE_KG = {
   "développé couché barre": 40, "développé militaire barre": 30,
   "développé incliné haltères": 16, "développé couché haltères": 18,
@@ -47,7 +57,7 @@ const BASE_KG = {
   "clean & press": 14, "turkish get-up": 10, "curl barre": 25,
   "curl haltères": 12, "curl marteau": 12, "curl incliné": 10,
   "dips": 0, "extensions triceps": 14, "skull crusher": 18,
-  "face pull": 12, "rameur": 0, "skierg": 0, "corde": 0, "vélo": 0,
+  "face pull": 12,
 };
 function baseKg(name) {
   const n = (name || "").toLowerCase();
@@ -55,80 +65,105 @@ function baseKg(name) {
   return 15;
 }
 function calc1RM(kg, reps) {
-  if (!kg || kg === 0) return null;
+  if (!kg) return null;
   const r = parseFloat(String(reps).split("–")[0]) || 8;
   return Math.round(kg * (1 + r / 30));
 }
-function calcWarmup(kg) {
-  if (!kg || kg <= 20) return [];
-  return [
-    { pct: "50%", kg: Math.round(kg * .5 / 2.5) * 2.5, reps: 8 },
-    { pct: "70%", kg: Math.round(kg * .7 / 2.5) * 2.5, reps: 5 },
-    { pct: "90%", kg: Math.round(kg * .9 / 2.5) * 2.5, reps: 2 },
-  ];
-}
 
-const COACH_TIPS = {
-  "traction": "Descente bras tendus complète — c'est là que le muscle se développe.",
-  "développé couché": "Pause 1 sec sur la poitrine. Pas de rebond.",
-  "soulevé": "Dos neutre absolu. Barre collée aux tibias tout le long.",
-  "squat": "Sous la parallèle. Regard à 45°, pas en bas.",
-  "curl": "Coudes fixes. 3 sec à la descente.",
-  "rowing": "Rétraction omoplates avant de tirer.",
-  "militaire": "Core serré. Barre passe devant le menton.",
-  "kettlebell": "Poussée de hanches, pas un squat.",
-  "dips": "Descente lente 3 sec. Coudes derrière.",
-  "rdl": "Charnière hanche pure. Ressens l'étirement ischios.",
-};
-function getCoachTip(name) {
-  const n = (name || "").toLowerCase();
-  for (const [k, v] of Object.entries(COACH_TIPS)) { if (n.includes(k)) return v; }
-  return null;
-}
+const PROGRAM = [
+  { day: "LUN", label: "Push Force", salle: "haut", muscle: "Pecs · Épaules · Triceps", exercises: [
+    { id: "l1", name: "Développé couché barre",       sets: 5, reps: "4–5", rest: 240, muscle: "Pecs" },
+    { id: "l2", name: "Développé militaire barre",    sets: 4, reps: "5–6", rest: 180, muscle: "Épaules" },
+    { id: "l3", name: "Développé incliné haltères",   sets: 3, reps: "10–12", rest: 120, muscle: "Pecs sup" },
+    { id: "l4", name: "Élévations latérales haltères",sets: 4, reps: "12–15", rest: 75,  muscle: "Deltoïdes" },
+    { id: "l5", name: "Oiseau inversé haltères",      sets: 3, reps: "15",    rest: 60,  muscle: "Rear delt" },
+    { id: "l6", name: "Dips barres parallèles",       sets: 4, reps: "8–12", rest: 90,  muscle: "Triceps" },
+  ], abs: [{ id: "la1", name: "L-Sit dips", vol: "4×max" }, { id: "la2", name: "Crunch obliques", vol: "3×20" }] },
 
-const DEFAULT_PROGRAM = [
-  { day: "LUN", label: "Push Force", salle: "haut", muscle: "Pecs · Épaules · Triceps", exercises: [{ id: "lun1", name: "Développé couché barre", sets: 5, reps: "4–5", rest: 240, muscle: "Pecs" }, { id: "lun2", name: "Développé militaire barre", sets: 4, reps: "5–6", rest: 180, muscle: "Épaules" }, { id: "lun3", name: "Développé incliné haltères 30°", sets: 3, reps: "10–12", rest: 120, muscle: "Pecs sup" }, { id: "lun4", name: "Élévations latérales haltères", sets: 4, reps: "12–15", rest: 75, muscle: "Épaules lat" }, { id: "lun5", name: "Oiseau inversé haltères", sets: 3, reps: "15", rest: 60, muscle: "Rear delt" }, { id: "lun6", name: "Dips barres parallèles", sets: 4, reps: "8–12", rest: 90, muscle: "Triceps" }], abs: [{ id: "al1", name: "L-Sit dips", vol: "4×max" }, { id: "al2", name: "Crunch obliques", vol: "3×20" }] },
-  { day: "MAR", label: "Hybrid Circuit", salle: "bas", muscle: "Full Body · Plurima · SkiErg", exercises: [{ id: "mar1", name: "Chest press Plurima", sets: 4, reps: "12", rest: 0, muscle: "Pecs" }, { id: "mar2", name: "Lat pulldown Plurima", sets: 4, reps: "12", rest: 0, muscle: "Dos" }, { id: "mar3", name: "Rowing haltère unilatéral", sets: 4, reps: "12", rest: 90, muscle: "Dos" }, { id: "mar4", name: "Développé couché haltères", sets: 4, reps: "12", rest: 0, muscle: "Pecs" }, { id: "mar5", name: "Curl haltères alternés", sets: 4, reps: "10", rest: 0, muscle: "Biceps" }, { id: "mar6", name: "SkiErg Sprints 20/10", sets: 8, reps: "20s", rest: 10, muscle: "Cardio" }], abs: [{ id: "am1", name: "Relevé de jambes", vol: "4×15" }, { id: "am2", name: "Planche dynamique", vol: "3×10" }] },
-  { day: "MER", label: "Pull & Legs", salle: "haut", muscle: "Dos · Biceps · Jambes", exercises: [{ id: "mer1", name: "Tractions prise large", sets: 5, reps: "5–7", rest: 180, muscle: "Dos large" }, { id: "mer2", name: "Chin-up prise supination", sets: 4, reps: "6–8", rest: 150, muscle: "Dos + biceps" }, { id: "mer3", name: "Romanian Deadlift haltères", sets: 4, reps: "8–10", rest: 150, muscle: "Ischios" }, { id: "mer4", name: "Rowing haltère unilatéral", sets: 3, reps: "10–12", rest: 90, muscle: "Dos épais" }, { id: "mer5", name: "Gobelet squat kettlebell", sets: 4, reps: "12", rest: 0, muscle: "Quads" }, { id: "mer6", name: "Kettlebell Swing à deux mains", sets: 4, reps: "15", rest: 0, muscle: "Fessiers" }, { id: "mer7", name: "Curl barre EZ", sets: 4, reps: "8–10", rest: 90, muscle: "Biceps" }], abs: [{ id: "amer1", name: "Ab rollout barre", vol: "4×10" }, { id: "amer2", name: "Russian twist", vol: "3×20" }] },
+  { day: "MAR", label: "Hybrid Circuit", salle: "bas", muscle: "Full Body · Plurima · SkiErg", exercises: [
+    { id: "m1", name: "Chest press Plurima",          sets: 4, reps: "12",  rest: 0,   muscle: "Pecs" },
+    { id: "m2", name: "Lat pulldown Plurima",         sets: 4, reps: "12",  rest: 0,   muscle: "Dos" },
+    { id: "m3", name: "Rowing haltère unilatéral",    sets: 4, reps: "12",  rest: 90,  muscle: "Dos" },
+    { id: "m4", name: "Développé couché haltères",    sets: 4, reps: "12",  rest: 0,   muscle: "Pecs" },
+    { id: "m5", name: "Curl haltères alternés",       sets: 4, reps: "10",  rest: 0,   muscle: "Biceps" },
+    { id: "m6", name: "SkiErg Sprints 20/10",         sets: 8, reps: "20s", rest: 10,  muscle: "Cardio" },
+  ], abs: [{ id: "ma1", name: "Relevé de jambes", vol: "4×15" }, { id: "ma2", name: "Planche dynamique", vol: "3×10" }] },
+
+  { day: "MER", label: "Pull & Legs", salle: "haut", muscle: "Dos · Biceps · Jambes", exercises: [
+    { id: "me1", name: "Tractions prise large",        sets: 5, reps: "5–7",   rest: 180, muscle: "Dos large" },
+    { id: "me2", name: "Chin-up prise supination",     sets: 4, reps: "6–8",   rest: 150, muscle: "Dos + biceps" },
+    { id: "me3", name: "Romanian Deadlift haltères",   sets: 4, reps: "8–10",  rest: 150, muscle: "Ischios" },
+    { id: "me4", name: "Rowing haltère unilatéral",    sets: 3, reps: "10–12", rest: 90,  muscle: "Dos épais" },
+    { id: "me5", name: "Gobelet squat kettlebell",     sets: 4, reps: "12",    rest: 0,   muscle: "Quads" },
+    { id: "me6", name: "Kettlebell Swing à deux mains",sets: 4, reps: "15",    rest: 0,   muscle: "Fessiers" },
+    { id: "me7", name: "Curl barre EZ",                sets: 4, reps: "8–10",  rest: 90,  muscle: "Biceps" },
+  ], abs: [{ id: "mea1", name: "Ab rollout barre", vol: "4×10" }, { id: "mea2", name: "Russian twist", vol: "3×20" }] },
+
   { day: "JEU", label: "Repos", salle: null, muscle: "Récupération active", exercises: [], abs: [] },
-  { day: "VEN", label: "Endurance Force", salle: "bas", muscle: "Full Body · Rameur · Haltères", exercises: [{ id: "ven1", name: "Rameur Intervals 500m", sets: 4, reps: "500m", rest: 60, muscle: "Full body" }, { id: "ven2", name: "Développé couché haltères", sets: 4, reps: "12", rest: 0, muscle: "Pecs" }, { id: "ven3", name: "Rowing haltère unilatéral", sets: 4, reps: "12", rest: 0, muscle: "Dos" }, { id: "ven4", name: "Curl incliné haltères", sets: 4, reps: "10", rest: 0, muscle: "Biceps" }, { id: "ven5", name: "Élévations latérales haltères", sets: 4, reps: "15", rest: 90, muscle: "Épaules" }, { id: "ven6", name: "Corde à sauter", sets: 3, reps: "1min", rest: 0, muscle: "Cardio" }], abs: [{ id: "av1", name: "Hollow body hold", vol: "4×30s" }, { id: "av2", name: "Crunch câble", vol: "3×15" }] },
-  { day: "SAM", label: "Full Power", salle: "haut", muscle: "Deadlift · Tractions · Kettlebell", exercises: [{ id: "sam1", name: "Soulevé de terre conventionnel", sets: 5, reps: "3–5", rest: 300, muscle: "Full body" }, { id: "sam2", name: "Hip thrust barre", sets: 4, reps: "10–12", rest: 150, muscle: "Fessiers" }, { id: "sam3", name: "Tractions lestées prise large", sets: 5, reps: "4–6", rest: 180, muscle: "Dos large" }, { id: "sam4", name: "Dips barres parallèles", sets: 3, reps: "8–10", rest: 120, muscle: "Triceps" }, { id: "sam5", name: "Kettlebell Swing unilatéral", sets: 4, reps: "8/bras", rest: 0, muscle: "Fessiers" }, { id: "sam6", name: "Turkish Get-Up", sets: 4, reps: "2/côté", rest: 120, muscle: "Stabilité" }], abs: [{ id: "as1", name: "Dragon flag", vol: "4×5–8" }, { id: "as2", name: "Relevé jambes suspendu", vol: "3×12" }] },
+
+  { day: "VEN", label: "Endurance Force", salle: "bas", muscle: "Full Body · Rameur · Haltères", exercises: [
+    { id: "v1", name: "Rameur Intervals 500m",          sets: 4, reps: "500m", rest: 60, muscle: "Full body" },
+    { id: "v2", name: "Développé couché haltères",      sets: 4, reps: "12",   rest: 0,  muscle: "Pecs" },
+    { id: "v3", name: "Rowing haltère unilatéral",      sets: 4, reps: "12",   rest: 0,  muscle: "Dos" },
+    { id: "v4", name: "Curl incliné haltères",          sets: 4, reps: "10",   rest: 0,  muscle: "Biceps" },
+    { id: "v5", name: "Élévations latérales haltères",  sets: 4, reps: "15",   rest: 90, muscle: "Deltoïdes" },
+    { id: "v6", name: "Corde à sauter",                 sets: 3, reps: "1min", rest: 0,  muscle: "Cardio" },
+  ], abs: [{ id: "va1", name: "Hollow body hold", vol: "4×30s" }, { id: "va2", name: "Crunch câble", vol: "3×15" }] },
+
+  { day: "SAM", label: "Full Power", salle: "haut", muscle: "Deadlift · Tractions · Kettlebell", exercises: [
+    { id: "s1", name: "Soulevé de terre conventionnel",  sets: 5, reps: "3–5",    rest: 300, muscle: "Full body" },
+    { id: "s2", name: "Hip thrust barre",                sets: 4, reps: "10–12",  rest: 150, muscle: "Fessiers" },
+    { id: "s3", name: "Tractions lestées prise large",   sets: 5, reps: "4–6",    rest: 180, muscle: "Dos large" },
+    { id: "s4", name: "Dips barres parallèles",          sets: 3, reps: "8–10",   rest: 120, muscle: "Triceps" },
+    { id: "s5", name: "Kettlebell Swing unilatéral",     sets: 4, reps: "8/bras", rest: 0,   muscle: "Fessiers" },
+    { id: "s6", name: "Turkish Get-Up",                  sets: 4, reps: "2/côté", rest: 120, muscle: "Stabilité" },
+  ], abs: [{ id: "sa1", name: "Dragon flag", vol: "4×5–8" }, { id: "sa2", name: "Relevé jambes suspendu", vol: "3×12" }] },
+
   { day: "DIM", label: "Repos", salle: null, muscle: "Reset total", exercises: [], abs: [] },
 ];
 
 const SESSION_TYPES = [
-  { id: "full", label: "Corps entier" }, { id: "upper", label: "Haut du corps" },
-  { id: "lower", label: "Bas du corps" }, { id: "arms", label: "Bras" },
-  { id: "bw", label: "Poids de corps" }, { id: "kb", label: "Kettlebell" },
-  { id: "cardio", label: "Cardio hybride" }, { id: "strength", label: "Force pure" },
+  "Corps entier", "Haut du corps", "Bas du corps",
+  "Bras", "Poids de corps", "Kettlebell", "Cardio hybride", "Force pure",
 ];
 
-// ─── STORAGE ──────────────────────────────────────────────────────────────────
-const LS_KEY = "ph_s10";
-const lsLoad = () => { try { const v = localStorage.getItem(LS_KEY); return v ? JSON.parse(v) : {}; } catch { return {}; } };
-const lsSave = (d) => { try { localStorage.setItem(LS_KEY, JSON.stringify(d)); } catch {} };
-
-// ─── UTILS ────────────────────────────────────────────────────────────────────
+// ─── UTILS ───────────────────────────────────────────────────────────────────
 const todayKey = () => new Date().toISOString().slice(0, 10);
 const todayIdx = () => { const d = new Date().getDay(); return d === 0 ? 6 : d - 1; };
 const fmtMSS = s => `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
-const fmtDur = s => s >= 3600 ? `${Math.floor(s / 3600)}h${String(Math.floor((s % 3600) / 60)).padStart(2, "0")}m` : `${Math.floor(s / 60)}m${String(s % 60).padStart(2, "0")}s`;
+const fmtDur = s => s >= 3600 ? `${Math.floor(s/3600)}h${String(Math.floor((s%3600)/60)).padStart(2,"0")}m` : `${Math.floor(s/60)}m${String(s%60).padStart(2,"0")}s`;
 
 function beep() {
   try {
-    const c = new (window.AudioContext || window.webkitAudioContext)();
-    [0, .18, .36].forEach(d => {
-      const o = c.createOscillator(), g = c.createGain();
-      o.connect(g); g.connect(c.destination);
-      o.frequency.value = 880;
-      g.gain.setValueAtTime(.28, c.currentTime + d);
-      g.gain.exponentialRampToValueAtTime(.001, c.currentTime + d + .12);
-      o.start(c.currentTime + d); o.stop(c.currentTime + d + .12);
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    [0, .15, .30].forEach(d => {
+      const o = ctx.createOscillator(), g = ctx.createGain();
+      o.connect(g); g.connect(ctx.destination);
+      o.frequency.value = 1046;
+      g.gain.setValueAtTime(.2, ctx.currentTime + d);
+      g.gain.exponentialRampToValueAtTime(.001, ctx.currentTime + d + .1);
+      o.start(ctx.currentTime + d); o.stop(ctx.currentTime + d + .1);
     });
   } catch {}
 }
 
-// ─── HOOKS ────────────────────────────────────────────────────────────────────
+// ─── LOCAL STORAGE FALLBACK ───────────────────────────────────────────────────
+const LS = "ph_s11";
+const lsGet = () => { try { return JSON.parse(localStorage.getItem(LS) || "{}"); } catch { return {}; } };
+const lsSet = d => { try { localStorage.setItem(LS, JSON.stringify(d)); } catch {} };
+
+// ─── HOOKS ───────────────────────────────────────────────────────────────────
+function useStopwatch() {
+  const [sec, setSec] = useState(0);
+  const [running, setRunning] = useState(false);
+  const ref = useRef(null);
+  const start = () => { setSec(0); setRunning(true); ref.current = setInterval(() => setSec(p => p + 1), 1000); };
+  const stop = () => { clearInterval(ref.current); setRunning(false); };
+  const reset = () => { clearInterval(ref.current); setRunning(false); setSec(0); };
+  useEffect(() => () => clearInterval(ref.current), []);
+  return { sec, running, start, stop, reset };
+}
+
 function useCountdown(onDone) {
   const [sec, setSec] = useState(0);
   const [total, setTotal] = useState(0);
@@ -136,8 +171,8 @@ function useCountdown(onDone) {
   const [done, setDone] = useState(false);
   const ref = useRef(null);
   const start = useCallback(s => {
-    setSec(s); setTotal(s); setRunning(true); setDone(false);
     clearInterval(ref.current);
+    setSec(s); setTotal(s); setRunning(true); setDone(false);
     ref.current = setInterval(() => {
       setSec(p => {
         if (p <= 1) { clearInterval(ref.current); setRunning(false); setDone(true); beep(); onDone?.(); return 0; }
@@ -151,47 +186,56 @@ function useCountdown(onDone) {
   return { sec, total, running, done, start, stop, reset };
 }
 
-function useStopwatch() {
-  const [sec, setSec] = useState(0);
-  const [running, setRunning] = useState(false);
-  const ref = useRef(null);
-  const start = useCallback(() => { setSec(0); setRunning(true); ref.current = setInterval(() => setSec(p => p + 1), 1000); }, []);
-  const stop = () => { clearInterval(ref.current); setRunning(false); };
-  const reset = () => { clearInterval(ref.current); setRunning(false); setSec(0); };
-  useEffect(() => () => clearInterval(ref.current), []);
-  return { sec, running, start, stop, reset };
-}
-
-// ─── RING TIMER (bottom overlay) ─────────────────────────────────────────────
-function RingTimer({ sec, total, running, done, label, onStop, onReset }) {
-  if (sec === 0 && !running && !done) return null;
-  const R = 44, C = 2 * Math.PI * R;
-  const pct = total > 0 ? sec / total : 0;
-  const color = done ? T.green : T.ink;
+// ─── REST TIMER OVERLAY ───────────────────────────────────────────────────────
+function RestOverlay({ timer, label }) {
+  if (!timer.running && !timer.done && timer.sec === 0) return null;
+  const pct = timer.total > 0 ? timer.sec / timer.total : 0;
+  const R = 36, circ = 2 * Math.PI * R;
+  const color = timer.done ? C.green : C.accent;
   return (
-    <div style={{ position: "fixed", bottom: 72, left: 0, right: 0, zIndex: 500, display: "flex", justifyContent: "center", padding: "0 16px" }}>
-      <div style={{ background: T.card, borderRadius: 20, padding: "16px 24px", boxShadow: T.shadowLg, display: "flex", alignItems: "center", gap: 20, maxWidth: 380, width: "100%" }}>
+    <div style={{
+      position: "fixed", bottom: 90, left: 16, right: 16, zIndex: 400,
+      display: "flex", justifyContent: "center",
+      animation: `slideUp ${T_DRAWER} ${EASE_DRAWER} both`,
+    }}>
+      <style>{`
+        @keyframes slideUp { from { transform: translateY(24px); opacity: 0; } to { transform: none; opacity: 1; } }
+        @keyframes fadeIn  { from { opacity: 0; } to { opacity: 1; } }
+      `}</style>
+      <div style={{
+        background: C.surface2, border: `1px solid ${C.border}`,
+        borderRadius: 20, padding: "16px 20px",
+        display: "flex", alignItems: "center", gap: 16,
+        maxWidth: 420, width: "100%",
+        backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)",
+      }}>
+        {/* Ring */}
         <div style={{ position: "relative", width: 72, height: 72, flexShrink: 0 }}>
           <svg width="72" height="72" style={{ transform: "rotate(-90deg)" }}>
-            <circle cx="36" cy="36" r={R} fill="none" stroke={T.border} strokeWidth="6" />
-            <circle cx="36" cy="36" r={R} fill="none" stroke={color} strokeWidth="6"
-              strokeDasharray={`${C * pct} ${C}`} strokeLinecap="round"
-              style={{ transition: "stroke-dasharray .6s linear, stroke .3s" }} />
+            <circle cx="36" cy="36" r={R} fill="none" stroke={C.border2} strokeWidth="5"/>
+            <circle cx="36" cy="36" r={R} fill="none" stroke={color} strokeWidth="5"
+              strokeDasharray={`${circ * pct} ${circ}`} strokeLinecap="round"
+              style={{ transition: `stroke-dasharray .8s linear, stroke ${T_MED}` }}/>
           </svg>
-          <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
-            <span style={{ fontFamily: "Inter", fontSize: 17, fontWeight: 800, color, lineHeight: 1 }}>{fmtMSS(sec)}</span>
+          <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 0 }}>
+            <span style={{ fontFamily: F, fontSize: 16, fontWeight: 700, color: timer.done ? C.green : C.ink, lineHeight: 1 }}>
+              {timer.done ? "GO" : fmtMSS(timer.sec)}
+            </span>
           </div>
         </div>
+        {/* Info */}
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: 11, fontWeight: 600, color: T.muted, textTransform: "uppercase", letterSpacing: ".1em", marginBottom: 3 }}>
-            {done ? "Prêt !" : "Repos"}
+          <div style={{ fontFamily: F, fontSize: 11, fontWeight: 600, color: C.ink48, textTransform: "uppercase", letterSpacing: ".1em", marginBottom: 4 }}>
+            {timer.done ? "Repos terminé" : "Temps de repos"}
           </div>
-          <div style={{ fontSize: 14, fontWeight: 700, color: done ? T.green : T.ink, marginBottom: 8, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-            {done ? "Reprends ta série" : label || ""}
+          <div style={{ fontFamily: F, fontSize: 15, fontWeight: 600, color: timer.done ? C.green : C.ink80, marginBottom: 12, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+            {label}
           </div>
           <div style={{ display: "flex", gap: 8 }}>
-            {running && <button onClick={onStop} style={{ fontSize: 12, fontWeight: 600, padding: "5px 14px", borderRadius: 8, border: `1.5px solid ${T.border}`, background: "transparent", color: T.muted, cursor: "pointer" }}>Pause</button>}
-            <button onClick={onReset} style={{ fontSize: 12, fontWeight: 600, padding: "5px 14px", borderRadius: 8, border: "none", background: T.bgDeep, color: T.muted, cursor: "pointer" }}>Fermer</button>
+            {timer.running && (
+              <button onClick={timer.stop} style={btnGhost("small")}>Passer</button>
+            )}
+            <button onClick={timer.reset} style={btnGhost("small")}>Fermer</button>
           </div>
         </div>
       </div>
@@ -199,334 +243,291 @@ function RingTimer({ sec, total, running, done, label, onStop, onReset }) {
   );
 }
 
-// ─── LINE CHART ───────────────────────────────────────────────────────────────
-function LineChart({ data, color = T.ink, height = 60 }) {
-  if (!data || data.length < 2) return (
-    <div style={{ height, display: "flex", alignItems: "center", justifyContent: "center" }}>
-      <span style={{ fontSize: 12, color: T.muted }}>Données insuffisantes</span>
-    </div>
-  );
-  const vals = data.map(d => d.value), min = Math.min(...vals), max = Math.max(...vals), range = max - min || 1;
-  const W = 300, H = height;
-  const pts = data.map((d, i) => [
-    (i / (data.length - 1)) * (W - 24) + 12,
-    H - 6 - ((d.value - min) / range) * (H - 18)
-  ]);
-  const path = pts.map((p, i) => `${i === 0 ? "M" : "L"} ${p[0]} ${p[1]}`).join(" ");
-  const area = `${path} L ${pts[pts.length - 1][0]} ${H} L ${pts[0][0]} ${H} Z`;
-  const gid = `g${color.replace("#", "")}`;
-  return (
-    <div>
-      <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", height }} preserveAspectRatio="none">
-        <defs>
-          <linearGradient id={gid} x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor={color} stopOpacity=".08" />
-            <stop offset="100%" stopColor={color} stopOpacity="0" />
-          </linearGradient>
-        </defs>
-        <path d={area} fill={`url(#${gid})`} />
-        <path d={path} stroke={color} strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round" />
-        {pts.map(([x, y], i) => <circle key={i} cx={x} cy={y} r="3" fill={color} stroke={T.card} strokeWidth="2" />)}
-        <text x={pts[pts.length - 1][0]} y={pts[pts.length - 1][1] - 8} textAnchor="middle" fontSize="9" fill={color} fontFamily="Inter" fontWeight="700">{data[data.length - 1].value}</text>
-      </svg>
-      <div style={{ display: "flex", justifyContent: "space-between", marginTop: 4 }}>
-        {data.map((d, i) => <span key={i} style={{ fontSize: 9, color: T.muted, fontWeight: 500 }}>{d.date}</span>)}
-      </div>
-    </div>
-  );
+// ─── STYLE HELPERS ────────────────────────────────────────────────────────────
+function btnGhost(size = "default") {
+  const pad = size === "small" ? "6px 14px" : "12px 20px";
+  const fs = size === "small" ? 12 : 15;
+  return {
+    fontFamily: F, fontSize: fs, fontWeight: 600, padding: pad,
+    borderRadius: 980, border: `1px solid ${C.border2}`,
+    background: "transparent", color: C.ink48, cursor: "pointer",
+    transition: `transform ${T_FAST} ${EASE_OUT}, opacity ${T_FAST}`,
+    WebkitTapHighlightColor: "transparent",
+  };
+}
+function btnPrimary(color = C.accent, size = "default") {
+  const pad = size === "small" ? "6px 16px" : "14px 24px";
+  const fs = size === "small" ? 13 : 17;
+  return {
+    fontFamily: F, fontSize: fs, fontWeight: 600, padding: pad,
+    borderRadius: 980, border: "none",
+    background: color, color: "#000", cursor: "pointer",
+    transition: `transform ${T_FAST} ${EASE_OUT}, opacity ${T_FAST}`,
+    WebkitTapHighlightColor: "transparent",
+  };
+}
+function btnFull(color = C.surface3, textColor = C.ink) {
+  return {
+    fontFamily: F, fontSize: 17, fontWeight: 600, padding: "16px",
+    borderRadius: 14, border: "none", background: color, color: textColor,
+    cursor: "pointer", width: "100%",
+    transition: `transform ${T_FAST} ${EASE_OUT}, opacity ${T_FAST}`,
+    WebkitTapHighlightColor: "transparent",
+  };
 }
 
-// ─── RADAR CHART ──────────────────────────────────────────────────────────────
-function RadarChart({ data }) {
-  const labels = ["Pecs", "Dos", "Épaules", "Bras", "Jambes", "Core"];
-  const n = labels.length, cx = 100, cy = 100, r = 72;
-  const pts = labels.map((l, i) => {
-    const a = (i / n) * 2 * Math.PI - Math.PI / 2, val = (data[l] || 0) / 100;
-    return { x: cx + r * val * Math.cos(a), y: cy + r * val * Math.sin(a), lx: cx + (r + 18) * Math.cos(a), ly: cy + (r + 18) * Math.sin(a) };
-  });
-  const poly = pts.map(p => `${p.x},${p.y}`).join(" ");
-  const grid = [.25, .5, .75, 1].map(s => labels.map((_, i) => {
-    const a = (i / n) * 2 * Math.PI - Math.PI / 2;
-    return `${cx + r * s * Math.cos(a)},${cy + r * s * Math.sin(a)}`;
-  }).join(" "));
+// Active press: scale(0.97) — Emil pattern
+function Tap({ children, onTap, style, disabled }) {
+  const [pressed, setPressed] = useState(false);
   return (
-    <svg viewBox="0 0 200 200" style={{ width: "100%", maxWidth: 200 }}>
-      {grid.map((g, i) => <polygon key={i} points={g} fill="none" stroke={T.border} strokeWidth="1" />)}
-      {labels.map((_, i) => {
-        const a = (i / n) * 2 * Math.PI - Math.PI / 2;
-        return <line key={i} x1={cx} y1={cy} x2={cx + r * Math.cos(a)} y2={cy + r * Math.sin(a)} stroke={T.border} strokeWidth="1" />;
-      })}
-      <polygon points={poly} fill={`${T.lime}60`} stroke={T.limeDark} strokeWidth="2" />
-      {pts.map((p, i) => (
-        <g key={i}>
-          <circle cx={p.x} cy={p.y} r="3" fill={T.ink} />
-          <text x={p.lx} y={p.ly} textAnchor="middle" dominantBaseline="middle" fontSize="9" fill={T.muted} fontFamily="Inter" fontWeight="600">{labels[i]}</text>
-        </g>
-      ))}
-    </svg>
-  );
-}
-
-// ─── MONTH CALENDAR ───────────────────────────────────────────────────────────
-function MonthCalendar({ sessionDates, onSelectDate }) {
-  const [view, setView] = useState(new Date());
-  const y = view.getFullYear(), m = view.getMonth();
-  const first = new Date(y, m, 1).getDay(), dim = new Date(y, m + 1, 0).getDate();
-  const off = first === 0 ? 6 : first - 1;
-  const cells = Array.from({ length: off + dim }, (_, i) => {
-    if (i < off) return null;
-    const d = i - off + 1;
-    const key = `${y}-${String(m + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
-    return { d, key, done: sessionDates.includes(key), isToday: key === todayKey() };
-  });
-  const MN = ["Janvier", "Février", "Mars", "Avril", "Mai", "Juin", "Juillet", "Août", "Septembre", "Octobre", "Novembre", "Décembre"];
-  const DN = ["L", "M", "M", "J", "V", "S", "D"];
-  return (
-    <div style={{ background: T.card, borderRadius: 16, padding: 16, marginBottom: 16, boxShadow: T.shadow }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-        <button onClick={() => setView(new Date(y, m - 1, 1))} style={{ background: T.bgDeep, border: "none", cursor: "pointer", color: T.muted, fontSize: 18, width: 32, height: 32, borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center" }}>‹</button>
-        <span style={{ fontFamily: "Inter", fontSize: 14, fontWeight: 700, color: T.ink }}>{MN[m]} {y}</span>
-        <button onClick={() => setView(new Date(y, m + 1, 1))} style={{ background: T.bgDeep, border: "none", cursor: "pointer", color: T.muted, fontSize: 18, width: 32, height: 32, borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center" }}>›</button>
-      </div>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(7,1fr)", gap: 2, marginBottom: 4 }}>
-        {DN.map((d, i) => <div key={i} style={{ textAlign: "center", fontSize: 10, fontWeight: 600, color: T.muted2, paddingBottom: 6 }}>{d}</div>)}
-      </div>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(7,1fr)", gap: 2 }}>
-        {cells.map((c, i) => {
-          if (!c) return <div key={i} />;
-          return (
-            <div key={i} onClick={() => c.done && onSelectDate?.(c.key)}
-              style={{ aspectRatio: "1", borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", background: c.done ? T.ink : c.isToday ? T.limeBg : "transparent", border: c.isToday ? `2px solid ${T.lime}` : "1px solid transparent", cursor: c.done ? "pointer" : "default" }}>
-              <span style={{ fontSize: 12, fontWeight: c.done || c.isToday ? 700 : 400, color: c.done ? "#fff" : c.isToday ? T.ink : T.muted }}>{c.d}</span>
-            </div>
-          );
-        })}
-      </div>
+    <div
+      onPointerDown={() => !disabled && setPressed(true)}
+      onPointerUp={() => { setPressed(false); !disabled && onTap?.(); }}
+      onPointerLeave={() => setPressed(false)}
+      style={{ ...style, transform: pressed && !disabled ? "scale(0.97)" : "scale(1)", transition: `transform ${T_FAST} ${EASE_OUT}`, cursor: disabled ? "default" : "pointer", WebkitTapHighlightColor: "transparent" }}
+    >
+      {children}
     </div>
   );
 }
 
-// ─── EXERCISE CARD ────────────────────────────────────────────────────────────
-function ExCard({ ex, weight, onWeightChange, log, onLogSet, onStartRest, sessionHistory }) {
+// ─── EXERCISE ROW ─────────────────────────────────────────────────────────────
+function ExRow({ ex, weight, onWeightChange, log, onLogSet, onStartRest, idx }) {
   const [open, setOpen] = useState(false);
   const sets = typeof ex.sets === "number" ? ex.sets : 0;
-  const doneArr = Array.from({ length: sets }, (_, i) => !!(log[`${ex.id}_s${i}`]?.done));
-  const completedSets = doneArr.filter(Boolean).length;
-  const allDone = sets > 0 && completedSets === sets;
+  const done = Array.from({ length: sets }, (_, i) => !!log[`${ex.id}_s${i}`]?.done);
+  const completed = done.filter(Boolean).length;
+  const allDone = sets > 0 && completed === sets;
   const kg = weight ?? baseKg(ex.name);
   const orm = calc1RM(kg, ex.reps);
-  const warmup = calcWarmup(kg);
-  const tip = getCoachTip(ex.name);
-  const lastKg = useMemo(() => {
-    const prev = sessionHistory.filter(s => (s.exercises || []).some(e => e.id === ex.id));
-    if (!prev.length) return null;
-    return prev[prev.length - 1].exercises?.find(e => e.id === ex.id)?.weight || null;
-  }, [sessionHistory, ex.id]);
 
-  const handleLogSet = (i) => {
-    const wasAllDone = doneArr.filter(Boolean).length === sets - 1 && !doneArr[i];
-    onLogSet(`${ex.id}_s${i}`, { done: !doneArr[i], weight: kg, date: todayKey() });
-    // Auto-start rest timer after last set
-    if (!doneArr[i] && ex.rest > 0) {
-      onStartRest(ex.rest, ex.name);
-    }
+  const handleSet = i => {
+    const newDone = !done[i];
+    onLogSet(`${ex.id}_s${i}`, { done: newDone, weight: kg, date: todayKey() });
+    if (newDone && ex.rest > 0) onStartRest(ex.rest, ex.name);
   };
+
+  const animDelay = `${idx * 40}ms`;
 
   return (
     <div style={{
-      background: T.card, borderRadius: 16, marginBottom: 10,
-      boxShadow: T.shadow,
-      border: `1px solid ${allDone ? T.greenBorder : "transparent"}`,
-      borderLeft: `3px solid ${allDone ? T.green : "transparent"}`,
-      transition: "all .2s", overflow: "hidden"
+      borderBottom: `1px solid ${C.border}`,
+      animation: `fadeSlideIn 300ms ${EASE_OUT} ${animDelay} both`,
     }}>
+      <style>{`
+        @keyframes fadeSlideIn {
+          from { opacity: 0; transform: translateY(8px); }
+          to   { opacity: 1; transform: none; }
+        }
+      `}</style>
+
       {/* Main row */}
-      <div style={{ padding: "14px 16px" }}>
-        <div style={{ display: "flex", alignItems: "flex-start", gap: 12 }}>
-          {/* Set number indicator */}
-          <div style={{ flexShrink: 0, width: 40, height: 40, borderRadius: 12, background: allDone ? T.green : T.bgDeep, display: "flex", alignItems: "center", justifyContent: "center", marginTop: 2 }}>
-            <span style={{ fontSize: 13, fontWeight: 800, color: allDone ? "#fff" : T.muted }}>
-              {completedSets}/{sets}
-            </span>
-          </div>
-
-          {/* Info */}
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 3, flexWrap: "wrap" }}>
-              <span style={{ fontFamily: "Inter", fontSize: 15, fontWeight: 600, color: allDone ? T.green : T.ink, textDecoration: allDone ? "line-through" : "none", lineHeight: 1.3 }}>{ex.name}</span>
-            </div>
-            <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-              <span style={{ fontSize: 11, fontWeight: 500, color: T.muted }}>{ex.muscle}</span>
-              {orm && <span style={{ fontSize: 11, fontWeight: 600, color: T.blue }}>1RM ~{orm}kg</span>}
-              {ex.rest > 0 && <span style={{ fontSize: 11, color: T.muted }}>· {ex.rest >= 60 ? `${ex.rest / 60}min` : `${ex.rest}s`} repos</span>}
-            </div>
-          </div>
-
-          {/* Expand toggle */}
-          <button onClick={() => setOpen(o => !o)} style={{ width: 30, height: 30, borderRadius: 8, border: `1px solid ${T.border}`, background: open ? T.bgDeep : "transparent", cursor: "pointer", color: T.muted, fontSize: 11, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-            {open ? "▲" : "▼"}
-          </button>
+      <Tap onTap={() => setOpen(o => !o)} style={{ padding: "14px 0", display: "flex", alignItems: "center", gap: 14 }}>
+        {/* Completion ring */}
+        <div style={{
+          width: 40, height: 40, borderRadius: "50%", flexShrink: 0,
+          border: `2px solid ${allDone ? C.green : C.border2}`,
+          background: allDone ? C.greenDim : "transparent",
+          display: "flex", alignItems: "center", justifyContent: "center",
+          transition: `all ${T_MED} ${EASE_OUT}`,
+        }}>
+          <span style={{ fontFamily: F, fontSize: 13, fontWeight: 700, color: allDone ? C.green : C.ink48 }}>
+            {completed}/{sets}
+          </span>
         </div>
 
-        {/* Set buttons — always visible */}
-        {sets > 0 && (
-          <div style={{ display: "flex", gap: 8, marginTop: 12, flexWrap: "wrap" }}>
-            {Array.from({ length: sets }, (_, i) => (
-              <button key={i} onClick={() => handleLogSet(i)} style={{
-                width: 44, height: 44, borderRadius: 12, cursor: "pointer",
-                transition: "all .15s",
-                border: `2px solid ${doneArr[i] ? T.green : T.border}`,
-                background: doneArr[i] ? T.green : T.card,
-                color: doneArr[i] ? "#fff" : T.muted,
-                fontFamily: "Inter", fontSize: 14, fontWeight: 800,
-              }}>
-                {i + 1}
-              </button>
-            ))}
-            {/* Quick rest button */}
-            {ex.rest > 0 && (
-              <button onClick={() => onStartRest(ex.rest, ex.name)} style={{
-                height: 44, padding: "0 14px", borderRadius: 12, cursor: "pointer",
-                border: `1.5px solid ${T.border}`, background: "transparent",
-                color: T.muted, fontFamily: "Inter", fontSize: 12, fontWeight: 600,
-              }}>
-                ⏱ {ex.rest >= 60 ? `${ex.rest / 60}min` : `${ex.rest}s`}
-              </button>
-            )}
+        {/* Info */}
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontFamily: F, fontSize: 17, fontWeight: 600, color: allDone ? C.ink48 : C.ink, letterSpacing: "-.01em", lineHeight: 1.2, marginBottom: 3, textDecoration: allDone ? "line-through" : "none", transition: `color ${T_MED}` }}>
+            {ex.name}
+          </div>
+          <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+            <span style={{ fontFamily: F, fontSize: 14, fontWeight: 400, color: C.ink48 }}>{ex.sets}×{ex.reps}</span>
+            <span style={{ fontFamily: F, fontSize: 14, fontWeight: 400, color: C.ink24 }}>·</span>
+            <span style={{ fontFamily: F, fontSize: 14, fontWeight: 400, color: C.ink48 }}>{ex.muscle}</span>
+            {orm && <><span style={{ color: C.ink24 }}>·</span><span style={{ fontFamily: F, fontSize: 13, fontWeight: 600, color: C.accent }}>1RM ~{orm}kg</span></>}
+          </div>
+        </div>
+
+        {/* Rest pill */}
+        {ex.rest > 0 && (
+          <div style={{ fontFamily: F, fontSize: 12, fontWeight: 600, padding: "4px 10px", borderRadius: 980, background: C.surface3, color: C.ink48, flexShrink: 0 }}>
+            {ex.rest >= 60 ? `${ex.rest / 60}′` : `${ex.rest}″`}
           </div>
         )}
+
+        {/* Chevron */}
+        <div style={{ color: C.ink24, fontSize: 12, flexShrink: 0, transform: open ? "rotate(180deg)" : "none", transition: `transform ${T_MED} ${EASE_OUT}` }}>▾</div>
+      </Tap>
+
+      {/* Set buttons — always visible when open=false stays compact; show below tap area */}
+      <div style={{ paddingBottom: completed > 0 || sets <= 4 ? 14 : 0 }}>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          {Array.from({ length: sets }, (_, i) => (
+            <Tap key={i} onTap={() => handleSet(i)} style={{
+              width: 44, height: 44, borderRadius: 12, flexShrink: 0,
+              border: `1.5px solid ${done[i] ? C.green : C.border2}`,
+              background: done[i] ? C.greenDim : C.surface3,
+              display: "flex", alignItems: "center", justifyContent: "center",
+              transition: `all ${T_MED} ${EASE_OUT}`,
+            }}>
+              <span style={{ fontFamily: F, fontSize: 15, fontWeight: 700, color: done[i] ? C.green : C.ink48 }}>{i + 1}</span>
+            </Tap>
+          ))}
+          {ex.rest > 0 && (
+            <Tap onTap={() => onStartRest(ex.rest, ex.name)} style={{
+              height: 44, padding: "0 14px", borderRadius: 12,
+              border: `1.5px solid ${C.border2}`, background: "transparent",
+              display: "flex", alignItems: "center",
+              transition: `all ${T_FAST} ${EASE_OUT}`,
+            }}>
+              <span style={{ fontFamily: F, fontSize: 13, fontWeight: 600, color: C.ink48 }}>Repos</span>
+            </Tap>
+          )}
+        </div>
       </div>
 
       {/* Expanded panel */}
       {open && (
-        <div style={{ borderTop: `1px solid ${T.border}`, padding: "14px 16px", background: T.bg }}>
-          {/* Weight control */}
-          <div style={{ background: T.card, borderRadius: 12, padding: "12px 16px", marginBottom: 12, boxShadow: T.shadow }}>
-            <div style={{ fontSize: 11, fontWeight: 600, color: T.muted, textTransform: "uppercase", letterSpacing: ".08em", marginBottom: 10 }}>
-              Charge{lastKg ? ` · Dernière fois : ${lastKg}kg` : ""}
-            </div>
-            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-              <button onClick={() => onWeightChange(ex.id, Math.max(0, kg - 2.5))} style={{ width: 44, height: 44, borderRadius: 12, border: `1.5px solid ${T.border}`, background: T.card, color: T.ink, fontSize: 24, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 600 }}>−</button>
+        <div style={{ paddingBottom: 20, animation: `fadeIn 200ms ${EASE_OUT} both` }}>
+          {/* Weight */}
+          <div style={{ background: C.surface2, borderRadius: 14, padding: "16px", marginBottom: 12 }}>
+            <div style={{ fontFamily: F, fontSize: 12, fontWeight: 600, color: C.ink48, textTransform: "uppercase", letterSpacing: ".1em", marginBottom: 14 }}>Charge de travail</div>
+            <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+              <Tap onTap={() => onWeightChange(ex.id, Math.max(0, kg - 2.5))} style={{
+                width: 48, height: 48, borderRadius: 12,
+                border: `1.5px solid ${C.border2}`, background: C.surface3,
+                display: "flex", alignItems: "center", justifyContent: "center",
+              }}>
+                <span style={{ fontFamily: F, fontSize: 22, fontWeight: 400, color: C.ink }}>−</span>
+              </Tap>
               <div style={{ flex: 1, textAlign: "center" }}>
-                <span style={{ fontFamily: "Inter", fontSize: 28, fontWeight: 800, color: T.ink }}>{kg === 0 ? "BW" : `${kg}kg`}</span>
+                <span style={{ fontFamily: F, fontSize: 34, fontWeight: 700, color: C.ink, letterSpacing: "-.02em" }}>
+                  {kg === 0 ? "BW" : `${kg}`}
+                </span>
+                {kg > 0 && <span style={{ fontFamily: F, fontSize: 20, fontWeight: 400, color: C.ink48 }}> kg</span>}
               </div>
-              <button onClick={() => onWeightChange(ex.id, kg + 2.5)} style={{ width: 44, height: 44, borderRadius: 12, border: `1.5px solid ${T.border}`, background: T.card, color: T.ink, fontSize: 24, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 600 }}>+</button>
+              <Tap onTap={() => onWeightChange(ex.id, kg + 2.5)} style={{
+                width: 48, height: 48, borderRadius: 12,
+                border: `1.5px solid ${C.border2}`, background: C.surface3,
+                display: "flex", alignItems: "center", justifyContent: "center",
+              }}>
+                <span style={{ fontFamily: F, fontSize: 22, fontWeight: 400, color: C.ink }}>+</span>
+              </Tap>
             </div>
           </div>
-
-          {/* Warmup */}
-          {warmup.length > 0 && (
-            <div style={{ marginBottom: 12 }}>
-              <div style={{ fontSize: 11, fontWeight: 600, color: T.muted, textTransform: "uppercase", letterSpacing: ".08em", marginBottom: 8 }}>Échauffement suggéré</div>
-              <div style={{ display: "flex", gap: 6 }}>
-                {warmup.map((w, i) => (
-                  <div key={i} style={{ flex: 1, background: T.card, borderRadius: 10, padding: "10px 8px", textAlign: "center", boxShadow: T.shadow }}>
-                    <div style={{ fontSize: 15, fontWeight: 800, color: T.ink }}>{w.kg === 0 ? "BW" : `${w.kg}kg`}</div>
-                    <div style={{ fontSize: 10, color: T.muted, marginTop: 2 }}>{w.reps} reps</div>
-                    <div style={{ fontSize: 9, color: T.muted2 }}>{w.pct}</div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Coach tip */}
-          {tip && (
-            <div style={{ background: T.limeBg, borderRadius: 10, padding: "10px 14px", borderLeft: `3px solid ${T.lime}` }}>
-              <div style={{ fontSize: 10, fontWeight: 700, color: T.ink, textTransform: "uppercase", letterSpacing: ".08em", marginBottom: 4 }}>Conseil</div>
-              <div style={{ fontSize: 13, fontWeight: 400, color: T.ink2, lineHeight: 1.6 }}>{tip}</div>
-            </div>
-          )}
         </div>
       )}
     </div>
   );
 }
 
-// ─── FEEDBACK MODAL ───────────────────────────────────────────────────────────
-function FeedbackModal({ onClose, onSave }) {
-  const [global, setGlobal] = useState(3);
+// ─── FEEDBACK SHEET ───────────────────────────────────────────────────────────
+function FeedbackSheet({ onClose, onSave }) {
+  const [intensity, setIntensity] = useState(3);
   const [energy, setEnergy] = useState(3);
   const [notes, setNotes] = useState("");
-  const INTENSITY = ["", "Très léger", "Léger", "Modéré", "Intense", "Maximum"];
-  const ENERGY_L = ["", "Épuisé", "Fatigué", "Normal", "Énergisé", "Au top"];
+  const IL = ["", "Très léger", "Léger", "Modéré", "Intense", "Maximum"];
+  const EL = ["", "Épuisé", "Fatigué", "Normal", "Énergisé", "Au top"];
+
   return (
-    <div style={{ position: "fixed", inset: 0, background: "rgba(249,249,247,.97)", zIndex: 600, display: "flex", alignItems: "flex-end", justifyContent: "center", fontFamily: "Inter" }}>
-      <div style={{ background: T.card, borderRadius: "24px 24px 0 0", padding: "28px 24px 40px", maxWidth: 600, width: "100%", boxShadow: T.shadowLg }}>
-        <div style={{ width: 40, height: 4, background: T.border, borderRadius: 100, margin: "0 auto 24px" }} />
-        <div style={{ fontSize: 20, fontWeight: 800, color: T.ink, marginBottom: 6 }}>Bilan de séance</div>
-        <div style={{ fontSize: 13, color: T.muted, marginBottom: 24 }}>Comment s'est passée ta séance ?</div>
+    <div style={{ position: "fixed", inset: 0, zIndex: 600, display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
+      <div onClick={onClose} style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,.6)", backdropFilter: "blur(4px)" }}/>
+      <div style={{
+        position: "relative", background: C.surface, borderRadius: "24px 24px 0 0",
+        padding: "32px 24px calc(40px + env(safe-area-inset-bottom))",
+        maxWidth: 600, width: "100%",
+        animation: `slideUp ${T_DRAWER} ${EASE_DRAWER} both`,
+      }}>
+        <div style={{ width: 36, height: 4, background: C.border2, borderRadius: 2, margin: "0 auto 28px" }}/>
+        <div style={{ fontFamily: F, fontSize: 28, fontWeight: 600, color: C.ink, letterSpacing: "-.02em", marginBottom: 6 }}>Bilan séance</div>
+        <div style={{ fontFamily: F, fontSize: 17, fontWeight: 400, color: C.ink48, marginBottom: 28, lineHeight: 1.47 }}>Comment s'est passée ta séance ?</div>
+
         {[
-          { label: "Intensité globale", val: global, set: setGlobal, labels: INTENSITY },
-          { label: "Niveau d'énergie", val: energy, set: setEnergy, labels: ENERGY_L },
+          { label: "Intensité", val: intensity, set: setIntensity, labels: IL },
+          { label: "Énergie", val: energy, set: setEnergy, labels: EL },
         ].map(({ label, val, set, labels }) => (
-          <div key={label} style={{ marginBottom: 20 }}>
-            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
-              <span style={{ fontSize: 13, fontWeight: 600, color: T.ink }}>{label}</span>
-              <span style={{ fontSize: 13, fontWeight: 700, color: T.ink, background: T.limeBg, padding: "2px 10px", borderRadius: 6 }}>{labels[val]}</span>
+          <div key={label} style={{ marginBottom: 24 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 12 }}>
+              <span style={{ fontFamily: F, fontSize: 17, fontWeight: 600, color: C.ink }}>{label}</span>
+              <span style={{ fontFamily: F, fontSize: 14, fontWeight: 400, color: C.ink48 }}>{labels[val]}</span>
             </div>
-            <div style={{ display: "flex", gap: 6 }}>
-              {[1, 2, 3, 4, 5].map(v => (
-                <button key={v} onClick={() => set(v)} style={{ flex: 1, height: 44, borderRadius: 12, border: `2px solid ${val === v ? T.ink : T.border}`, background: val === v ? T.ink : T.card, color: val === v ? "#fff" : T.muted, fontFamily: "Inter", fontSize: 15, fontWeight: 700, cursor: "pointer" }}>{v}</button>
+            <div style={{ display: "flex", gap: 8 }}>
+              {[1,2,3,4,5].map(v => (
+                <Tap key={v} onTap={() => set(v)} style={{
+                  flex: 1, height: 48, borderRadius: 12,
+                  border: `1.5px solid ${val === v ? C.accent : C.border2}`,
+                  background: val === v ? C.accentDim : C.surface2,
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  transition: `all ${T_FAST} ${EASE_OUT}`,
+                }}>
+                  <span style={{ fontFamily: F, fontSize: 17, fontWeight: val === v ? 700 : 400, color: val === v ? C.accent : C.ink48 }}>{v}</span>
+                </Tap>
               ))}
             </div>
           </div>
         ))}
-        <textarea value={notes} onChange={e => setNotes(e.target.value)} placeholder="Notes libres..." style={{ width: "100%", minHeight: 60, padding: "12px 14px", borderRadius: 12, border: `1.5px solid ${T.border}`, fontFamily: "Inter", fontSize: 13, color: T.ink, resize: "none", outline: "none", background: T.bg, marginBottom: 16, boxSizing: "border-box" }} />
+
+        <textarea value={notes} onChange={e => setNotes(e.target.value)} placeholder="Notes libres..."
+          style={{ width: "100%", minHeight: 72, padding: "14px 16px", borderRadius: 14, border: `1px solid ${C.border2}`, fontFamily: F, fontSize: 17, color: C.ink, background: C.surface2, resize: "none", outline: "none", marginBottom: 20, boxSizing: "border-box", lineHeight: 1.47, "::placeholder": { color: C.ink24 } }}/>
+
         <div style={{ display: "flex", gap: 10 }}>
-          <button style={{ flex: 1, padding: "14px", borderRadius: 14, border: `1.5px solid ${T.border}`, background: "transparent", color: T.muted, fontFamily: "Inter", fontSize: 14, fontWeight: 600, cursor: "pointer" }} onClick={onClose}>Annuler</button>
-          <button style={{ flex: 2, padding: "14px", borderRadius: 14, border: "none", background: T.ink, color: "#fff", fontFamily: "Inter", fontSize: 14, fontWeight: 700, cursor: "pointer" }} onClick={() => onSave({ global, energy, notes })}>Enregistrer</button>
+          <Tap onTap={onClose} style={{ ...btnFull(C.surface2, C.ink48), borderRadius: 14 }}><span style={{ fontFamily: F, fontSize: 17, fontWeight: 600 }}>Annuler</span></Tap>
+          <Tap onTap={() => onSave({ global: intensity, energy, notes })} style={{ ...btnFull(C.accent, "#000"), borderRadius: 14 }}><span style={{ fontFamily: F, fontSize: 17, fontWeight: 600 }}>Enregistrer</span></Tap>
         </div>
       </div>
     </div>
   );
 }
 
-// ─── REGEN MODAL (AI) ─────────────────────────────────────────────────────────
-function RegenModal({ dayInfo, excluded, history, weights, onClose, onResult }) {
+// ─── AI REGEN SHEET ───────────────────────────────────────────────────────────
+function RegenSheet({ onClose, onResult }) {
   const [type, setType] = useState(null);
   const [custom, setCustom] = useState("");
   const [loading, setLoading] = useState(false);
+
   const generate = async () => {
-    if (!type && !custom) return;
+    if (!type && !custom.trim()) return;
     setLoading(true);
     try {
       const res = await fetch("https://api.anthropic.com/v1/messages", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          model: "claude-sonnet-4-6",
-          max_tokens: 1000,
-          messages: [{
-            role: "user",
-            content: `Génère une séance fitness en JSON. Type: ${type || custom}. Exclure: ${excluded.join(", ") || "rien"}. Réponds UNIQUEMENT en JSON: {"titre": string, "exercises": [{"id": string, "name": string, "sets": number, "reps": string, "rest": number, "muscle": string}], "abs": [{"id": string, "name": string, "vol": string}]}`
-          }]
+          model: "claude-sonnet-4-6", max_tokens: 1000,
+          messages: [{ role: "user", content: `Génère une séance fitness en JSON. Type: ${type || custom}. Réponds UNIQUEMENT en JSON valide: {"titre": string, "exercises": [{"id": string, "name": string, "sets": number, "reps": string, "rest": number, "muscle": string}], "abs": [{"id": string, "name": string, "vol": string}]}` }]
         })
       });
-      const data = await res.json();
-      const raw = (data.content?.find(b => b.type === "text")?.text || "").replace(/```json|```/g, "").trim();
+      const d = await res.json();
+      const raw = (d.content?.find(b => b.type === "text")?.text || "").replace(/```json|```/g, "").trim();
       onResult(JSON.parse(raw)); onClose();
-    } catch { alert("Erreur. Réessaie."); }
-    finally { setLoading(false); }
+    } catch { alert("Erreur génération. Réessaie."); }
+    setLoading(false);
   };
+
   return (
-    <div style={{ position: "fixed", inset: 0, background: "rgba(249,249,247,.97)", zIndex: 500, display: "flex", alignItems: "flex-end", justifyContent: "center", padding: 0, fontFamily: "Inter" }}>
-      <div style={{ background: T.card, borderRadius: "24px 24px 0 0", padding: "28px 24px 40px", maxWidth: 600, width: "100%", boxShadow: T.shadowLg }}>
-        <div style={{ width: 40, height: 4, background: T.border, borderRadius: 100, margin: "0 auto 24px" }} />
-        <div style={{ fontSize: 20, fontWeight: 800, color: T.ink, marginBottom: 6 }}>Nouvelle séance</div>
-        <div style={{ fontSize: 13, color: T.muted, marginBottom: 20 }}>Quel type de séance veux-tu ?</div>
+    <div style={{ position: "fixed", inset: 0, zIndex: 600, display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
+      <div onClick={onClose} style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,.6)", backdropFilter: "blur(4px)" }}/>
+      <div style={{ position: "relative", background: C.surface, borderRadius: "24px 24px 0 0", padding: "32px 24px calc(40px + env(safe-area-inset-bottom))", maxWidth: 600, width: "100%", animation: `slideUp ${T_DRAWER} ${EASE_DRAWER} both` }}>
+        <div style={{ width: 36, height: 4, background: C.border2, borderRadius: 2, margin: "0 auto 28px" }}/>
+        <div style={{ fontFamily: F, fontSize: 28, fontWeight: 600, color: C.ink, letterSpacing: "-.02em", marginBottom: 24 }}>Nouvelle séance</div>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 16 }}>
           {SESSION_TYPES.map(t => (
-            <button key={t.id} onClick={() => setType(t.id === type ? null : t.id)} style={{ padding: "12px 8px", borderRadius: 12, cursor: "pointer", border: `2px solid ${type === t.id ? T.ink : T.border}`, background: type === t.id ? T.ink : T.card, color: type === t.id ? "#fff" : T.ink2, fontFamily: "Inter", fontSize: 13, fontWeight: type === t.id ? 700 : 500, transition: "all .15s" }}>
-              {t.label}
-            </button>
+            <Tap key={t} onTap={() => setType(t === type ? null : t)} style={{
+              padding: "14px 12px", borderRadius: 14, textAlign: "center",
+              border: `1.5px solid ${type === t ? C.accent : C.border2}`,
+              background: type === t ? C.accentDim : C.surface2,
+              transition: `all ${T_FAST} ${EASE_OUT}`,
+            }}>
+              <span style={{ fontFamily: F, fontSize: 15, fontWeight: type === t ? 600 : 400, color: type === t ? C.accent : C.ink48 }}>{t}</span>
+            </Tap>
           ))}
         </div>
-        <textarea value={custom} onChange={e => setCustom(e.target.value)} placeholder="Ou décris librement..." style={{ width: "100%", minHeight: 52, padding: "12px 14px", borderRadius: 12, border: `1.5px solid ${T.border}`, fontFamily: "Inter", fontSize: 13, color: T.ink, resize: "none", outline: "none", background: T.bg, marginBottom: 16, boxSizing: "border-box" }} />
-        <div style={{ display: "flex", gap: 10 }}>
-          <button style={{ flex: 1, padding: "14px", borderRadius: 14, border: `1.5px solid ${T.border}`, background: "transparent", color: T.muted, fontFamily: "Inter", fontSize: 14, fontWeight: 600, cursor: "pointer" }} onClick={onClose}>Annuler</button>
-          <button style={{ flex: 2, padding: "14px", borderRadius: 14, border: "none", background: T.ink, color: "#fff", fontFamily: "Inter", fontSize: 14, fontWeight: 700, cursor: "pointer", opacity: (loading || (!type && !custom)) ? .5 : 1 }} onClick={generate} disabled={loading || (!type && !custom)}>{loading ? "Génération…" : "Générer"}</button>
-        </div>
+        <textarea value={custom} onChange={e => setCustom(e.target.value)} placeholder="Ou décris librement ta séance..."
+          style={{ width: "100%", minHeight: 56, padding: "12px 16px", borderRadius: 14, border: `1px solid ${C.border2}`, fontFamily: F, fontSize: 15, color: C.ink, background: C.surface2, resize: "none", outline: "none", marginBottom: 20, boxSizing: "border-box" }}/>
+        <Tap onTap={generate} style={{ ...btnFull(loading || (!type && !custom.trim()) ? C.surface3 : C.accent, loading || (!type && !custom.trim()) ? C.ink24 : "#000"), borderRadius: 14, opacity: loading ? .6 : 1 }}>
+          <span style={{ fontFamily: F, fontSize: 17, fontWeight: 600 }}>{loading ? "Génération en cours…" : "Générer avec IA"}</span>
+        </Tap>
       </div>
     </div>
   );
@@ -535,176 +536,242 @@ function RegenModal({ dayInfo, excluded, history, weights, onClose, onResult }) 
 // ─── SESSION REPORT ───────────────────────────────────────────────────────────
 function SessionReport({ session, onClose }) {
   if (!session) return null;
-  const { totalKg = 0, totalSets = 0, duration = 0, exercises = [], date = "", dayLabel = "", day = "", score = 0 } = session;
-  const muscleVol = {};
-  exercises.forEach(ex => {
-    const m = ex.muscle || "Autre";
-    muscleVol[m] = (muscleVol[m] || 0) + (ex.weight || 0) * (ex.completedSets || 0) * (parseFloat(String(ex.reps || "8").split("–")[0]) || 8);
-  });
-  const MAP = { "Pecs": "Pecs", "Dos": "Dos", "Dos large": "Dos", "Dos épais": "Dos", "Dos + biceps": "Dos", "Épaules": "Épaules", "Épaules lat": "Épaules", "Rear delt": "Épaules", "Biceps": "Bras", "Brachialis": "Bras", "Triceps": "Bras", "Quads": "Jambes", "Ischios": "Jambes", "Fessiers": "Jambes", "Full body": "Pecs", "Core": "Core", "Stabilité": "Core", "Cardio": "Core" };
-  const radarData = {};
-  Object.entries(muscleVol).forEach(([m, v]) => { const k = MAP[m] || "Core"; radarData[k] = (radarData[k] || 0) + v; });
-  const rMax = Math.max(...Object.values(radarData), 1);
-  Object.keys(radarData).forEach(k => radarData[k] = Math.round(radarData[k] / rMax * 100));
+  const { totalKg = 0, totalSets = 0, duration = 0, exercises = [], date = "", dayLabel = "", score = 0, feedback } = session;
+
   return (
-    <div style={{ position: "fixed", inset: 0, background: T.bg, zIndex: 700, overflowY: "auto", fontFamily: "Inter" }}>
-      <div style={{ maxWidth: 600, margin: "0 auto", paddingBottom: 60 }}>
-        <div style={{ background: T.ink, padding: "48px 24px 32px", position: "relative" }}>
-          <button onClick={onClose} style={{ position: "absolute", top: 20, right: 20, width: 36, height: 36, borderRadius: 100, background: "rgba(255,255,255,.1)", border: "none", color: "#fff", cursor: "pointer", fontSize: 16, display: "flex", alignItems: "center", justifyContent: "center" }}>✕</button>
-          <div style={{ fontSize: 11, fontWeight: 600, color: "rgba(255,255,255,.4)", textTransform: "uppercase", letterSpacing: ".14em", marginBottom: 10 }}>{date}</div>
-          <div style={{ fontSize: 32, fontWeight: 800, color: "#fff", lineHeight: 1.05, marginBottom: 6 }}>{dayLabel || day}</div>
+    <div style={{ position: "fixed", inset: 0, background: C.bg, zIndex: 700, overflowY: "auto", fontFamily: F, animation: `fadeIn 200ms ${EASE_OUT} both` }}>
+      <div style={{ maxWidth: 600, margin: "0 auto" }}>
+        {/* Hero */}
+        <div style={{ padding: "60px 24px 40px", borderBottom: `1px solid ${C.border}` }}>
+          <button onClick={onClose} style={{ position: "fixed", top: 20, right: 20, width: 36, height: 36, borderRadius: "50%", background: C.surface2, border: `1px solid ${C.border2}`, color: C.ink48, cursor: "pointer", fontFamily: F, fontSize: 14 }}>✕</button>
+          <div style={{ fontSize: 12, fontWeight: 600, color: C.ink48, textTransform: "uppercase", letterSpacing: ".12em", marginBottom: 12 }}>{date}</div>
+          <div style={{ fontSize: 40, fontWeight: 600, color: C.ink, letterSpacing: "-.02em", lineHeight: 1.1, marginBottom: 16 }}>{dayLabel}</div>
           {score > 0 && (
-            <div style={{ display: "inline-flex", alignItems: "center", gap: 6, background: "rgba(202,255,0,.12)", border: "1px solid rgba(202,255,0,.25)", borderRadius: 100, padding: "5px 14px", marginTop: 10 }}>
-              <span style={{ fontSize: 16, fontWeight: 800, color: T.lime }}>{score}</span>
-              <span style={{ fontSize: 10, fontWeight: 700, color: "rgba(202,255,0,.6)", letterSpacing: ".12em" }}>SCORE</span>
+            <div style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "8px 16px", borderRadius: 980, border: `1px solid ${C.border2}`, background: C.surface2 }}>
+              <span style={{ fontSize: 17, fontWeight: 700, color: C.accent }}>{score}</span>
+              <span style={{ fontSize: 12, fontWeight: 600, color: C.ink48, letterSpacing: ".08em" }}>SCORE</span>
             </div>
           )}
         </div>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr" }}>
+
+        {/* Metrics */}
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", borderBottom: `1px solid ${C.border}` }}>
           {[
-            { l: "Volume", v: totalKg > 0 ? `${(totalKg / 1000).toFixed(2).replace(".", ",")}` : "—", u: "tonnes" },
-            { l: "Durée", v: duration > 0 ? fmtDur(duration) : "—", u: "" },
-            { l: "Séries", v: `${totalSets}`, u: "complètes" },
-          ].map(m => (
-            <div key={m.l} style={{ background: T.card, padding: "20px 14px", margin: "1px" }}>
-              <div style={{ fontSize: 10, fontWeight: 700, color: T.muted, textTransform: "uppercase", letterSpacing: ".1em", marginBottom: 8 }}>{m.l}</div>
-              <div style={{ fontSize: 24, fontWeight: 800, color: T.ink, lineHeight: 1 }}>{m.v}</div>
-              {m.u && <div style={{ fontSize: 10, fontWeight: 500, color: T.muted, marginTop: 3 }}>{m.u}</div>}
+            { l: "Volume", v: totalKg > 0 ? `${(totalKg/1000).toFixed(1)}t` : "—" },
+            { l: "Durée", v: duration > 0 ? fmtDur(duration) : "—" },
+            { l: "Séries", v: `${totalSets}` },
+          ].map(({ l, v }, i) => (
+            <div key={l} style={{ padding: "24px 16px", borderRight: i < 2 ? `1px solid ${C.border}` : "none" }}>
+              <div style={{ fontSize: 12, fontWeight: 600, color: C.ink48, textTransform: "uppercase", letterSpacing: ".1em", marginBottom: 8 }}>{l}</div>
+              <div style={{ fontSize: 28, fontWeight: 700, color: C.ink, letterSpacing: "-.01em" }}>{v}</div>
             </div>
           ))}
         </div>
-        <div style={{ background: T.card, borderTop: "1px solid #F0F0ED", padding: "20px" }}>
-          <div style={{ fontSize: 10, fontWeight: 700, color: T.muted, textTransform: "uppercase", letterSpacing: ".1em", marginBottom: 16 }}>Volume musculaire</div>
-          <div style={{ display: "flex", justifyContent: "center" }}><RadarChart data={radarData} /></div>
-        </div>
-        <div style={{ padding: "20px" }}>
-          <button onClick={onClose} style={{ width: "100%", padding: "15px", borderRadius: 14, border: "none", background: T.ink, color: "#fff", fontFamily: "Inter", fontSize: 15, fontWeight: 700, cursor: "pointer" }}>Fermer</button>
+
+        {/* Exercises */}
+        {exercises.length > 0 && (
+          <div style={{ padding: "24px" }}>
+            <div style={{ fontSize: 14, fontWeight: 600, color: C.ink48, textTransform: "uppercase", letterSpacing: ".1em", marginBottom: 16 }}>Exercices</div>
+            {exercises.filter(e => e.completedSets > 0).map((ex, i) => (
+              <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "14px 0", borderBottom: `1px solid ${C.border}` }}>
+                <div>
+                  <div style={{ fontSize: 17, fontWeight: 600, color: C.ink, marginBottom: 2 }}>{ex.name}</div>
+                  <div style={{ fontSize: 14, fontWeight: 400, color: C.ink48 }}>{ex.completedSets} séries · {ex.muscle}</div>
+                </div>
+                {ex.weight > 0 && <span style={{ fontSize: 17, fontWeight: 700, color: C.ink }}>{ex.weight}kg</span>}
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Feedback */}
+        {feedback && (
+          <div style={{ padding: "24px", borderTop: `1px solid ${C.border}` }}>
+            <div style={{ display: "flex", gap: 16, marginBottom: 16 }}>
+              {[{ l: "Intensité", v: feedback.global }, { l: "Énergie", v: feedback.energy }].map(({ l, v }) => (
+                <div key={l} style={{ flex: 1, background: C.surface2, borderRadius: 12, padding: "14px 16px" }}>
+                  <div style={{ fontSize: 12, fontWeight: 600, color: C.ink48, textTransform: "uppercase", letterSpacing: ".08em", marginBottom: 6 }}>{l}</div>
+                  <div style={{ fontSize: 28, fontWeight: 700, color: C.ink }}>{v}/5</div>
+                </div>
+              ))}
+            </div>
+            {feedback.notes && <div style={{ fontSize: 15, fontWeight: 400, color: C.ink48, lineHeight: 1.6 }}>{feedback.notes}</div>}
+          </div>
+        )}
+
+        <div style={{ padding: "0 24px 60px" }}>
+          <Tap onTap={onClose} style={btnFull(C.surface2, C.ink)}><span style={{ fontFamily: F, fontSize: 17, fontWeight: 600 }}>Fermer</span></Tap>
         </div>
       </div>
     </div>
   );
 }
 
-// ─── PROGRESS TAB ─────────────────────────────────────────────────────────────
-function ProgressTab({ sessionHistory, weights }) {
-  const [selectedEx, setSelectedEx] = useState(null);
-  const allExNames = useMemo(() => [...new Set(DEFAULT_PROGRAM.flatMap(d => d.exercises || []).map(e => e.name))], []);
-  const progressData = useMemo(() => {
-    if (!selectedEx) return [];
-    return sessionHistory.filter(s => s.weights?.[selectedEx]).map(s => ({ date: s.date.slice(5), value: s.weights[selectedEx] })).slice(-8);
-  }, [selectedEx, sessionHistory]);
-  const volumeByWeek = useMemo(() => {
-    const weeks = {};
-    sessionHistory.forEach(s => { const w = s.date.slice(0, 7); weeks[w] = (weeks[w] || 0) + (s.totalKg || 0); });
-    return Object.entries(weeks).slice(-8).map(([w, v]) => ({ date: w.slice(5), value: Math.round(v / 1000) }));
-  }, [sessionHistory]);
-  const globalRadar = useMemo(() => {
-    const data = {};
-    const MAP = { "Pecs": "Pecs", "Dos": "Dos", "Dos large": "Dos", "Épaules": "Épaules", "Épaules lat": "Épaules", "Rear delt": "Épaules", "Biceps": "Bras", "Triceps": "Bras", "Quads": "Jambes", "Ischios": "Jambes", "Fessiers": "Jambes", "Core": "Core", "Stabilité": "Core", "Cardio": "Core" };
-    sessionHistory.forEach(s => { (s.exercises || []).forEach(ex => { const k = MAP[ex.muscle] || "Core"; data[k] = (data[k] || 0) + (ex.weight || 0) * (ex.completedSets || 0); }); });
-    const max = Math.max(...Object.values(data), 1);
-    Object.keys(data).forEach(k => data[k] = Math.round(data[k] / max * 100));
-    return data;
-  }, [sessionHistory]);
+// ─── HISTORY TAB ─────────────────────────────────────────────────────────────
+function HistoryTab({ sessions, onSelect }) {
+  const [view, setView] = useState(new Date());
+  const y = view.getFullYear(), m = view.getMonth();
+  const first = new Date(y, m, 1).getDay();
+  const days = new Date(y, m + 1, 0).getDate();
+  const off = first === 0 ? 6 : first - 1;
+  const MN = ["Jan","Fév","Mar","Avr","Mai","Juin","Juil","Août","Sep","Oct","Nov","Déc"];
+  const DN = ["L","M","M","J","V","S","D"];
+  const sessionDates = sessions.map(s => s.date);
 
   return (
-    <div style={{ padding: "20px 20px 100px", maxWidth: 680, margin: "0 auto" }}>
-      {[
-        { title: "Équilibre musculaire", sub: "Volume cumulé sur toutes tes séances", content: <div style={{ display: "flex", justifyContent: "center" }}><RadarChart data={globalRadar} /></div> },
-        { title: "Volume hebdomadaire", sub: "Tonnes soulevées par semaine", content: <LineChart data={volumeByWeek} color={T.ink} height={60} /> },
-      ].map(({ title, sub, content }) => (
-        <div key={title} style={{ background: T.card, borderRadius: 16, padding: "20px", marginBottom: 12, boxShadow: T.shadow }}>
-          <div style={{ fontSize: 15, fontWeight: 700, color: T.ink, marginBottom: 4 }}>{title}</div>
-          <div style={{ fontSize: 12, color: T.muted, marginBottom: 16 }}>{sub}</div>
-          {content}
+    <div style={{ padding: "20px 20px 100px", maxWidth: 600, margin: "0 auto" }}>
+      {/* Calendar */}
+      <div style={{ background: C.surface, borderRadius: 20, padding: "20px", marginBottom: 24 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
+          <Tap onTap={() => setView(new Date(y, m-1, 1))} style={{ width: 36, height: 36, borderRadius: 8, background: C.surface2, display: "flex", alignItems: "center", justifyContent: "center" }}>
+            <span style={{ fontFamily: F, fontSize: 16, color: C.ink48 }}>‹</span>
+          </Tap>
+          <span style={{ fontFamily: F, fontSize: 17, fontWeight: 600, color: C.ink }}>{MN[m]} {y}</span>
+          <Tap onTap={() => setView(new Date(y, m+1, 1))} style={{ width: 36, height: 36, borderRadius: 8, background: C.surface2, display: "flex", alignItems: "center", justifyContent: "center" }}>
+            <span style={{ fontFamily: F, fontSize: 16, color: C.ink48 }}>›</span>
+          </Tap>
         </div>
-      ))}
-      <div style={{ background: T.card, borderRadius: 16, padding: "20px", marginBottom: 12, boxShadow: T.shadow }}>
-        <div style={{ fontSize: 15, fontWeight: 700, color: T.ink, marginBottom: 4 }}>Progression des charges</div>
-        <div style={{ fontSize: 12, color: T.muted, marginBottom: 16 }}>Évolution sur un exercice</div>
-        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 16 }}>
-          {allExNames.slice(0, 8).map(n => (
-            <button key={n} onClick={() => setSelectedEx(n === selectedEx ? null : n)} style={{ fontSize: 12, fontWeight: 500, padding: "6px 14px", borderRadius: 100, border: `1.5px solid ${selectedEx === n ? T.ink : T.border}`, background: selectedEx === n ? T.ink : T.card, color: selectedEx === n ? "#fff" : T.muted, cursor: "pointer" }}>
-              {n.split(" ").slice(0, 2).join(" ")}
-            </button>
-          ))}
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(7,1fr)", gap: 4, marginBottom: 8 }}>
+          {DN.map((d, i) => <div key={i} style={{ textAlign: "center", fontFamily: F, fontSize: 11, fontWeight: 600, color: C.ink24, paddingBottom: 8 }}>{d}</div>)}
         </div>
-        {selectedEx ? <LineChart data={progressData} color={T.green} height={60} /> : <div style={{ height: 60, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, color: T.muted }}>Sélectionne un exercice</div>}
-      </div>
-      <div style={{ background: T.card, borderRadius: 16, overflow: "hidden", boxShadow: T.shadow }}>
-        <div style={{ padding: "16px 20px", borderBottom: `1px solid ${T.border}` }}>
-          <div style={{ fontSize: 15, fontWeight: 700, color: T.ink }}>Personal Bests</div>
-        </div>
-        {Object.keys(weights).length === 0
-          ? <div style={{ padding: "28px", textAlign: "center", fontSize: 13, color: T.muted }}>Enregistre tes charges pendant les séances.</div>
-          : Object.entries(weights).map(([id, kg], i) => {
-            const ex = DEFAULT_PROGRAM.flatMap(d => d.exercises || []).find(e => e.id === id);
-            if (!ex) return null;
-            const orm = calc1RM(kg, ex.reps);
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(7,1fr)", gap: 4 }}>
+          {Array.from({ length: off + days }, (_, i) => {
+            if (i < off) return <div key={i}/>;
+            const d = i - off + 1;
+            const key = `${y}-${String(m+1).padStart(2,"0")}-${String(d).padStart(2,"0")}`;
+            const done = sessionDates.includes(key);
+            const isToday = key === todayKey();
             return (
-              <div key={id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "14px 20px", borderBottom: i < Object.keys(weights).length - 1 ? `1px solid ${T.border}` : "none" }}>
-                <div>
-                  <div style={{ fontSize: 13, fontWeight: 600, color: T.ink }}>{ex.name}</div>
-                  {orm && <div style={{ fontSize: 11, fontWeight: 600, color: T.blue }}>1RM estimé : {orm}kg</div>}
-                </div>
-                <span style={{ fontSize: 18, fontWeight: 800, color: T.ink }}>{kg === 0 ? "BW" : `${kg}kg`}</span>
-              </div>
+              <Tap key={i} onTap={() => { if (done) { const s = sessions.find(h => h.date === key); if (s) onSelect(s); }}}
+                style={{ aspectRatio: "1", borderRadius: 8, background: done ? C.accent : isToday ? C.surface3 : "transparent", border: isToday && !done ? `1px solid ${C.border2}` : "none", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                <span style={{ fontFamily: F, fontSize: 13, fontWeight: done || isToday ? 600 : 400, color: done ? "#000" : isToday ? C.ink : C.ink48 }}>{d}</span>
+              </Tap>
             );
           })}
+        </div>
       </div>
+
+      {/* Recent sessions */}
+      <div style={{ fontFamily: F, fontSize: 14, fontWeight: 600, color: C.ink48, textTransform: "uppercase", letterSpacing: ".1em", marginBottom: 12 }}>Séances récentes</div>
+      {sessions.length === 0 && (
+        <div style={{ textAlign: "center", padding: "40px 0", fontFamily: F, fontSize: 17, color: C.ink48 }}>Aucune séance enregistrée.</div>
+      )}
+      {sessions.slice().reverse().map((s, i) => (
+        <Tap key={i} onTap={() => onSelect(s)} style={{ background: C.surface, borderRadius: 16, padding: "18px", marginBottom: 10, display: "block" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 8 }}>
+            <div style={{ fontFamily: F, fontSize: 17, fontWeight: 600, color: C.ink }}>{s.dayLabel || s.day}</div>
+            <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+              {s.score > 0 && <span style={{ fontFamily: F, fontSize: 15, fontWeight: 700, color: C.accent }}>{s.score}</span>}
+              <span style={{ fontFamily: F, fontSize: 14, fontWeight: 400, color: C.ink48 }}>{s.date}</span>
+            </div>
+          </div>
+          <div style={{ display: "flex", gap: 16 }}>
+            {s.totalKg > 0 && <span style={{ fontFamily: F, fontSize: 14, color: C.ink48 }}>{s.totalKg.toLocaleString()}kg</span>}
+            {s.duration > 0 && <span style={{ fontFamily: F, fontSize: 14, color: C.ink48 }}>{fmtDur(s.duration)}</span>}
+            {s.totalSets > 0 && <span style={{ fontFamily: F, fontSize: 14, color: C.ink48 }}>{s.totalSets} séries</span>}
+          </div>
+        </Tap>
+      ))}
     </div>
   );
 }
 
-// ─── SETTINGS TAB ─────────────────────────────────────────────────────────────
-function SettingsTab({ excluded, onToggleExclude, onExport, onImport, onReset }) {
-  const fileRef = useRef(null);
-  const allEx = DEFAULT_PROGRAM.flatMap(d => d.exercises || []);
+// ─── STATS TAB ────────────────────────────────────────────────────────────────
+function StatsTab({ sessions, weights }) {
+  const totalSessions = sessions.length;
+  const totalKg = sessions.reduce((a, s) => a + (s.totalKg || 0), 0);
+  const avgScore = sessions.length ? Math.round(sessions.reduce((a, s) => a + (s.score || 0), 0) / sessions.length) : 0;
+  const bestSession = sessions.reduce((b, s) => (s.score || 0) > (b?.score || 0) ? s : b, null);
+
+  // PBs from weights
+  const allEx = PROGRAM.flatMap(d => d.exercises || []);
+  const pbs = Object.entries(weights).map(([id, kg]) => {
+    const ex = allEx.find(e => e.id === id);
+    if (!ex) return null;
+    return { name: ex.name, kg, orm: calc1RM(kg, ex.reps), muscle: ex.muscle };
+  }).filter(Boolean).sort((a, b) => (b.orm || 0) - (a.orm || 0));
+
+  const MetricCard = ({ label, value, sub }) => (
+    <div style={{ flex: 1, background: C.surface, borderRadius: 16, padding: "20px 16px" }}>
+      <div style={{ fontFamily: F, fontSize: 12, fontWeight: 600, color: C.ink48, textTransform: "uppercase", letterSpacing: ".1em", marginBottom: 8 }}>{label}</div>
+      <div style={{ fontFamily: F, fontSize: 34, fontWeight: 700, color: C.ink, letterSpacing: "-.02em", lineHeight: 1 }}>{value}</div>
+      {sub && <div style={{ fontFamily: F, fontSize: 13, fontWeight: 400, color: C.ink48, marginTop: 6 }}>{sub}</div>}
+    </div>
+  );
+
   return (
-    <div style={{ padding: "20px 20px 100px", maxWidth: 680, margin: "0 auto" }}>
-      <div style={{ background: T.card, borderRadius: 16, padding: "20px", marginBottom: 12, boxShadow: T.shadow }}>
-        <div style={{ fontSize: 15, fontWeight: 700, color: T.ink, marginBottom: 6 }}>Sauvegarde</div>
-        <div style={{ fontSize: 13, color: T.muted, marginBottom: 16, lineHeight: 1.7 }}>Les données sont sauvegardées localement sur cet appareil.</div>
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-          <button style={{ fontSize: 13, fontWeight: 700, padding: "10px 20px", borderRadius: 10, border: "none", background: T.ink, color: "#fff", cursor: "pointer" }} onClick={onExport}>↓ Exporter JSON</button>
-          <button style={{ fontSize: 13, fontWeight: 600, padding: "10px 20px", borderRadius: 10, border: `1.5px solid ${T.border}`, background: "transparent", color: T.muted, cursor: "pointer" }} onClick={() => fileRef.current?.click()}>↑ Importer JSON</button>
-          <input ref={fileRef} type="file" accept=".json" style={{ display: "none" }} onChange={e => { const f = e.target.files[0]; if (f) { const r = new FileReader(); r.onload = ev => { try { onImport(JSON.parse(ev.target.result)); } catch { alert("Fichier invalide."); } }; r.readAsText(f); } }} />
-        </div>
+    <div style={{ padding: "20px 20px 100px", maxWidth: 600, margin: "0 auto" }}>
+      <div style={{ display: "flex", gap: 10, marginBottom: 10 }}>
+        <MetricCard label="Séances" value={totalSessions}/>
+        <MetricCard label="Volume total" value={totalKg > 0 ? `${(totalKg/1000).toFixed(1)}t` : "—"}/>
       </div>
-      <div style={{ background: T.card, borderRadius: 16, overflow: "hidden", marginBottom: 12, boxShadow: T.shadow }}>
-        <div style={{ padding: "16px 20px", borderBottom: `1px solid ${T.border}` }}>
-          <div style={{ fontSize: 15, fontWeight: 700, color: T.ink, marginBottom: 2 }}>Exercices exclus</div>
-          <div style={{ fontSize: 12, color: T.muted }}>Masqués dans les séances et la génération IA.</div>
-        </div>
-        {allEx.map((ex, i) => (
-          <div key={ex.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 20px", borderBottom: i < allEx.length - 1 ? `1px solid ${T.border}` : "none", opacity: excluded.includes(ex.id) ? .4 : 1 }}>
-            <div>
-              <div style={{ fontSize: 13, fontWeight: 500, color: T.ink }}>{ex.name}</div>
-              <div style={{ fontSize: 11, color: T.muted }}>{ex.muscle}</div>
-            </div>
-            <button onClick={() => onToggleExclude(ex.id)} style={{ padding: "6px 16px", borderRadius: 100, fontSize: 12, fontWeight: 600, cursor: "pointer", border: `1.5px solid ${excluded.includes(ex.id) ? T.greenBorder : T.border}`, background: excluded.includes(ex.id) ? T.greenBg : "transparent", color: excluded.includes(ex.id) ? T.green : T.muted }}>
-              {excluded.includes(ex.id) ? "Réactiver" : "Exclure"}
-            </button>
+      <div style={{ display: "flex", gap: 10, marginBottom: 24 }}>
+        <MetricCard label="Score moyen" value={avgScore || "—"}/>
+        <MetricCard label="Meilleur" value={bestSession?.score || "—"} sub={bestSession?.dayLabel}/>
+      </div>
+
+      <div style={{ fontFamily: F, fontSize: 14, fontWeight: 600, color: C.ink48, textTransform: "uppercase", letterSpacing: ".1em", marginBottom: 12 }}>Personal Bests</div>
+      {pbs.length === 0 ? (
+        <div style={{ fontFamily: F, fontSize: 17, color: C.ink48, textAlign: "center", padding: "32px 0" }}>Aucun PB enregistré. Commence une séance.</div>
+      ) : pbs.map((pb, i) => (
+        <div key={i} style={{ background: C.surface, borderRadius: 16, padding: "16px 20px", marginBottom: 10, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <div>
+            <div style={{ fontFamily: F, fontSize: 17, fontWeight: 600, color: C.ink, marginBottom: 4 }}>{pb.name}</div>
+            <div style={{ fontFamily: F, fontSize: 14, fontWeight: 400, color: C.ink48 }}>{pb.muscle}</div>
           </div>
+          <div style={{ textAlign: "right" }}>
+            <div style={{ fontFamily: F, fontSize: 22, fontWeight: 700, color: C.ink }}>{pb.kg === 0 ? "BW" : `${pb.kg}kg`}</div>
+            {pb.orm && <div style={{ fontFamily: F, fontSize: 13, fontWeight: 600, color: C.accent }}>1RM ~{pb.orm}kg</div>}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ─── SETTINGS TAB ────────────────────────────────────────────────────────────
+function SettingsTab({ onExport, onImport, onReset }) {
+  const fileRef = useRef(null);
+  return (
+    <div style={{ padding: "20px 20px 100px", maxWidth: 600, margin: "0 auto" }}>
+      <div style={{ background: C.surface, borderRadius: 20, overflow: "hidden", marginBottom: 12 }}>
+        {[
+          { label: "Exporter les données", sub: "Sauvegarde JSON locale", action: onExport },
+          { label: "Importer les données", sub: "Restaurer depuis un fichier", action: () => fileRef.current?.click() },
+        ].map(({ label, sub, action }, i) => (
+          <Tap key={label} onTap={action} style={{ padding: "18px 20px", display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: i === 0 ? `1px solid ${C.border}` : "none" }}>
+            <div>
+              <div style={{ fontFamily: F, fontSize: 17, fontWeight: 400, color: C.ink }}>{label}</div>
+              <div style={{ fontFamily: F, fontSize: 14, fontWeight: 400, color: C.ink48, marginTop: 2 }}>{sub}</div>
+            </div>
+            <span style={{ fontFamily: F, fontSize: 17, color: C.accent }}>›</span>
+          </Tap>
         ))}
       </div>
-      <div style={{ background: T.card, borderRadius: 16, padding: "20px", boxShadow: T.shadow }}>
-        <div style={{ fontSize: 15, fontWeight: 700, color: T.ink, marginBottom: 10 }}>Données</div>
-        <button onClick={onReset} style={{ fontSize: 13, fontWeight: 600, padding: "10px 20px", borderRadius: 10, border: `1.5px solid ${T.red}`, background: "transparent", color: T.red, cursor: "pointer" }}>Effacer toutes les données</button>
+      <input ref={fileRef} type="file" accept=".json" style={{ display: "none" }}
+        onChange={e => { const f = e.target.files[0]; if (f) { const r = new FileReader(); r.onload = ev => { try { onImport(JSON.parse(ev.target.result)); } catch { alert("Fichier invalide."); } }; r.readAsText(f); }}}/>
+
+      <div style={{ background: C.surface, borderRadius: 20, overflow: "hidden" }}>
+        <Tap onTap={() => { if (window.confirm("Effacer toutes les données ?")) onReset(); }} style={{ padding: "18px 20px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <span style={{ fontFamily: F, fontSize: 17, fontWeight: 400, color: C.red }}>Effacer toutes les données</span>
+          <span style={{ fontFamily: F, fontSize: 17, color: C.red }}>›</span>
+        </Tap>
+      </div>
+
+      <div style={{ fontFamily: F, fontSize: 13, fontWeight: 400, color: C.ink24, textAlign: "center", marginTop: 32, lineHeight: 1.6 }}>
+        PH App · S11 · Sprint 11{"\n"}Données stockées localement + Supabase
       </div>
     </div>
   );
 }
 
-// ─── MAIN APP ──────────────────────────────────────────────────────────────────
+// ─── MAIN ────────────────────────────────────────────────────────────────────
 export default function PHApp() {
   const [tab, setTab] = useState("seance");
   const [dayIdx, setDayIdx] = useState(todayIdx());
-  const [schedule, setSchedule] = useState(DEFAULT_PROGRAM);
   const [log, setLog] = useState({});
   const [weights, setWeights] = useState({});
-  const [sessionHistory, setSessionHistory] = useState([]);
-  const [excluded, setExcluded] = useState([]);
+  const [sessions, setSessions] = useState([]);
   const [aiOverride, setAiOverride] = useState(null);
   const [streak, setStreak] = useState(0);
   const [sessionActive, setSessionActive] = useState(false);
@@ -712,26 +779,47 @@ export default function PHApp() {
   const [showRegen, setShowRegen] = useState(false);
   const [showReport, setShowReport] = useState(null);
   const [restLabel, setRestLabel] = useState("");
-  const sessionClock = useStopwatch();
-  const restTimer = useCountdown();
+  const [sbReady, setSbReady] = useState(false);
+  const clock = useStopwatch();
+  const rest = useCountdown();
 
+  // Load data — Supabase first, localStorage fallback
   useEffect(() => {
-    const data = lsLoad();
-    if (data.schedule) setSchedule(data.schedule);
-    if (data.log) setLog(data.log);
-    if (data.weights) setWeights(data.weights);
-    if (data.sessionHistory) setSessionHistory(data.sessionHistory);
-    if (data.excluded) setExcluded(data.excluded);
-    const dates = (data.sessionHistory || []).map(s => s.date);
+    const local = lsGet();
+    if (local.log) setLog(local.log);
+    if (local.weights) setWeights(local.weights);
+    if (local.sessions) { setSessions(local.sessions); computeStreak(local.sessions); }
+
+    if (sb) {
+      Promise.all([
+        sb.from("sessions").select("*").eq("user_id", USER_ID).order("date", { ascending: false }),
+        sb.from("personal_bests").select("*").eq("user_id", USER_ID),
+      ]).then(([{ data: sess }, { data: pbs }]) => {
+        if (sess?.length) { setSessions(sess); computeStreak(sess); lsSet({ ...lsGet(), sessions: sess }); }
+        if (pbs?.length) {
+          const w = {};
+          pbs.forEach(pb => { w[pb.exercise_id || pb.exercise_name] = pb.weight_kg; });
+          setWeights(prev => ({ ...prev, ...w }));
+        }
+        setSbReady(true);
+      }).catch(() => setSbReady(false));
+    }
+  }, []);
+
+  function computeStreak(sess) {
+    const dates = (sess || []).map(s => s.date);
     let s = 0;
-    for (let i = 0; i < 30; i++) {
+    for (let i = 0; i < 60; i++) {
       const d = new Date(); d.setDate(d.getDate() - i);
       if (dates.includes(d.toISOString().slice(0, 10))) s++; else break;
     }
     setStreak(s);
-  }, []);
+  }
 
-  const persist = useCallback((updates) => { lsSave({ schedule, log, weights, sessionHistory, excluded, ...updates }); }, [schedule, log, weights, sessionHistory, excluded]);
+  const persist = useCallback((updates) => {
+    const current = lsGet();
+    lsSet({ ...current, ...updates });
+  }, []);
 
   const saveLog = useCallback((key, val) => {
     setLog(prev => { const next = { ...prev, [key]: val }; persist({ log: next }); return next; });
@@ -744,23 +832,12 @@ export default function PHApp() {
     }
   }, [persist]);
 
-  const saveWeight = useCallback((id, val) => { setWeights(prev => { const next = { ...prev, [id]: val }; persist({ weights: next }); return next; }); }, [persist]);
-  const toggleExclude = useCallback((id) => { setExcluded(prev => { const next = prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]; persist({ excluded: next }); return next; }); }, [persist]);
+  const saveWeight = useCallback((id, val) => {
+    setWeights(prev => { const next = { ...prev, [id]: val }; persist({ weights: next }); return next; });
+  }, [persist]);
 
-  const handleStartSession = () => {
-    setSessionActive(true);
-    sessionClock.start();
-  };
-
-  const handleEndSession = () => {
-    sessionClock.stop();
-    setShowFeedback(true);
-  };
-
-  const calcScore = (kg, sets, g, e) => Math.round(Math.min(kg / 5000 * 40, 40) + Math.min(sets / 25 * 30, 30) + ((g || 3) + (e || 3)) / 10 * 30);
-
-  const handleFeedbackSave = (fb) => {
-    const day = schedule[dayIdx];
+  const handleFeedbackSave = async (fb) => {
+    const day = PROGRAM[dayIdx];
     const exos = aiOverride?.exercises || day.exercises || [];
     let totalKg = 0, totalSets = 0;
     const exercisesData = exos.map(ex => {
@@ -772,253 +849,229 @@ export default function PHApp() {
       });
       return { id: ex.id, name: ex.name, muscle: ex.muscle, weight: lastWeight, completedSets };
     });
-    const duration = sessionClock.sec;
-    const score = calcScore(Math.round(totalKg), totalSets, fb.global, fb.energy);
-    const entry = { ...fb, day: day.day, dayLabel: day.label, date: todayKey(), exercises: exercisesData, totalKg: Math.round(totalKg), totalSets, duration, weights: { ...weights }, score, feedback: fb };
-    setSessionHistory(prev => { const next = [...prev.filter(s => s.date !== todayKey()), entry]; persist({ sessionHistory: next }); setStreak(s => s + 1); return next; });
-    setSessionActive(false);
-    sessionClock.reset();
-    setShowFeedback(false);
-    setShowReport(entry);
+    const score = Math.round(Math.min(totalKg / 5000 * 40, 40) + Math.min(totalSets / 25 * 30, 30) + ((fb.global + fb.energy) / 10 * 30));
+    const entry = { day: day.day, dayLabel: day.label, date: todayKey(), exercises: exercisesData, totalKg: Math.round(totalKg), totalSets, duration: clock.sec, score, feedback: fb, user_id: USER_ID };
+
+    // Save to Supabase
+    if (sb) {
+      const { error } = await sb.from("sessions").upsert({ ...entry, week: "S24", session_type: day.label, completed: true, notes: fb.notes }, { onConflict: "user_id,date" });
+      if (!error) {
+        // Update streak in Supabase
+        const { data: existing } = await sb.from("streaks").select("*").eq("user_id", USER_ID).single().catch(() => ({ data: null }));
+        const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+        const cur = existing?.last_session_date === yesterday ? (existing.current_streak || 0) + 1 : 1;
+        await sb.from("streaks").upsert({ user_id: USER_ID, current_streak: cur, longest_streak: Math.max(cur, existing?.longest_streak || 0), last_session_date: todayKey(), total_sessions: (existing?.total_sessions || 0) + 1, updated_at: new Date().toISOString() }, { onConflict: "user_id" });
+        // Save PBs
+        for (const ex of exercisesData) {
+          if (ex.weight > 0) {
+            await sb.from("personal_bests").upsert({ user_id: USER_ID, exercise_name: ex.name, exercise_id: ex.id, weight_kg: ex.weight, reps: parseInt(String(exos.find(e => e.id === ex.id)?.reps).split("–")[0]) || 8, one_rm: calc1RM(ex.weight, exos.find(e => e.id === ex.id)?.reps || "8"), achieved_at: todayKey() }, { onConflict: "user_id,exercise_name" }).catch(() => {});
+          }
+        }
+      }
+    }
+
+    setSessions(prev => { const next = [...prev.filter(s => s.date !== todayKey()), entry]; persist({ sessions: next }); computeStreak(next); return next; });
+    setSessionActive(false); clock.reset(); setShowFeedback(false); setShowReport(entry);
   };
 
-  const handleExport = () => { const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([JSON.stringify(lsLoad(), null, 2)], { type: "application/json" })); a.download = `PH-backup-${todayKey()}.json`; a.click(); };
-  const handleImport = (data) => { lsSave(data); if (data.schedule) setSchedule(data.schedule); if (data.log) setLog(data.log); if (data.weights) setWeights(data.weights); if (data.sessionHistory) setSessionHistory(data.sessionHistory); if (data.excluded) setExcluded(data.excluded); alert("Données restaurées."); };
+  const handleExport = () => { const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([JSON.stringify(lsGet(), null, 2)], { type: "application/json" })); a.download = `PH-backup-${todayKey()}.json`; a.click(); };
+  const handleImport = d => { lsSet(d); if (d.log) setLog(d.log); if (d.weights) setWeights(d.weights); if (d.sessions) { setSessions(d.sessions); computeStreak(d.sessions); } alert("Restauré."); };
+  const handleReset = () => { lsSet({}); setLog({}); setWeights({}); setSessions([]); setStreak(0); };
 
-  const day = schedule[dayIdx];
+  const day = PROGRAM[dayIdx];
   const isRest = !day?.salle;
-  const exos = (aiOverride?.exercises || day?.exercises || []).filter(e => !excluded.includes(e.id));
+  const exos = (aiOverride?.exercises || day?.exercises || []);
   const absExos = aiOverride?.abs || day?.abs || [];
-  const sessionDates = sessionHistory.map(s => s.date);
 
-  // Bottom nav tabs
-  const TABS = [
-    { id: "seance", label: "Séance", icon: "⚡" },
-    { id: "progress", label: "Stats", icon: "📈" },
-    { id: "history", label: "Historique", icon: "📅" },
-    { id: "settings", label: "Réglages", icon: "⚙" },
+  const NAV = [
+    { id: "seance", label: "Séance" },
+    { id: "stats", label: "Stats" },
+    { id: "history", label: "Historique" },
+    { id: "settings", label: "Réglages" },
   ];
 
   return (
-    <div style={{ background: T.bg, minHeight: "100vh", minHeight: "100dvh", color: T.ink, fontFamily: "Inter, -apple-system, sans-serif", maxWidth: "100vw", overflowX: "hidden" }}>
+    <div style={{ background: C.bg, minHeight: "100dvh", color: C.ink, fontFamily: F, overflowX: "hidden" }}>
+      <style>{`
+        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+        body { margin: 0; background: ${C.bg}; }
+        @keyframes fadeIn    { from { opacity: 0; } to { opacity: 1; } }
+        @keyframes slideUp   { from { transform: translateY(32px); opacity: 0; } to { transform: none; opacity: 1; } }
+        @keyframes fadeSlideIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+        textarea::placeholder { color: ${C.ink24}; }
+        input::placeholder    { color: ${C.ink24}; }
+      `}</style>
 
       {/* TOP BAR */}
-      <div style={{ background: T.card, borderBottom: `1px solid ${T.border}`, padding: "12px 16px", position: "sticky", top: 0, zIndex: 200, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+      <div style={{ background: C.bg, borderBottom: `1px solid ${C.border}`, padding: "14px 20px 12px", position: "sticky", top: 0, zIndex: 200, display: "flex", justifyContent: "space-between", alignItems: "center", paddingTop: "calc(14px + env(safe-area-inset-top))" }}>
         <div>
-          <div style={{ fontSize: 17, fontWeight: 800, color: T.ink, letterSpacing: "-.02em" }}>
-            PH <span style={{ background: T.lime, color: T.ink, padding: "1px 7px", borderRadius: 6, fontSize: 14, fontWeight: 900 }}>APP</span>
+          <div style={{ fontFamily: F, fontSize: 20, fontWeight: 700, color: C.ink, letterSpacing: "-.03em" }}>
+            PH <span style={{ fontWeight: 300, color: C.ink48, fontSize: 16 }}>Programme Hybride</span>
           </div>
-          <div style={{ fontSize: 9, fontWeight: 600, color: T.muted, letterSpacing: ".16em", textTransform: "uppercase", marginTop: 1 }}>S24 · Sprint 10</div>
+          <div style={{ fontFamily: F, fontSize: 11, fontWeight: 600, color: C.ink24, letterSpacing: ".14em", textTransform: "uppercase", marginTop: 2 }}>S24</div>
         </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
           {sessionActive && (
-            <span style={{ fontSize: 13, fontWeight: 800, color: T.red, background: T.redBg, padding: "4px 12px", borderRadius: 8 }}>
-              {fmtDur(sessionClock.sec)}
-            </span>
+            <div style={{ fontFamily: F, fontSize: 15, fontWeight: 700, color: C.red, letterSpacing: "-.01em" }}>{fmtDur(clock.sec)}</div>
           )}
           {streak > 0 && (
-            <div style={{ display: "flex", alignItems: "center", gap: 4, background: "#FFFBEB", border: "1px solid #FDE68A", borderRadius: 100, padding: "4px 12px" }}>
-              <span style={{ fontSize: 13, fontWeight: 800, color: T.streak }}>{streak}</span>
-              <span style={{ fontSize: 9, fontWeight: 700, color: T.streak, letterSpacing: ".08em" }}>J</span>
+            <div style={{ fontFamily: F, fontSize: 13, fontWeight: 600, color: C.orange, padding: "4px 12px", borderRadius: 980, background: C.orangeDim }}>
+              {streak}d
             </div>
           )}
+          {sbReady && <div style={{ width: 6, height: 6, borderRadius: "50%", background: C.green }}/>}
         </div>
       </div>
 
-      {/* DAY STRIP — only on séance tab */}
+      {/* DAY STRIP */}
       {tab === "seance" && (
-        <div style={{ background: T.card, borderBottom: `1px solid ${T.border}`, display: "flex", overflowX: "auto", scrollbarWidth: "none", padding: "8px 12px", gap: 4 }}>
-          {schedule.map((d, i) => {
+        <div style={{ background: C.bg, borderBottom: `1px solid ${C.border}`, display: "flex", overflowX: "auto", padding: "10px 16px", gap: 6, scrollbarWidth: "none" }}>
+          {PROGRAM.map((d, i) => {
             const exList = d.exercises || [];
             const done = exList.filter(e => Array.from({ length: typeof e.sets === "number" ? e.sets : 0 }, (_, si) => si).every(si => log[`${e.id}_s${si}`]?.done)).length;
-            const pct = exList.length ? Math.round(done / exList.length * 100) : 0;
-            const isToday = i === todayIdx(), isSel = i === dayIdx;
+            const pct = exList.length ? done / exList.length : 0;
+            const isSel = i === dayIdx, isToday = i === todayIdx();
             return (
-              <div key={i} onClick={() => { setDayIdx(i); setAiOverride(null); }}
-                style={{ flexShrink: 0, minWidth: 52, padding: "8px 6px", textAlign: "center", cursor: "pointer", borderRadius: 12, background: isSel ? T.ink : isToday ? T.limeBg : "transparent", border: isToday && !isSel ? `2px solid ${T.lime}` : "2px solid transparent", transition: "all .15s" }}>
-                <div style={{ fontSize: 10, fontWeight: 700, color: isSel ? T.lime : isToday ? T.green : T.muted, letterSpacing: ".04em" }}>{d.day}</div>
-                <div style={{ fontSize: 8, fontWeight: 500, color: isSel ? "rgba(255,255,255,.5)" : T.muted2, margin: "2px 0" }}>{d.label.split(" ")[0]}</div>
-                {d.salle ? (
-                  <div style={{ width: "70%", height: 3, background: isSel ? "rgba(255,255,255,.15)" : T.border, borderRadius: 100, margin: "0 auto", overflow: "hidden" }}>
-                    <div style={{ width: `${pct}%`, height: 3, background: isSel ? T.lime : T.green, borderRadius: 100 }} />
+              <Tap key={i} onTap={() => { setDayIdx(i); setAiOverride(null); }} style={{
+                flexShrink: 0, minWidth: 50, padding: "10px 6px", textAlign: "center", borderRadius: 12,
+                background: isSel ? C.surface2 : "transparent",
+                border: `1px solid ${isSel ? C.border2 : "transparent"}`,
+              }}>
+                <div style={{ fontFamily: F, fontSize: 10, fontWeight: 600, color: isSel ? C.ink80 : C.ink24, letterSpacing: ".06em", marginBottom: 4 }}>{d.day}</div>
+                {isToday && <div style={{ width: 6, height: 6, borderRadius: "50%", background: C.lime, margin: "0 auto 4px" }}/>}
+                {d.salle && pct > 0 && (
+                  <div style={{ width: "70%", height: 2, background: C.border2, borderRadius: 1, margin: "0 auto" }}>
+                    <div style={{ width: `${pct * 100}%`, height: 2, background: C.accent, borderRadius: 1, transition: `width ${T_MED} ${EASE_OUT}` }}/>
                   </div>
-                ) : <div style={{ fontSize: 7, color: isSel ? "rgba(255,255,255,.2)" : T.muted2 }}>—</div>}
-              </div>
+                )}
+              </Tap>
             );
           })}
         </div>
       )}
 
-      {/* MAIN CONTENT */}
+      {/* CONTENT */}
       <div style={{ paddingBottom: 80 }}>
 
-        {/* ── SÉANCE TAB ── */}
+        {/* SÉANCE */}
         {tab === "seance" && (
-          <div style={{ padding: "16px 16px 0", maxWidth: 680, margin: "0 auto" }}>
+          <div style={{ padding: "16px 20px 0", maxWidth: 600, margin: "0 auto" }}>
             {isRest ? (
-              <div style={{ textAlign: "center", padding: "60px 20px", display: "flex", flexDirection: "column", alignItems: "center", gap: 16 }}>
-                <div style={{ fontSize: 32, fontWeight: 800, color: T.muted }}>Récupération</div>
-                <p style={{ fontSize: 14, color: T.muted, maxWidth: 300, lineHeight: 1.9 }}>
-                  {dayIdx === 3 ? "Récupération musculaire active." : "Reset complet. Synthèse protéique prioritaire."}
-                </p>
-                <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "center" }}>
-                  {["10km marche", "8h sommeil", "2g protéines/kg"].map(r => (
-                    <span key={r} style={{ fontSize: 12, fontWeight: 500, padding: "6px 14px", border: `1.5px solid ${T.border}`, borderRadius: 100, color: T.muted }}>{r}</span>
+              <div style={{ textAlign: "center", padding: "80px 0", animation: `fadeIn 200ms ${EASE_OUT}` }}>
+                <div style={{ fontFamily: F, fontSize: 34, fontWeight: 600, color: C.ink48, letterSpacing: "-.02em", marginBottom: 16 }}>Récupération</div>
+                <div style={{ fontFamily: F, fontSize: 17, fontWeight: 400, color: C.ink24, lineHeight: 1.6, maxWidth: 280, margin: "0 auto 28px" }}>
+                  {dayIdx === 3 ? "Récupération musculaire active. Tes fibres consolident les adaptations." : "Reset complet. Synthèse protéique et sommeil prioritaires."}
+                </div>
+                <div style={{ display: "flex", gap: 8, justifyContent: "center", flexWrap: "wrap" }}>
+                  {["10km marche", "8h sommeil", "2g prot/kg"].map(r => (
+                    <span key={r} style={{ fontFamily: F, fontSize: 14, fontWeight: 400, padding: "7px 16px", border: `1px solid ${C.border2}`, borderRadius: 980, color: C.ink48 }}>{r}</span>
                   ))}
                 </div>
               </div>
             ) : (
               <>
-                {/* Session header */}
-                <div style={{ background: T.card, borderRadius: 20, padding: "18px", marginBottom: 14, boxShadow: T.shadow }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 14 }}>
-                    <div style={{ flex: 1, minWidth: 0, marginRight: 12 }}>
-                      <div style={{ fontSize: 10, fontWeight: 700, color: T.muted, textTransform: "uppercase", letterSpacing: ".12em", marginBottom: 4 }}>{day.day} · S24</div>
-                      <div style={{ fontSize: 22, fontWeight: 800, color: T.ink, lineHeight: 1.1, letterSpacing: "-.01em" }}>{aiOverride?.titre || day.label}</div>
-                      <div style={{ fontSize: 13, fontWeight: 400, color: T.muted, marginTop: 4 }}>{day.muscle}</div>
-                    </div>
-                    <span style={{ fontSize: 11, fontWeight: 700, padding: "5px 12px", borderRadius: 100, background: day.salle === "haut" ? T.orangeBg : T.greenBg, color: day.salle === "haut" ? T.orange : T.green, border: `1.5px solid ${day.salle === "haut" ? T.orangeBorder : T.greenBorder}`, whiteSpace: "nowrap", flexShrink: 0 }}>
-                      {day.salle === "haut" ? "Salle Haut" : "Salle Bas"}
-                    </span>
+                {/* Header */}
+                <div style={{ marginBottom: 20, animation: `fadeIn 200ms ${EASE_OUT}` }}>
+                  <div style={{ fontFamily: F, fontSize: 12, fontWeight: 600, color: C.ink24, textTransform: "uppercase", letterSpacing: ".14em", marginBottom: 8 }}>
+                    {day.day} · S24 · {day.salle === "haut" ? "Salle Haute" : "Salle Basse"}
                   </div>
-
-                  {/* START / END SESSION BUTTON */}
-                  {!sessionActive ? (
-                    <button
-                      onClick={handleStartSession}
-                      style={{ width: "100%", padding: "15px", borderRadius: 14, border: "none", background: T.lime, color: T.ink, fontFamily: "Inter", fontSize: 15, fontWeight: 800, cursor: "pointer", letterSpacing: ".02em" }}>
-                      ▶ Démarrer la séance
-                    </button>
-                  ) : (
-                    <div style={{ display: "flex", gap: 8 }}>
-                      <div style={{ flex: 1, padding: "13px", borderRadius: 14, background: T.redBg, border: `1.5px solid ${T.red}`, textAlign: "center" }}>
-                        <span style={{ fontSize: 13, fontWeight: 800, color: T.red }}>⏱ {fmtDur(sessionClock.sec)}</span>
-                      </div>
-                      <button onClick={handleEndSession} style={{ flex: 2, padding: "13px", borderRadius: 14, border: "none", background: T.ink, color: "#fff", fontFamily: "Inter", fontSize: 14, fontWeight: 700, cursor: "pointer" }}>
-                        ■ Terminer
-                      </button>
-                      <button onClick={() => setShowRegen(true)} style={{ padding: "13px 16px", borderRadius: 14, border: `1.5px solid ${T.border}`, background: "transparent", color: T.muted, fontFamily: "Inter", fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
-                        IA
-                      </button>
-                    </div>
-                  )}
-
-                  {!sessionActive && (
-                    <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
-                      <button style={{ flex: 1, fontSize: 13, fontWeight: 600, padding: "10px", borderRadius: 12, border: `1.5px solid ${T.border}`, background: "transparent", color: T.muted, cursor: "pointer" }} onClick={() => setShowRegen(true)}>✦ Générer IA</button>
-                    </div>
-                  )}
+                  <div style={{ fontFamily: F, fontSize: 34, fontWeight: 600, color: C.ink, letterSpacing: "-.02em", lineHeight: 1.1, marginBottom: 8 }}>
+                    {aiOverride?.titre || day.label}
+                  </div>
+                  <div style={{ fontFamily: F, fontSize: 17, fontWeight: 400, color: C.ink48 }}>{day.muscle}</div>
                 </div>
 
-                {/* Warmup */}
-                <div style={{ background: T.card, borderRadius: 14, padding: "14px 16px", marginBottom: 14, boxShadow: T.shadow, borderLeft: `4px solid ${T.ink}` }}>
-                  <div style={{ fontSize: 10, fontWeight: 700, color: T.muted, textTransform: "uppercase", letterSpacing: ".1em", marginBottom: 6 }}>Échauffement · 8 min</div>
-                  <div style={{ fontSize: 13, color: T.ink2, lineHeight: 1.8 }}>
+                {/* START / END button — the ONE big action */}
+                {!sessionActive ? (
+                  <div style={{ display: "flex", gap: 10, marginBottom: 28 }}>
+                    <Tap onTap={() => { setSessionActive(true); clock.start(); }} style={{ flex: 1, padding: "16px", borderRadius: 14, background: C.accent, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                      <span style={{ fontFamily: F, fontSize: 17, fontWeight: 600, color: "#000" }}>Démarrer</span>
+                    </Tap>
+                    <Tap onTap={() => setShowRegen(true)} style={{ padding: "16px 20px", borderRadius: 14, border: `1px solid ${C.border2}`, background: "transparent", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                      <span style={{ fontFamily: F, fontSize: 15, fontWeight: 600, color: C.ink48 }}>IA</span>
+                    </Tap>
+                  </div>
+                ) : (
+                  <div style={{ display: "flex", gap: 10, marginBottom: 28 }}>
+                    <div style={{ flex: 1, padding: "14px 16px", borderRadius: 14, background: C.redDim, border: `1px solid ${C.red}`, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                      <span style={{ fontFamily: F, fontSize: 17, fontWeight: 700, color: C.red }}>{fmtDur(clock.sec)}</span>
+                    </div>
+                    <Tap onTap={() => { clock.stop(); setShowFeedback(true); }} style={{ flex: 2, padding: "14px", borderRadius: 14, background: C.surface2, border: `1px solid ${C.border2}`, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                      <span style={{ fontFamily: F, fontSize: 17, fontWeight: 600, color: C.ink80 }}>Terminer</span>
+                    </Tap>
+                    <Tap onTap={() => setShowRegen(true)} style={{ padding: "14px 20px", borderRadius: 14, border: `1px solid ${C.border2}`, background: "transparent", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                      <span style={{ fontFamily: F, fontSize: 15, fontWeight: 600, color: C.ink48 }}>IA</span>
+                    </Tap>
+                  </div>
+                )}
+
+                {/* Warmup note */}
+                <div style={{ borderLeft: `2px solid ${C.border2}`, paddingLeft: 16, marginBottom: 28 }}>
+                  <div style={{ fontFamily: F, fontSize: 12, fontWeight: 600, color: C.ink24, textTransform: "uppercase", letterSpacing: ".1em", marginBottom: 6 }}>Échauffement · 8 min</div>
+                  <div style={{ fontFamily: F, fontSize: 14, fontWeight: 400, color: C.ink48, lineHeight: 1.7 }}>
                     {day.salle === "haut"
-                      ? "Rotations épaules 2×10 · Wall slide 2×10 · Push-up to downdog 2×8 · Mobilité thoracique"
-                      : "Corde à sauter 3 min · Hip circle 2×10 · Leg swing 2×10 · Rameur 3 min"}
+                      ? "Rotations épaules · Wall slide · Push-up to downdog · Mobilité thoracique"
+                      : "Corde à sauter 3min · Hip circle · Leg swing · Rameur 3min"}
                   </div>
                 </div>
 
-                {/* Exercises label */}
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-                  <span style={{ fontSize: 11, fontWeight: 700, color: T.muted, textTransform: "uppercase", letterSpacing: ".1em" }}>Exercices</span>
-                  <span style={{ fontSize: 11, fontWeight: 500, color: T.muted }}>{exos.length} mouvements</span>
+                {/* Exercises */}
+                <div style={{ borderTop: `1px solid ${C.border}` }}>
+                  {exos.map((ex, i) => (
+                    <ExRow key={ex.id} ex={ex} idx={i}
+                      weight={weights[ex.id] ?? baseKg(ex.name)}
+                      onWeightChange={saveWeight}
+                      log={log}
+                      onLogSet={saveLog}
+                      onStartRest={(s, n) => { setRestLabel(n); rest.start(s); }}
+                    />
+                  ))}
                 </div>
-
-                {exos.map(ex => (
-                  <ExCard key={ex.id} ex={ex}
-                    weight={weights[ex.id] ?? baseKg(ex.name)}
-                    onWeightChange={saveWeight}
-                    log={log}
-                    onLogSet={saveLog}
-                    onStartRest={(s, n) => { setRestLabel(n); restTimer.start(s); }}
-                    sessionHistory={sessionHistory}
-                  />
-                ))}
 
                 {/* Abs */}
                 {absExos.length > 0 && (
-                  <>
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", margin: "18px 0 10px" }}>
-                      <span style={{ fontSize: 11, fontWeight: 700, color: T.green, textTransform: "uppercase", letterSpacing: ".1em" }}>Abdominaux</span>
-                    </div>
+                  <div style={{ marginTop: 24, paddingTop: 24, borderTop: `1px solid ${C.border}` }}>
+                    <div style={{ fontFamily: F, fontSize: 12, fontWeight: 600, color: C.ink24, textTransform: "uppercase", letterSpacing: ".1em", marginBottom: 16 }}>Abdominaux</div>
                     {absExos.map(a => (
-                      <div key={a.id} style={{ background: T.card, borderRadius: 14, padding: "14px 16px", marginBottom: 8, display: "flex", justifyContent: "space-between", alignItems: "center", boxShadow: T.shadow }}>
-                        <span style={{ fontSize: 14, fontWeight: 600, color: T.ink }}>{a.name}</span>
-                        <span style={{ fontSize: 12, fontWeight: 700, padding: "4px 12px", borderRadius: 8, background: T.greenBg, color: T.green }}>{a.vol}</span>
+                      <div key={a.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "14px 0", borderBottom: `1px solid ${C.border}` }}>
+                        <span style={{ fontFamily: F, fontSize: 17, fontWeight: 400, color: C.ink }}>{a.name}</span>
+                        <span style={{ fontFamily: F, fontSize: 15, fontWeight: 600, color: C.ink48 }}>{a.vol}</span>
                       </div>
                     ))}
-                  </>
+                  </div>
                 )}
 
-                {/* End CTA if not active */}
+                {/* End CTA */}
                 {!sessionActive && (
-                  <div style={{ background: T.card, borderRadius: 16, padding: "20px", textAlign: "center", marginTop: 16, boxShadow: T.shadow }}>
-                    <div style={{ fontSize: 13, color: T.muted, marginBottom: 14 }}>Séance terminée ? Génère ton rapport.</div>
-                    <button style={{ fontSize: 15, fontWeight: 700, padding: "14px 36px", borderRadius: 14, border: "none", background: T.ink, color: "#fff", cursor: "pointer" }} onClick={() => setShowFeedback(true)}>Rapport de séance</button>
-                  </div>
+                  <Tap onTap={() => setShowFeedback(true)} style={{ marginTop: 32, marginBottom: 16, padding: "16px", borderRadius: 14, background: C.surface2, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                    <span style={{ fontFamily: F, fontSize: 17, fontWeight: 600, color: C.ink48 }}>Rapport de séance</span>
+                  </Tap>
                 )}
               </>
             )}
           </div>
         )}
 
-        {/* ── PROGRESS TAB ── */}
-        {tab === "progress" && <ProgressTab sessionHistory={sessionHistory} weights={weights} />}
-
-        {/* ── HISTORY TAB ── */}
-        {tab === "history" && (
-          <div style={{ padding: "16px 16px 0", maxWidth: 680, margin: "0 auto" }}>
-            <MonthCalendar sessionDates={sessionDates} onSelectDate={key => { const s = sessionHistory.find(h => h.date === key); if (s) setShowReport(s); }} />
-            <div style={{ fontSize: 11, fontWeight: 700, color: T.muted, textTransform: "uppercase", letterSpacing: ".1em", marginBottom: 12 }}>Séances récentes</div>
-            {sessionHistory.length === 0 && <div style={{ textAlign: "center", padding: "36px", fontSize: 13, color: T.muted }}>Aucune séance enregistrée.</div>}
-            {sessionHistory.slice().reverse().map((s, i) => (
-              <div key={i} onClick={() => setShowReport(s)} style={{ background: T.card, borderRadius: 16, padding: "16px", marginBottom: 10, cursor: "pointer", boxShadow: T.shadow }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 6 }}>
-                  <div>
-                    <div style={{ fontSize: 15, fontWeight: 700, color: T.ink }}>{s.dayLabel || s.day}</div>
-                    <div style={{ fontSize: 11, fontWeight: 500, color: T.muted, marginTop: 2 }}>{s.date}</div>
-                  </div>
-                  <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                    {s.score > 0 && <span style={{ fontSize: 13, fontWeight: 800, padding: "3px 12px", borderRadius: 8, background: T.limeBg, border: `1.5px solid ${T.lime}`, color: T.ink }}>{s.score}</span>}
-                    {s.totalKg > 0 && <span style={{ fontSize: 12, color: T.muted }}>{s.totalKg.toLocaleString()}kg</span>}
-                  </div>
-                </div>
-                {s.exercises && <div style={{ fontSize: 12, color: T.muted, lineHeight: 1.7 }}>{s.exercises.slice(0, 3).map(e => e.name).join(" · ")}{s.exercises.length > 3 ? ` +${s.exercises.length - 3}` : ""}</div>}
-              </div>
-            ))}
-          </div>
-        )}
-
-        {/* ── SETTINGS TAB ── */}
-        {tab === "settings" && (
-          <SettingsTab
-            excluded={excluded}
-            onToggleExclude={toggleExclude}
-            onExport={handleExport}
-            onImport={handleImport}
-            onReset={() => { if (!window.confirm("Effacer toutes les données ?")) return; lsSave({}); setLog({}); setWeights({}); setSessionHistory([]); setExcluded([]); setSchedule(DEFAULT_PROGRAM); setStreak(0); }}
-          />
-        )}
+        {tab === "stats" && <StatsTab sessions={sessions} weights={weights}/>}
+        {tab === "history" && <HistoryTab sessions={sessions} onSelect={setShowReport}/>}
+        {tab === "settings" && <SettingsTab onExport={handleExport} onImport={handleImport} onReset={handleReset}/>}
       </div>
 
-      {/* ── BOTTOM NAV ── */}
-      <div style={{ position: "fixed", bottom: 0, left: 0, right: 0, zIndex: 300, background: T.card, borderTop: `1px solid ${T.border}`, display: "flex", paddingBottom: "env(safe-area-inset-bottom)" }}>
-        {TABS.map(({ id, label, icon }) => (
-          <button key={id} onClick={() => setTab(id)} style={{ flex: 1, padding: "10px 4px 12px", border: "none", background: "transparent", cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 3 }}>
-            <span style={{ fontSize: 20 }}>{icon}</span>
-            <span style={{ fontSize: 10, fontWeight: tab === id ? 700 : 500, color: tab === id ? T.ink : T.muted, letterSpacing: ".02em" }}>{label}</span>
-            {tab === id && <div style={{ width: 20, height: 2.5, background: T.lime, borderRadius: 100, marginTop: 1 }} />}
-          </button>
+      {/* BOTTOM NAV */}
+      <div style={{ position: "fixed", bottom: 0, left: 0, right: 0, zIndex: 300, background: `rgba(0,0,0,.88)`, borderTop: `1px solid ${C.border}`, backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)", display: "flex", paddingBottom: "env(safe-area-inset-bottom)" }}>
+        {NAV.map(({ id, label }) => (
+          <Tap key={id} onTap={() => setTab(id)} style={{ flex: 1, padding: "10px 4px 14px", display: "flex", flexDirection: "column", alignItems: "center", gap: 5 }}>
+            <div style={{ width: 20, height: 2, borderRadius: 1, background: tab === id ? C.accent : "transparent", marginBottom: 4, transition: `background ${T_MED}` }}/>
+            <span style={{ fontFamily: F, fontSize: 11, fontWeight: tab === id ? 600 : 400, color: tab === id ? C.ink : C.ink48, letterSpacing: ".02em", transition: `color ${T_MED}` }}>{label}</span>
+          </Tap>
         ))}
       </div>
 
-      {/* ── OVERLAYS ── */}
-      <RingTimer sec={restTimer.sec} total={restTimer.total} running={restTimer.running} done={restTimer.done} label={restLabel} onStop={() => restTimer.stop()} onReset={() => restTimer.reset()} />
-      {showFeedback && <FeedbackModal onClose={() => setShowFeedback(false)} onSave={handleFeedbackSave} />}
-      {showRegen && <RegenModal dayInfo={day} excluded={excluded} history={sessionHistory} weights={weights} onClose={() => setShowRegen(false)} onResult={s => { setAiOverride(s); setTab("seance"); }} />}
-      {showReport && <SessionReport session={showReport} onClose={() => setShowReport(null)} />}
+      {/* OVERLAYS */}
+      <RestOverlay timer={rest} label={restLabel}/>
+      {showFeedback && <FeedbackSheet onClose={() => setShowFeedback(false)} onSave={handleFeedbackSave}/>}
+      {showRegen && <RegenSheet onClose={() => setShowRegen(false)} onResult={o => { setAiOverride(o); setShowRegen(false); }}/>}
+      {showReport && <SessionReport session={showReport} onClose={() => setShowReport(null)}/>}
     </div>
   );
 }
