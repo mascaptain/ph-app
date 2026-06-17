@@ -241,6 +241,68 @@ function Tap({children,onTap,style,disabled}) {
   );
 }
 
+
+// ─── WELCOME SCREEN ───────────────────────────────────────────────────────────
+// Shown every time the app opens — big session of the day
+function WelcomeScreen({user, todaySession, streak, onStart, onSkip}) {
+  const hour = new Date().getHours();
+  const greet = hour < 12 ? "Bonjour" : hour < 18 ? "Bon après-midi" : "Bonsoir";
+  const name = user?.user_metadata?.name || "Athlète";
+  const isRest = !todaySession?.salle;
+  return(
+    <div style={{position:"fixed",inset:0,background:C.bg,zIndex:Z.auth-1,display:"flex",flexDirection:"column",fontFamily:F,paddingTop:"env(safe-area-inset-top)",paddingBottom:"env(safe-area-inset-bottom)"}}>
+      <div style={{flex:1,display:"flex",flexDirection:"column",justifyContent:"space-between",padding:"48px 28px 32px"}}>
+        <div>
+          <div style={{fontSize:13,fontWeight:600,color:C.ink4,textTransform:"uppercase",letterSpacing:".14em",marginBottom:12}}>{greet}</div>
+          <div style={{fontSize:40,fontWeight:700,color:C.ink,letterSpacing:"-.02em",lineHeight:1.1,marginBottom:32}}>{name}</div>
+          {streak>0&&(
+            <div style={{display:"inline-flex",alignItems:"center",gap:8,padding:"8px 16px",borderRadius:980,background:C.orDim,marginBottom:32}}>
+              <span style={{fontSize:17,fontWeight:700,color:C.orange}}>{streak} jours</span>
+              <span style={{fontSize:14,color:C.orange}}>de streak</span>
+            </div>
+          )}
+        </div>
+        {/* Séance du jour */}
+        <div style={{background:C.s1,borderRadius:24,padding:"28px",marginBottom:32}}>
+          <div style={{fontSize:11,fontWeight:600,color:C.ink4,textTransform:"uppercase",letterSpacing:".14em",marginBottom:12}}>
+            {isRest ? "Aujourd'hui" : `${todaySession?.day} · Séance du jour`}
+          </div>
+          {isRest ? (
+            <>
+              <div style={{fontSize:32,fontWeight:700,color:C.ink4,letterSpacing:"-.02em",marginBottom:8}}>Récupération</div>
+              <div style={{fontSize:17,color:C.ink4,lineHeight:1.6}}>{todaySession?.muscle}</div>
+            </>
+          ) : (
+            <>
+              <div style={{fontSize:32,fontWeight:700,color:C.ink,letterSpacing:"-.02em",lineHeight:1.1,marginBottom:10}}>{todaySession?.label}</div>
+              <div style={{fontSize:17,color:C.ink3,lineHeight:1.5,marginBottom:20}}>{todaySession?.muscle}</div>
+              <div style={{display:"flex",gap:12,flexWrap:"wrap"}}>
+                <div style={{padding:"8px 14px",borderRadius:10,background:C.s3}}>
+                  <span style={{fontSize:13,fontWeight:600,color:C.ink3}}>{todaySession?.exercises?.length||0} exercices</span>
+                </div>
+                <div style={{padding:"8px 14px",borderRadius:10,background:C.s3}}>
+                  <span style={{fontSize:13,fontWeight:600,color:C.ink3}}>{todaySession?.salle==="haut"?"Salle Haute":"Salle Basse"}</span>
+                </div>
+              </div>
+            </>
+          )}
+        </div>
+        {/* Actions */}
+        <div style={{display:"flex",flexDirection:"column",gap:10}}>
+          {!isRest&&(
+            <Tap onTap={onStart} style={{padding:"18px",borderRadius:16,background:C.blue,display:"flex",alignItems:"center",justifyContent:"center"}}>
+              <span style={{fontSize:17,fontWeight:600,color:"#000"}}>Commencer la séance</span>
+            </Tap>
+          )}
+          <Tap onTap={onSkip} style={{padding:"16px",borderRadius:16,border:`1px solid ${C.s4}`,display:"flex",alignItems:"center",justifyContent:"center"}}>
+            <span style={{fontSize:17,fontWeight:600,color:C.ink3}}>{isRest?"Entrer dans l'app":"Voir le programme complet"}</span>
+          </Tap>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── AUTH SCREEN ─────────────────────────────────────────────────────────────
 function AuthScreen({onAuth}) {
   const[mode,setMode]=useState("login"); // login | signup | magic
@@ -969,6 +1031,7 @@ function TabContent({tab,prevTab,children}) {
 // ─── MAIN ────────────────────────────────────────────────────────────────────
 export default function SomaApp() {
   const[user,setUser]=useState(null);
+  const[showWelcome,setShowWelcome]=useState(true);
   const[authLoading,setAuthLoading]=useState(true);
   const[tab,setTab]=useState("seance");
   const[prevTab,setPrevTab]=useState(null);
@@ -1071,16 +1134,34 @@ export default function SomaApp() {
       return{id:ex.id,n:ex.n||ex.name,m:ex.m||ex.muscle,weight:lastWeight,completedSets};
     });
     const score=Math.round(Math.min(totalKg/5000*40,40)+Math.min(totalSets/25*30,30)+((fb.global+fb.energy)/10*30));
-    const entry={day:day.day,dayLabel:aiOverride?.titre||day.label,date:todayKey(),exercises:exercisesData,totalKg:Math.round(totalKg),totalSets,duration:clock.sec,score,feedback:fb,user_id:user?.id,weights:{...weights}};
+    const entry={
+      day:day.day,
+      day_label:aiOverride?.titre||day.label,
+      date:todayKey(),
+      exercises:JSON.stringify(exercisesData),
+      total_kg:Math.round(totalKg),
+      total_sets:totalSets,
+      duration_seconds:clock.sec,
+      score,
+      feedback:JSON.stringify(fb),
+      user_id:user?.id
+    };
     // Save Supabase
     if(user?.id){
-      await supabase.from("sessions").upsert({...entry,week:"S24",session_type:entry.dayLabel,completed:true,notes:fb.notes},{onConflict:"user_id,date"}).catch(()=>{});
+      const {error: sessionError} = await supabase.from("sessions").upsert({
+        ...entry,
+        week:"S24",
+        session_type:entry.day_label,
+        completed:true,
+        notes:fb.notes||""
+      },{onConflict:"user_id,date"});
+      if(sessionError) console.error("Session save error:", sessionError.message);
       const{data:ex2}=await supabase.from("streaks").select("*").eq("user_id",user.id).single().catch(()=>({data:null}));
       const yesterday=new Date(Date.now()-86400000).toISOString().slice(0,10);
       const cur=ex2?.last_session_date===yesterday?(ex2.current_streak||0)+1:1;
       await supabase.from("streaks").upsert({user_id:user.id,current_streak:cur,longest_streak:Math.max(cur,ex2?.longest_streak||0),last_session_date:todayKey(),total_sessions:(ex2?.total_sessions||0)+1,updated_at:new Date().toISOString()},{onConflict:"user_id"}).catch(()=>{});
       for(const e of exercisesData){
-        if(e.weight>0) await supabase.from("personal_bests").upsert({user_id:user.id,exercise_name:e.n,exercise_id:e.id,weight_kg:e.weight,reps:8,one_rm:orm(e.weight,"8"),achieved_at:todayKey()},{onConflict:"user_id,exercise_name"}).catch(()=>{});
+        if(e.weight>0) await supabase.from("personal_bests").upsert({user_id:user.id,exercise_name:e.n||e.name,exercise_id:e.id,weight_kg:e.weight,reps:8,one_rm:orm(e.weight,"8"),achieved_at:todayKey()},{onConflict:"user_id,exercise_id"}).catch(()=>{});
       }
     }
     setSessions(prev=>{const next=[...prev.filter(s=>s.date!==todayKey()),entry];persist(null,{sessions:next});computeStreak(next);return next;});
@@ -1100,6 +1181,15 @@ export default function SomaApp() {
   );
 
   if(!user) return <AuthScreen onAuth={u=>{setUser(u);loadUserData(u.id);}}/>;
+
+  const todayProgram = PROGRAM[todayIdx()];
+  if(showWelcome) return <WelcomeScreen 
+    user={user} 
+    todaySession={todayProgram} 
+    streak={streak}
+    onStart={()=>{setShowWelcome(false);setDayIdx(todayIdx());setSessionActive(true);clock.start();}}
+    onSkip={()=>setShowWelcome(false)}
+  />;
 
   const day=PROGRAM[dayIdx];
   const isRest=!day?.salle;
