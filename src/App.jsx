@@ -427,10 +427,9 @@ function MiniRest({timer,label,onExpand}) {
 }
 
 // ─── EXERCISE FULL SCREEN ────────────────────────────────────────────────────
-function ExFullScreen({ex,weight,onWeightChange,log,onLogSet,onStartRest,onClose,lastKg,accent,dayKey}) {
+function ExFullScreen({ex,weight,onWeightChange,log,onLogSet,onStartRest,onClose,lastKg,accent}) {
   const sets=typeof ex.sets==="number"?ex.sets:4;
-  const dk=dayKey||ex.id;
-  const done=Array.from({length:sets},(_,i)=>!!log[`${dk}_${ex.id}_s${i}`]?.done);
+  const done=Array.from({length:sets},(_,i)=>!!log[`${ex.id}_s${i}`]?.done);
   const completed=done.filter(Boolean).length;
   const allDone=sets>0&&completed===sets;
   const kg=weight??ex.kg??0;
@@ -438,7 +437,7 @@ function ExFullScreen({ex,weight,onWeightChange,log,onLogSet,onStartRest,onClose
 
   const handleSet=i=>{
     const newDone=!done[i];
-    onLogSet(`${dk}_${ex.id}_s${i}`,{done:newDone,weight:kg,date:todayKey()});
+    onLogSet(`${ex.id}_s${i}`,{done:newDone,weight:kg,date:todayKey()});
     if(newDone&&ex.rest>0) onStartRest(ex.rest,ex.n);
   };
 
@@ -457,7 +456,7 @@ function ExFullScreen({ex,weight,onWeightChange,log,onLogSet,onStartRest,onClose
           <span style={{fontSize:14,color:C.ink3}}>{ex.m}</span>
           <span style={{color:C.s4}}>·</span>
           <span style={{fontSize:13,fontWeight:600,padding:"2px 10px",borderRadius:980,background:C.s2,color:C.ink4}}>{EQ_LABELS[ex.eq]}</span>
-          {oneRM&&<><span style={{color:C.s4}}>·</span><span style={{fontSize:13,fontWeight:600,color:C.blue}}>1RM ~{oneRM}kg</span></>}
+          {ex.kg>0&&!lastKg&&<><span style={{color:C.s4}}>·</span><span style={{fontSize:13,fontWeight:600,color:C.blue}}>Recommandé : {ex.kg}kg</span></>}
         </div>
         {lastKg>0&&<div style={{padding:"12px 16px",borderRadius:12,background:C.orDim,marginBottom:20}}>
           <span style={{fontSize:14,fontWeight:600,color:C.orange}}>Dernière fois : {lastKg}kg · Essaie {lastKg+2.5}kg</span>
@@ -503,17 +502,16 @@ function ExFullScreen({ex,weight,onWeightChange,log,onLogSet,onStartRest,onClose
 }
 
 // ─── EXERCISE ROW ─────────────────────────────────────────────────────────────
-function ExRow({ex,weight,onWeightChange,log,onLogSet,onStartRest,idx,lastKg,onFullScreen,dayKey}) {
+function ExRow({ex,weight,onWeightChange,log,onLogSet,onStartRest,idx,lastKg,onFullScreen}) {
   const sets=typeof ex.sets==="number"?ex.sets:4;
-  const dk=dayKey||ex.id;
-  const done=Array.from({length:sets},(_,i)=>!!log[`${dk}_${ex.id}_s${i}`]?.done);
+  const done=Array.from({length:sets},(_,i)=>!!log[`${ex.id}_s${i}`]?.done);
   const completed=done.filter(Boolean).length;
   const allDone=sets>0&&completed===sets;
   const kg=weight??ex.kg??0;
   const oneRM=orm(kg,ex.reps);
 
   const handleSet=i=>{
-    onLogSet(`${dk}_${ex.id}_s${i}`,{done:!done[i],weight:kg,date:todayKey()});
+    onLogSet(`${ex.id}_s${i}`,{done:!done[i],weight:kg,date:todayKey()});
     if(!done[i]&&ex.rest>0) onStartRest(ex.rest,ex.n);
   };
 
@@ -532,7 +530,7 @@ function ExRow({ex,weight,onWeightChange,log,onLogSet,onStartRest,idx,lastKg,onF
             <span style={{fontSize:14,color:C.ink3}}>{sets}×{ex.reps}</span>
             <span style={{color:C.s4}}>·</span>
             <span style={{fontSize:14,color:C.ink3}}>{ex.m}</span>
-            {oneRM&&<><span style={{color:C.s4}}>·</span><span style={{fontSize:13,fontWeight:600,color:C.blue}}>~{oneRM}kg</span></>}
+            {ex.kg>0&&!lastKg&&<><span style={{color:C.s4}}>·</span><span style={{fontSize:13,fontWeight:600,color:C.blue}}>Reco: {ex.kg}kg</span></>}
             {lastKg>0&&<span style={{fontSize:12,fontWeight:600,color:C.orange}}>↑{lastKg}kg</span>}
           </div>
         </div>
@@ -927,6 +925,52 @@ function HistoryTab({sessions,onSelect,accent}) {
   );
 }
 
+
+// ─── PHOTO TRACKER ───────────────────────────────────────────────────────────
+function PhotoTracker(){
+  const[photos,setPhotos]=useState(()=>{try{return JSON.parse(localStorage.getItem("soma_photos")||"[]");}catch{return[];}});
+  const[weight,setWeight]=useState("");
+  const fileRef=useRef(null);
+  const handleFile=e=>{
+    const f=e.target.files[0];if(!f)return;
+    const reader=new FileReader();
+    reader.onload=ev=>{
+      const entry={id:Date.now(),date:new Date().toLocaleDateString("fr-FR"),weight:weight||null,img:ev.target.result};
+      const next=[entry,...photos].slice(0,24);
+      setPhotos(next);localStorage.setItem("soma_photos",JSON.stringify(next));
+      setWeight("");e.target.value="";
+    };
+    reader.readAsDataURL(f);
+  };
+  const del=id=>{const next=photos.filter(p=>p.id!==id);setPhotos(next);localStorage.setItem("soma_photos",JSON.stringify(next));};
+  return(
+    <div style={{background:C.s1,borderRadius:16,overflow:"hidden",marginBottom:12,fontFamily:F}}>
+      <div style={{padding:"14px 16px",borderBottom:`1px solid ${C.s3}`,display:"flex",gap:8,alignItems:"center"}}>
+        <input value={weight} onChange={e=>setWeight(e.target.value)} placeholder="Poids kg" type="number"
+          style={{width:90,padding:"9px 12px",borderRadius:10,border:`1px solid ${C.div}`,background:C.s2,fontFamily:F,fontSize:14,color:C.ink,outline:"none"}}/>
+        <Tap onTap={()=>fileRef.current?.click()} style={{flex:1,padding:"10px",borderRadius:10,background:C.blue,display:"flex",alignItems:"center",justifyContent:"center"}}>
+          <span style={{fontSize:14,fontWeight:600,color:"#000"}}>+ Photo</span>
+        </Tap>
+        <input ref={fileRef} type="file" accept="image/*" capture="environment" style={{display:"none"}} onChange={handleFile}/>
+      </div>
+      {photos.length===0
+        ?<div style={{padding:"24px",textAlign:"center",fontSize:14,color:C.ink4}}>Aucune photo de suivi.</div>
+        :<div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:2,padding:2}}>
+          {photos.map(p=>(
+            <div key={p.id} style={{position:"relative",aspectRatio:"1",overflow:"hidden",borderRadius:6,background:C.s3}}>
+              <img src={p.img} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/>
+              <div style={{position:"absolute",bottom:0,left:0,right:0,background:"rgba(0,0,0,.7)",padding:"3px 6px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                <span style={{fontSize:9,color:"rgba(255,255,255,.8)",fontFamily:F}}>{p.date}{p.weight?` · ${p.weight}kg`:""}</span>
+                <Tap onTap={()=>del(p.id)}><span style={{fontSize:11,color:C.red}}>✕</span></Tap>
+              </div>
+            </div>
+          ))}
+        </div>
+      }
+    </div>
+  );
+}
+
 // ─── SETTINGS TAB ────────────────────────────────────────────────────────────
 function SettingsTab({user,excluded,onToggleExclude,onSignOut,onReset}) {
   const[showLib,setShowLib]=useState(false);
@@ -979,7 +1023,9 @@ function SettingsTab({user,excluded,onToggleExclude,onSignOut,onReset}) {
           <span style={{fontSize:17,color:C.red}}>›</span>
         </Tap>
       </div>
-      <div style={{fontSize:12,color:C.ink4,textAlign:"center",marginTop:28}}>SŌMA · S14 · Auth Supabase · {DB.length} exercices</div>
+      <div style={{fontSize:12,fontWeight:600,color:C.ink4,textTransform:"uppercase",letterSpacing:".1em",marginBottom:10,marginTop:20}}>Photos de suivi corps</div>
+      <PhotoTracker/>
+      <div style={{fontSize:12,color:C.ink4,textAlign:"center",marginTop:28}}>SŌMA · S15 · {DB.length} exercices</div>
     </div>
   );
 }
@@ -1058,8 +1104,8 @@ export default function SomaApp() {
       if(strData) setStreak(strData.current_streak||0);
       setSbReady(true);
       setDataReady(true);
-      setShowWelcome(true);
-    }catch(e){console.error("load err:",e);setDataReady(true);setShowWelcome(true);}
+      if(!sessionStorage.getItem("soma_welcome_seen")){setShowWelcome(true);sessionStorage.setItem("soma_welcome_seen","1");}
+    }catch(e){console.error("load err:",e);setDataReady(true);}
   },[]);
 
   useEffect(()=>{if(user) loadUserData(user.id);},[user]);
@@ -1086,7 +1132,7 @@ export default function SomaApp() {
 
   const switchTab=useCallback(id=>{setPrevTab(tab);setTab(id);},[tab]);
 
-  const handleStartRest=(s,n)=>{rest.reset();setRestLabel(n);setTimeout(()=>{rest.start(s);setShowRestFull(true);},30);};
+  const handleStartRest=(s,n)=>{setRestLabel(n);rest.start(s);setShowRestFull(true);};
 
   const handleReplaceEx=(replaced,newEx)=>{
     const day=PROGRAM[dayIdx];
@@ -1097,14 +1143,13 @@ export default function SomaApp() {
   };
 
   const handleFeedbackSave=async(fb)=>{
-    if(!fb||typeof fb.global==="undefined"){console.error("feedback invalide",fb);return;}
     const day=PROGRAM[dayIdx];
     const exos=aiOverride?.exercises||day.exercises||[];
     let totalKg=0,totalSets=0;
     const exercisesData=exos.map(ex=>{
       const s=typeof ex.sets==="number"?ex.sets:4;
       let completedSets=0,lastWeight=0;
-      const dKey=`${dayIdx}_${todayKey()}`;Array.from({length:s},(_,i)=>{const e=log[`${dKey}_${ex.id}_s${i}`]||log[`${ex.id}_s${i}`];if(e?.done){completedSets++;lastWeight=e.weight||0;const r=parseFloat(String(ex.reps||"8").split("–")[0])||8;totalKg+=lastWeight*r;totalSets++;}});
+      Array.from({length:s},(_,i)=>{const e=log[`${ex.id}_s${i}`];if(e?.done){completedSets++;lastWeight=e.weight||0;const r=parseFloat(String(ex.reps||"8").split("–")[0])||8;totalKg+=lastWeight*r;totalSets++;}});
       return{id:ex.id,n:ex.n||ex.name,m:ex.m||ex.muscle,weight:lastWeight,completedSets};
     });
     const score=Math.round(Math.min(totalKg/5000*40,40)+Math.min(totalSets/25*30,30)+((fb.global+fb.energy)/10*30));
@@ -1232,8 +1277,8 @@ export default function SomaApp() {
                       <div style={{flex:1,padding:"15px",borderRadius:15,background:C.redDim,border:`1px solid ${C.red}`,display:"flex",alignItems:"center",justifyContent:"center"}}>
                         <span style={{fontSize:17,fontWeight:700,color:C.red}}>{fmtDur(clock.sec)}</span>
                       </div>
-                      <Tap onTap={()=>{clock.stop();setShowFeedback(true);}} style={{flex:2,padding:"15px",borderRadius:15,background:C.s2,border:`1px solid ${C.div}`,display:"flex",alignItems:"center",justifyContent:"center"}}>
-                        <span style={{fontSize:17,fontWeight:600,color:C.ink2}}>Terminer</span>
+                      <Tap onTap={()=>{clock.stop();setShowFeedback(true);}} style={{flex:2,padding:"15px",borderRadius:15,background:C.blue,border:"none",display:"flex",alignItems:"center",justifyContent:"center"}}>
+                        <span style={{fontSize:17,fontWeight:600,color:"#000"}}>Fin de séance</span>
                       </Tap>
                       <Tap onTap={()=>setShowAI(true)} style={{padding:"15px 16px",borderRadius:15,border:`1px solid ${C.div}`,display:"flex",alignItems:"center",justifyContent:"center"}}>
                         <span style={{fontSize:13,fontWeight:600,color:C.ink3}}>IA</span>
@@ -1254,7 +1299,6 @@ export default function SomaApp() {
                         onStartRest={handleStartRest}
                         lastKg={lastKgPerEx[ex.id]||0}
                         onFullScreen={ex=>setFullScreenEx(ex)}
-                        dayKey={`${dayIdx}_${todayKey()}`}
                       />
                     ))}
                   </div>
@@ -1270,8 +1314,8 @@ export default function SomaApp() {
                     </div>
                   )}
                   {!sessionActive&&(
-                    <Tap onTap={()=>setShowFeedback(true)} style={{marginTop:28,marginBottom:16,padding:"16px",borderRadius:15,background:C.s2,display:"flex",alignItems:"center",justifyContent:"center"}}>
-                      <span style={{fontSize:17,fontWeight:600,color:C.ink3}}>Rapport de séance</span>
+                    <Tap onTap={()=>setShowFeedback(true)} style={{marginTop:28,marginBottom:16,padding:"16px",borderRadius:15,background:C.blue,display:"flex",alignItems:"center",justifyContent:"center"}}>
+                      <span style={{fontSize:17,fontWeight:600,color:"#000"}}>Fin de séance</span>
                     </Tap>
                   )}
                 </>
@@ -1298,9 +1342,9 @@ export default function SomaApp() {
       </div>
 
       {/* OVERLAYS — z-index ordering per semantic scale */}
-      {showRestFull&&<RestFullScreen timer={rest} label={restLabel} onSkip={()=>{rest.stop();setShowRestFull(false);}} onClose={()=>{rest.reset();setShowRestFull(false);}}/>}
-      {!showRestFull&&rest.sec>0&&<MiniRest timer={rest} label={restLabel} onExpand={()=>setShowRestFull(true)}/>}
-      {fullScreenEx&&<ExFullScreen ex={fullScreenEx} weight={weights[fullScreenEx.id]??fullScreenEx.kg??0} onWeightChange={saveWeight} log={log} onLogSet={saveLog} onStartRest={handleStartRest} onClose={()=>setFullScreenEx(null)} lastKg={lastKgPerEx[fullScreenEx.id]||0} accent={accent} dayKey={`${dayIdx}_${todayKey()}`}/>}
+      {showRestFull&&<RestFullScreen timer={rest} label={restLabel} onSkip={()=>rest.stop()} onClose={()=>setShowRestFull(false)}/>}
+      {!showRestFull&&<MiniRest timer={rest} label={restLabel} onExpand={()=>setShowRestFull(true)}/>}
+      {fullScreenEx&&<ExFullScreen ex={fullScreenEx} weight={weights[fullScreenEx.id]??fullScreenEx.kg??0} onWeightChange={saveWeight} log={log} onLogSet={saveLog} onStartRest={handleStartRest} onClose={()=>setFullScreenEx(null)} lastKg={lastKgPerEx[fullScreenEx.id]||0} accent={accent}/>}
       {showFeedback&&<FeedbackSheet onClose={()=>setShowFeedback(false)} onSave={handleFeedbackSave}/>}
       {showAI&&<AISheet onClose={()=>setShowAI(false)} onResult={o=>{setAiOverride(o);setShowAI(false);}} excluded={excluded}/>}
       {showPicker&&<ExPicker onSelect={newEx=>handleReplaceEx(showPicker,newEx)} onClose={()=>setShowPicker(null)} currentId={showPicker.id} excluded={excluded}/>}
