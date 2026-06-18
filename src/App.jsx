@@ -242,67 +242,35 @@ function Tap({children,onTap,style,disabled}) {
 }
 
 
-// ─── WELCOME SCREEN ───────────────────────────────────────────────────────────
-// Shown every time the app opens — big session of the day
-function WelcomeScreen({user, todaySession, streak, onStart, onSkip}) {
-  const hour = new Date().getHours();
-  const greet = hour < 12 ? "Bonjour" : hour < 18 ? "Bon après-midi" : "Bonsoir";
-  const name = user?.user_metadata?.name || "Athlète";
-  const isRest = !todaySession?.salle;
+// ─── WELCOME SCREEN ──────────────────────────────────────────────────────────
+function WelcomeScreen({user,todaySession,streak,onStart,onSkip}){
+  const h=new Date().getHours();
+  const greet=h<12?"Bonjour":h<18?"Bon après-midi":"Bonsoir";
+  const name=user?.user_metadata?.name||"Athlète";
+  const isRest=!todaySession?.salle;
   return(
-    <div style={{position:"fixed",inset:0,background:C.bg,zIndex:Z.auth-1,display:"flex",flexDirection:"column",fontFamily:F,paddingTop:"env(safe-area-inset-top)",paddingBottom:"env(safe-area-inset-bottom)"}}>
-      <div style={{flex:1,display:"flex",flexDirection:"column",justifyContent:"space-between",padding:"48px 28px 32px"}}>
+    <div style={{position:"fixed",inset:0,background:C.bg,zIndex:850,display:"flex",flexDirection:"column",fontFamily:F,paddingTop:"env(safe-area-inset-top)",paddingBottom:"env(safe-area-inset-bottom)"}}>
+      <div style={{flex:1,display:"flex",flexDirection:"column",justifyContent:"space-between",padding:"52px 24px 32px",maxWidth:480,margin:"0 auto",width:"100%"}}>
         <div>
-          <div style={{fontSize:13,fontWeight:600,color:C.ink4,textTransform:"uppercase",letterSpacing:".14em",marginBottom:12}}>{greet}</div>
-          <div style={{fontSize:40,fontWeight:700,color:C.ink,letterSpacing:"-.02em",lineHeight:1.1,marginBottom:32}}>{name}</div>
-          {streak>0&&(
-            <div style={{display:"inline-flex",alignItems:"center",gap:8,padding:"8px 16px",borderRadius:980,background:C.orDim,marginBottom:32}}>
-              <span style={{fontSize:17,fontWeight:700,color:C.orange}}>{streak} jours</span>
-              <span style={{fontSize:14,color:C.orange}}>de streak</span>
-            </div>
-          )}
+          <div style={{fontSize:12,fontWeight:600,color:C.ink4,textTransform:"uppercase",letterSpacing:".14em",marginBottom:12}}>{greet}</div>
+          <div style={{fontSize:42,fontWeight:700,color:C.ink,letterSpacing:"-.03em",lineHeight:1.05,marginBottom:24}}>{name}</div>
+          {streak>0&&<div style={{display:"inline-flex",alignItems:"center",gap:8,padding:"8px 16px",borderRadius:980,background:C.orDim,marginBottom:8}}><span style={{fontSize:17,fontWeight:700,color:C.orange}}>{streak}</span><span style={{fontSize:14,color:C.orange}}>{" jours de streak"}</span></div>}
         </div>
-        {/* Séance du jour */}
-        <div style={{background:C.s1,borderRadius:24,padding:"28px",marginBottom:32}}>
-          <div style={{fontSize:11,fontWeight:600,color:C.ink4,textTransform:"uppercase",letterSpacing:".14em",marginBottom:12}}>
-            {isRest ? "Aujourd'hui" : `${todaySession?.day} · Séance du jour`}
-          </div>
-          {isRest ? (
-            <>
-              <div style={{fontSize:32,fontWeight:700,color:C.ink4,letterSpacing:"-.02em",marginBottom:8}}>Récupération</div>
-              <div style={{fontSize:17,color:C.ink4,lineHeight:1.6}}>{todaySession?.muscle}</div>
-            </>
-          ) : (
-            <>
-              <div style={{fontSize:32,fontWeight:700,color:C.ink,letterSpacing:"-.02em",lineHeight:1.1,marginBottom:10}}>{todaySession?.label}</div>
-              <div style={{fontSize:17,color:C.ink3,lineHeight:1.5,marginBottom:20}}>{todaySession?.muscle}</div>
-              <div style={{display:"flex",gap:12,flexWrap:"wrap"}}>
-                <div style={{padding:"8px 14px",borderRadius:10,background:C.s3}}>
-                  <span style={{fontSize:13,fontWeight:600,color:C.ink3}}>{todaySession?.exercises?.length||0} exercices</span>
-                </div>
-                <div style={{padding:"8px 14px",borderRadius:10,background:C.s3}}>
-                  <span style={{fontSize:13,fontWeight:600,color:C.ink3}}>{todaySession?.salle==="haut"?"Salle Haute":"Salle Basse"}</span>
-                </div>
-              </div>
-            </>
-          )}
+        <div style={{background:C.s1,borderRadius:22,padding:"24px",marginBottom:24}}>
+          <div style={{fontSize:11,fontWeight:600,color:C.ink4,textTransform:"uppercase",letterSpacing:".14em",marginBottom:12}}>{isRest?"Aujourd'hui":(todaySession?.day||"")+" · Séance du jour"}</div>
+          {isRest
+            ?<><div style={{fontSize:28,fontWeight:700,color:C.ink4,marginBottom:8}}>Récupération</div><div style={{fontSize:16,color:C.ink4}}>{todaySession?.muscle||"Repos actif"}</div></>
+            :<><div style={{fontSize:28,fontWeight:700,color:C.ink,letterSpacing:"-.02em",lineHeight:1.1,marginBottom:10}}>{todaySession?.label}</div><div style={{fontSize:16,color:C.ink3,marginBottom:18}}>{todaySession?.muscle}</div><div style={{display:"flex",gap:8,flexWrap:"wrap"}}><span style={{padding:"6px 12px",borderRadius:8,background:C.s3,fontSize:13,fontWeight:600,color:C.ink3}}>{(todaySession?.exercises||[]).length} exercices</span><span style={{padding:"6px 12px",borderRadius:8,background:C.s3,fontSize:13,fontWeight:600,color:C.ink3}}>{todaySession?.salle==="haut"?"Salle Haute":"Salle Basse"}</span></div></>
+          }
         </div>
-        {/* Actions */}
         <div style={{display:"flex",flexDirection:"column",gap:10}}>
-          {!isRest&&(
-            <Tap onTap={onStart} style={{padding:"18px",borderRadius:16,background:C.blue,display:"flex",alignItems:"center",justifyContent:"center"}}>
-              <span style={{fontSize:17,fontWeight:600,color:"#000"}}>Commencer la séance</span>
-            </Tap>
-          )}
-          <Tap onTap={onSkip} style={{padding:"16px",borderRadius:16,border:`1px solid ${C.s4}`,display:"flex",alignItems:"center",justifyContent:"center"}}>
-            <span style={{fontSize:17,fontWeight:600,color:C.ink3}}>{isRest?"Entrer dans l'app":"Voir le programme complet"}</span>
-          </Tap>
+          {!isRest&&<Tap onTap={onStart} style={{padding:"17px",borderRadius:15,background:C.blue,display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{fontSize:17,fontWeight:600,color:"#000"}}>Commencer la séance</span></Tap>}
+          <Tap onTap={onSkip} style={{padding:"15px",borderRadius:15,border:`1px solid ${C.s4}`,display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{fontSize:17,fontWeight:600,color:C.ink3}}>{isRest?"Entrer dans l'app":"Voir tout le programme"}</span></Tap>
         </div>
       </div>
     </div>
   );
 }
-
 // ─── AUTH SCREEN ─────────────────────────────────────────────────────────────
 function AuthScreen({onAuth}) {
   const[mode,setMode]=useState("login"); // login | signup | magic
@@ -1031,9 +999,9 @@ function TabContent({tab,prevTab,children}) {
 // ─── MAIN ────────────────────────────────────────────────────────────────────
 export default function SomaApp() {
   const[user,setUser]=useState(null);
+  const[authLoading,setAuthLoading]=useState(true);
   const[showWelcome,setShowWelcome]=useState(false);
   const[dataReady,setDataReady]=useState(false);
-  const[authLoading,setAuthLoading]=useState(true);
   const[tab,setTab]=useState("seance");
   const[prevTab,setPrevTab]=useState(null);
   const[dayIdx,setDayIdx]=useState(todayIdx());
@@ -1068,7 +1036,7 @@ export default function SomaApp() {
     return()=>subscription.unsubscribe();
   },[]);
 
-  const loadUserData = useCallback(async(uid)=>{ try {
+  const loadUserData = useCallback(async(uid)=>{
     // Load from local first (instant)
     const local=JSON.parse(localStorage.getItem(`soma_${uid}`)||"{}");
     if(local.log) setLog(local.log);
@@ -1083,20 +1051,16 @@ export default function SomaApp() {
         supabase.from("personal_bests").select("*").eq("user_id",uid),
         supabase.from("streaks").select("*").eq("user_id",uid).single(),
       ]);
-      if(sess?.length){setSessions(sess);computeStreak(sess);persist(uid,{sessions:sess});}
+      if(sess?.length){const norm=sess.map(s=>({...s,dayLabel:s.day_label||s.dayLabel||s.day||"",totalKg:Number(s.total_kg||s.totalKg||0),totalSets:Number(s.total_sets||s.totalSets||0),duration:Number(s.duration_seconds||s.duration||0),exercises:typeof s.exercises==="string"?JSON.parse(s.exercises||"[]"):(s.exercises||[]),feedback:typeof s.feedback==="string"?JSON.parse(s.feedback||"null"):s.feedback}));setSessions(norm);computeStreak(norm);persist(uid,{sessions:norm});}
       if(pbs?.length){const w={};pbs.forEach(pb=>{w[pb.exercise_id||pb.exercise_name]=pb.weight_kg;});setWeights(prev=>{const next={...prev,...w};persist(uid,{weights:next});return next;});}
       if(strData) setStreak(strData.current_streak||0);
       setSbReady(true);
-    setDataReady(true);
-    setShowWelcome(true);
-    } catch(e){console.error('loadUserData error:',e); setDataReady(true); setShowWelcome(true);}
+      setDataReady(true);
+      setShowWelcome(true);
+    }catch(e){console.error("load err:",e);setDataReady(true);setShowWelcome(true);}
   },[]);
 
-  useEffect(()=>{
-    if(user) {
-      loadUserData(user.id).catch(()=>{setDataReady(true);setShowWelcome(true);});
-    }
-  },[user]);
+  useEffect(()=>{if(user) loadUserData(user.id);},[user]);
 
   function computeStreak(sess){
     const dates=(sess||[]).map(s=>s.date);let s=0;
@@ -1141,52 +1105,20 @@ export default function SomaApp() {
       return{id:ex.id,n:ex.n||ex.name,m:ex.m||ex.muscle,weight:lastWeight,completedSets};
     });
     const score=Math.round(Math.min(totalKg/5000*40,40)+Math.min(totalSets/25*30,30)+((fb.global+fb.energy)/10*30));
-    // Entry pour state local (exercises comme tableau)
-    const entryLocal={
-      day:day.day,
-      dayLabel:aiOverride?.titre||day.label,
-      date:todayKey(),
-      exercises:exercisesData,
-      totalKg:Math.round(totalKg),
-      totalSets,
-      duration:clock.sec,
-      score,
-      feedback:fb,
-      weights:{...weights},
-      user_id:user?.id
-    };
-    // Entry pour Supabase (JSON stringify)
-    const entryDB={
-      day:day.day,
-      day_label:aiOverride?.titre||day.label,
-      date:todayKey(),
-      exercises:JSON.stringify(exercisesData),
-      total_kg:Math.round(totalKg),
-      total_sets:totalSets,
-      duration_seconds:clock.sec,
-      score,
-      feedback:JSON.stringify(fb),
-      user_id:user?.id
-    };
+    const entryLocal={day:day.day,dayLabel:aiOverride?.titre||day.label,date:todayKey(),exercises:exercisesData,totalKg:Math.round(totalKg),totalSets,duration:clock.sec,score,feedback:fb,user_id:user?.id,weights:{...weights}};
     // Save Supabase
     if(user?.id){
-      const {error: sessionError} = await supabase.from("sessions").upsert({
-        ...entryDB,
-        week:"S24",
-        session_type:entry.day_label,
-        completed:true,
-        notes:fb.notes||""
-      },{onConflict:"user_id,date"});
-      if(sessionError) console.error("Session save error:", sessionError.message);
+      const{error:sErr}=await supabase.from("sessions").upsert({user_id:user.id,date:todayKey(),week:"S24",day:day.day,day_label:entryLocal.dayLabel,session_type:entryLocal.dayLabel,total_kg:Math.round(totalKg),total_sets:totalSets,duration_seconds:clock.sec,score,exercises:JSON.stringify(exercisesData),feedback:JSON.stringify(fb),notes:fb.notes||""},{onConflict:"user_id,date"});
+      if(sErr) console.error("Session save error:",sErr.message);
       const{data:ex2}=await supabase.from("streaks").select("*").eq("user_id",user.id).single().catch(()=>({data:null}));
       const yesterday=new Date(Date.now()-86400000).toISOString().slice(0,10);
       const cur=ex2?.last_session_date===yesterday?(ex2.current_streak||0)+1:1;
       await supabase.from("streaks").upsert({user_id:user.id,current_streak:cur,longest_streak:Math.max(cur,ex2?.longest_streak||0),last_session_date:todayKey(),total_sessions:(ex2?.total_sessions||0)+1,updated_at:new Date().toISOString()},{onConflict:"user_id"}).catch(()=>{});
       for(const e of exercisesData){
-        if(e.weight>0) await supabase.from("personal_bests").upsert({user_id:user.id,exercise_name:e.n||e.name,exercise_id:e.id,weight_kg:e.weight,reps:8,one_rm:orm(e.weight,"8"),achieved_at:todayKey()},{onConflict:"user_id,exercise_id"}).catch(()=>{});
+        if(e.weight>0) await supabase.from("personal_bests").upsert({user_id:user.id,exercise_name:e.n||e.name||"",exercise_id:e.id,weight_kg:e.weight,reps:8,one_rm:orm(e.weight,"8"),achieved_at:todayKey()},{onConflict:"user_id,exercise_id"}).catch(()=>{});
       }
     }
-    setSessions(prev=>{const next=[...prev.filter(s=>s.date!==todayKey()),entry];persist(user?.id,{sessions:next});computeStreak(next);return next;});
+    setSessions(prev=>{const next=[...prev.filter(s=>s.date!==todayKey()),entryLocal];computeStreak(next);return next;});
     setSessionActive(false);clock.reset();setShowFeedback(false);setShowReport(entryLocal);
   };
 
@@ -1203,16 +1135,8 @@ export default function SomaApp() {
   );
 
   if(!user) return <AuthScreen onAuth={u=>{setUser(u);loadUserData(u.id);}}/>;
-
-  const todayProgram = PROGRAM[todayIdx()];
-  if(!dataReady) return <div style={{position:'fixed',inset:0,background:C.bg,display:'flex',alignItems:'center',justifyContent:'center',flexDirection:'column',gap:16,fontFamily:F}}><div style={{fontSize:32,fontWeight:700,color:C.ink,letterSpacing:'-.03em'}}>SŌMA</div><div style={{width:6,height:6,borderRadius:'50%',background:C.blue,animation:'pulse 1s ease-in-out infinite'}}/></div>;
-  if(showWelcome) return <WelcomeScreen 
-    user={user} 
-    todaySession={todayProgram} 
-    streak={streak}
-    onStart={()=>{setShowWelcome(false);setDayIdx(todayIdx());setSessionActive(true);clock.start();}}
-    onSkip={()=>setShowWelcome(false)}
-  />;
+  if(!dataReady) return(<div style={{position:"fixed",inset:0,background:C.bg,display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",gap:20,fontFamily:F}}><style>{"@keyframes p{0%,100%{opacity:.3}50%{opacity:1}}"}</style><div style={{fontSize:36,fontWeight:700,color:C.ink,letterSpacing:"-.03em"}}>SŌMA</div><div style={{width:8,height:8,borderRadius:"50%",background:C.blue,animation:"p 1s ease-in-out infinite"}}/></div>);
+  if(showWelcome) return(<WelcomeScreen user={user} todaySession={PROGRAM[todayIdx()]} streak={streak} onStart={()=>{setShowWelcome(false);setDayIdx(todayIdx());setSessionActive(true);clock.start();}} onSkip={()=>setShowWelcome(false)}/>);
 
   const day=PROGRAM[dayIdx];
   const isRest=!day?.salle;
