@@ -1031,7 +1031,8 @@ function TabContent({tab,prevTab,children}) {
 // ─── MAIN ────────────────────────────────────────────────────────────────────
 export default function SomaApp() {
   const[user,setUser]=useState(null);
-  const[showWelcome,setShowWelcome]=useState(true);
+  const[showWelcome,setShowWelcome]=useState(false);
+  const[dataReady,setDataReady]=useState(false);
   const[authLoading,setAuthLoading]=useState(true);
   const[tab,setTab]=useState("seance");
   const[prevTab,setPrevTab]=useState(null);
@@ -1067,7 +1068,7 @@ export default function SomaApp() {
     return()=>subscription.unsubscribe();
   },[]);
 
-  const loadUserData = useCallback(async(uid)=>{
+  const loadUserData = useCallback(async(uid)=>{ try {
     // Load from local first (instant)
     const local=JSON.parse(localStorage.getItem(`soma_${uid}`)||"{}");
     if(local.log) setLog(local.log);
@@ -1086,10 +1087,16 @@ export default function SomaApp() {
       if(pbs?.length){const w={};pbs.forEach(pb=>{w[pb.exercise_id||pb.exercise_name]=pb.weight_kg;});setWeights(prev=>{const next={...prev,...w};persist(uid,{weights:next});return next;});}
       if(strData) setStreak(strData.current_streak||0);
       setSbReady(true);
-    }catch(e){console.error(e);}
+    setDataReady(true);
+    setShowWelcome(true);
+    } catch(e){console.error('loadUserData error:',e); setDataReady(true); setShowWelcome(true);}
   },[]);
 
-  useEffect(()=>{if(user) loadUserData(user.id);},[user]);
+  useEffect(()=>{
+    if(user) {
+      loadUserData(user.id).catch(()=>{setDataReady(true);setShowWelcome(true);});
+    }
+  },[user]);
 
   function computeStreak(sess){
     const dates=(sess||[]).map(s=>s.date);let s=0;
@@ -1104,12 +1111,12 @@ export default function SomaApp() {
   },[user]);
 
   const saveLog=useCallback((key,val)=>{
-    setLog(prev=>{const next={...prev,[key]:val};persist(null,{log:next});return next;});
-    if(val.weight) setWeights(prev=>{const exId=key.split("_s")[0];if(!prev[exId]||val.weight>prev[exId]){const next={...prev,[exId]:val.weight};persist(null,{weights:next});return next;}return prev;});
+    setLog(prev=>{const next={...prev,[key]:val};persist(user?.id,{log:next});return next;});
+    if(val.weight) setWeights(prev=>{const exId=key.split("_s")[0];if(!prev[exId]||val.weight>prev[exId]){const next={...prev,[exId]:val.weight};persist(user?.id,{weights:next});return next;}return prev;});
   },[persist]);
 
-  const saveWeight=useCallback((id,val)=>{setWeights(prev=>{const next={...prev,[id]:val};persist(null,{weights:next});return next;});},[persist]);
-  const toggleExclude=useCallback(id=>{setExcluded(prev=>{const next=prev.includes(id)?prev.filter(x=>x!==id):[...prev,id];persist(null,{excluded:next});return next;});},[persist]);
+  const saveWeight=useCallback((id,val)=>{setWeights(prev=>{const next={...prev,[id]:val};persist(user?.id,{weights:next});return next;});},[persist]);
+  const toggleExclude=useCallback(id=>{setExcluded(prev=>{const next=prev.includes(id)?prev.filter(x=>x!==id):[...prev,id];persist(user?.id,{excluded:next});return next;});},[persist]);
 
   const switchTab=useCallback(id=>{setPrevTab(tab);setTab(id);},[tab]);
 
@@ -1134,7 +1141,22 @@ export default function SomaApp() {
       return{id:ex.id,n:ex.n||ex.name,m:ex.m||ex.muscle,weight:lastWeight,completedSets};
     });
     const score=Math.round(Math.min(totalKg/5000*40,40)+Math.min(totalSets/25*30,30)+((fb.global+fb.energy)/10*30));
-    const entry={
+    // Entry pour state local (exercises comme tableau)
+    const entryLocal={
+      day:day.day,
+      dayLabel:aiOverride?.titre||day.label,
+      date:todayKey(),
+      exercises:exercisesData,
+      totalKg:Math.round(totalKg),
+      totalSets,
+      duration:clock.sec,
+      score,
+      feedback:fb,
+      weights:{...weights},
+      user_id:user?.id
+    };
+    // Entry pour Supabase (JSON stringify)
+    const entryDB={
       day:day.day,
       day_label:aiOverride?.titre||day.label,
       date:todayKey(),
@@ -1149,7 +1171,7 @@ export default function SomaApp() {
     // Save Supabase
     if(user?.id){
       const {error: sessionError} = await supabase.from("sessions").upsert({
-        ...entry,
+        ...entryDB,
         week:"S24",
         session_type:entry.day_label,
         completed:true,
@@ -1164,8 +1186,8 @@ export default function SomaApp() {
         if(e.weight>0) await supabase.from("personal_bests").upsert({user_id:user.id,exercise_name:e.n||e.name,exercise_id:e.id,weight_kg:e.weight,reps:8,one_rm:orm(e.weight,"8"),achieved_at:todayKey()},{onConflict:"user_id,exercise_id"}).catch(()=>{});
       }
     }
-    setSessions(prev=>{const next=[...prev.filter(s=>s.date!==todayKey()),entry];persist(null,{sessions:next});computeStreak(next);return next;});
-    setSessionActive(false);clock.reset();setShowFeedback(false);setShowReport(entry);
+    setSessions(prev=>{const next=[...prev.filter(s=>s.date!==todayKey()),entry];persist(user?.id,{sessions:next});computeStreak(next);return next;});
+    setSessionActive(false);clock.reset();setShowFeedback(false);setShowReport(entryLocal);
   };
 
   const lastKgPerEx=useMemo(()=>{
@@ -1183,6 +1205,7 @@ export default function SomaApp() {
   if(!user) return <AuthScreen onAuth={u=>{setUser(u);loadUserData(u.id);}}/>;
 
   const todayProgram = PROGRAM[todayIdx()];
+  if(!dataReady) return <div style={{position:'fixed',inset:0,background:C.bg,display:'flex',alignItems:'center',justifyContent:'center',flexDirection:'column',gap:16,fontFamily:F}}><div style={{fontSize:32,fontWeight:700,color:C.ink,letterSpacing:'-.03em'}}>SŌMA</div><div style={{width:6,height:6,borderRadius:'50%',background:C.blue,animation:'pulse 1s ease-in-out infinite'}}/></div>;
   if(showWelcome) return <WelcomeScreen 
     user={user} 
     todaySession={todayProgram} 
