@@ -427,9 +427,10 @@ function MiniRest({timer,label,onExpand}) {
 }
 
 // ─── EXERCISE FULL SCREEN ────────────────────────────────────────────────────
-function ExFullScreen({ex,weight,onWeightChange,log,onLogSet,onStartRest,onClose,lastKg,accent}) {
+function ExFullScreen({ex,weight,onWeightChange,log,onLogSet,onStartRest,onClose,lastKg,accent,dayKey}) {
   const sets=typeof ex.sets==="number"?ex.sets:4;
-  const done=Array.from({length:sets},(_,i)=>!!log[`${ex.id}_s${i}`]?.done);
+  const dk=dayKey||ex.id;
+  const done=Array.from({length:sets},(_,i)=>!!log[`${dk}_${ex.id}_s${i}`]?.done);
   const completed=done.filter(Boolean).length;
   const allDone=sets>0&&completed===sets;
   const kg=weight??ex.kg??0;
@@ -437,7 +438,7 @@ function ExFullScreen({ex,weight,onWeightChange,log,onLogSet,onStartRest,onClose
 
   const handleSet=i=>{
     const newDone=!done[i];
-    onLogSet(`${ex.id}_s${i}`,{done:newDone,weight:kg,date:todayKey()});
+    onLogSet(`${dk}_${ex.id}_s${i}`,{done:newDone,weight:kg,date:todayKey()});
     if(newDone&&ex.rest>0) onStartRest(ex.rest,ex.n);
   };
 
@@ -502,16 +503,17 @@ function ExFullScreen({ex,weight,onWeightChange,log,onLogSet,onStartRest,onClose
 }
 
 // ─── EXERCISE ROW ─────────────────────────────────────────────────────────────
-function ExRow({ex,weight,onWeightChange,log,onLogSet,onStartRest,idx,lastKg,onFullScreen}) {
+function ExRow({ex,weight,onWeightChange,log,onLogSet,onStartRest,idx,lastKg,onFullScreen,dayKey}) {
   const sets=typeof ex.sets==="number"?ex.sets:4;
-  const done=Array.from({length:sets},(_,i)=>!!log[`${ex.id}_s${i}`]?.done);
+  const dk=dayKey||ex.id;
+  const done=Array.from({length:sets},(_,i)=>!!log[`${dk}_${ex.id}_s${i}`]?.done);
   const completed=done.filter(Boolean).length;
   const allDone=sets>0&&completed===sets;
   const kg=weight??ex.kg??0;
   const oneRM=orm(kg,ex.reps);
 
   const handleSet=i=>{
-    onLogSet(`${ex.id}_s${i}`,{done:!done[i],weight:kg,date:todayKey()});
+    onLogSet(`${dk}_${ex.id}_s${i}`,{done:!done[i],weight:kg,date:todayKey()});
     if(!done[i]&&ex.rest>0) onStartRest(ex.rest,ex.n);
   };
 
@@ -1084,7 +1086,7 @@ export default function SomaApp() {
 
   const switchTab=useCallback(id=>{setPrevTab(tab);setTab(id);},[tab]);
 
-  const handleStartRest=(s,n)=>{setRestLabel(n);rest.start(s);setShowRestFull(true);};
+  const handleStartRest=(s,n)=>{rest.reset();setRestLabel(n);setTimeout(()=>{rest.start(s);setShowRestFull(true);},30);};
 
   const handleReplaceEx=(replaced,newEx)=>{
     const day=PROGRAM[dayIdx];
@@ -1095,13 +1097,14 @@ export default function SomaApp() {
   };
 
   const handleFeedbackSave=async(fb)=>{
+    if(!fb||typeof fb.global==="undefined"){console.error("feedback invalide",fb);return;}
     const day=PROGRAM[dayIdx];
     const exos=aiOverride?.exercises||day.exercises||[];
     let totalKg=0,totalSets=0;
     const exercisesData=exos.map(ex=>{
       const s=typeof ex.sets==="number"?ex.sets:4;
       let completedSets=0,lastWeight=0;
-      Array.from({length:s},(_,i)=>{const e=log[`${ex.id}_s${i}`];if(e?.done){completedSets++;lastWeight=e.weight||0;const r=parseFloat(String(ex.reps||"8").split("–")[0])||8;totalKg+=lastWeight*r;totalSets++;}});
+      const dKey=`${dayIdx}_${todayKey()}`;Array.from({length:s},(_,i)=>{const e=log[`${dKey}_${ex.id}_s${i}`]||log[`${ex.id}_s${i}`];if(e?.done){completedSets++;lastWeight=e.weight||0;const r=parseFloat(String(ex.reps||"8").split("–")[0])||8;totalKg+=lastWeight*r;totalSets++;}});
       return{id:ex.id,n:ex.n||ex.name,m:ex.m||ex.muscle,weight:lastWeight,completedSets};
     });
     const score=Math.round(Math.min(totalKg/5000*40,40)+Math.min(totalSets/25*30,30)+((fb.global+fb.energy)/10*30));
@@ -1251,6 +1254,7 @@ export default function SomaApp() {
                         onStartRest={handleStartRest}
                         lastKg={lastKgPerEx[ex.id]||0}
                         onFullScreen={ex=>setFullScreenEx(ex)}
+                        dayKey={`${dayIdx}_${todayKey()}`}
                       />
                     ))}
                   </div>
@@ -1294,9 +1298,9 @@ export default function SomaApp() {
       </div>
 
       {/* OVERLAYS — z-index ordering per semantic scale */}
-      {showRestFull&&<RestFullScreen timer={rest} label={restLabel} onSkip={()=>rest.stop()} onClose={()=>setShowRestFull(false)}/>}
-      {!showRestFull&&<MiniRest timer={rest} label={restLabel} onExpand={()=>setShowRestFull(true)}/>}
-      {fullScreenEx&&<ExFullScreen ex={fullScreenEx} weight={weights[fullScreenEx.id]??fullScreenEx.kg??0} onWeightChange={saveWeight} log={log} onLogSet={saveLog} onStartRest={handleStartRest} onClose={()=>setFullScreenEx(null)} lastKg={lastKgPerEx[fullScreenEx.id]||0} accent={accent}/>}
+      {showRestFull&&<RestFullScreen timer={rest} label={restLabel} onSkip={()=>{rest.stop();setShowRestFull(false);}} onClose={()=>{rest.reset();setShowRestFull(false);}}/>}
+      {!showRestFull&&rest.sec>0&&<MiniRest timer={rest} label={restLabel} onExpand={()=>setShowRestFull(true)}/>}
+      {fullScreenEx&&<ExFullScreen ex={fullScreenEx} weight={weights[fullScreenEx.id]??fullScreenEx.kg??0} onWeightChange={saveWeight} log={log} onLogSet={saveLog} onStartRest={handleStartRest} onClose={()=>setFullScreenEx(null)} lastKg={lastKgPerEx[fullScreenEx.id]||0} accent={accent} dayKey={`${dayIdx}_${todayKey()}`}/>}
       {showFeedback&&<FeedbackSheet onClose={()=>setShowFeedback(false)} onSave={handleFeedbackSave}/>}
       {showAI&&<AISheet onClose={()=>setShowAI(false)} onResult={o=>{setAiOverride(o);setShowAI(false);}} excluded={excluded}/>}
       {showPicker&&<ExPicker onSelect={newEx=>handleReplaceEx(showPicker,newEx)} onClose={()=>setShowPicker(null)} currentId={showPicker.id} excluded={excluded}/>}
