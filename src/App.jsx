@@ -254,13 +254,13 @@ function WelcomeScreen({user,todaySession,streak,onStart,onSkip}){
         <div>
           <div style={{fontSize:12,fontWeight:600,color:C.ink4,textTransform:"uppercase",letterSpacing:".14em",marginBottom:12}}>{greet}</div>
           <div style={{fontSize:42,fontWeight:700,color:C.ink,letterSpacing:"-.03em",lineHeight:1.05,marginBottom:24}}>{name}</div>
-          {streak>0&&<div style={{display:"inline-flex",alignItems:"center",gap:8,padding:"8px 16px",borderRadius:980,background:C.orDim,marginBottom:8}}><span style={{fontSize:17,fontWeight:700,color:C.orange}}>{streak}</span><span style={{fontSize:14,color:C.orange}}>{" jours de streak"}</span></div>}
+          {streak>0&&<div style={{display:"inline-flex",alignItems:"center",gap:8,padding:"8px 16px",borderRadius:980,background:C.orDim}}><span style={{fontSize:17,fontWeight:700,color:C.orange}}>{streak}</span><span style={{fontSize:14,color:C.orange}}>{" jours de streak"}</span></div>}
         </div>
         <div style={{background:C.s1,borderRadius:22,padding:"24px",marginBottom:24}}>
           <div style={{fontSize:11,fontWeight:600,color:C.ink4,textTransform:"uppercase",letterSpacing:".14em",marginBottom:12}}>{isRest?"Aujourd'hui":(todaySession?.day||"")+" · Séance du jour"}</div>
           {isRest
             ?<><div style={{fontSize:28,fontWeight:700,color:C.ink4,marginBottom:8}}>Récupération</div><div style={{fontSize:16,color:C.ink4}}>{todaySession?.muscle||"Repos actif"}</div></>
-            :<><div style={{fontSize:28,fontWeight:700,color:C.ink,letterSpacing:"-.02em",lineHeight:1.1,marginBottom:10}}>{todaySession?.label}</div><div style={{fontSize:16,color:C.ink3,marginBottom:18}}>{todaySession?.muscle}</div><div style={{display:"flex",gap:8,flexWrap:"wrap"}}><span style={{padding:"6px 12px",borderRadius:8,background:C.s3,fontSize:13,fontWeight:600,color:C.ink3}}>{(todaySession?.exercises||[]).length} exercices</span><span style={{padding:"6px 12px",borderRadius:8,background:C.s3,fontSize:13,fontWeight:600,color:C.ink3}}>{todaySession?.salle==="haut"?"Salle Haute":"Salle Basse"}</span></div></>
+            :<><div style={{fontSize:28,fontWeight:700,color:C.ink,letterSpacing:"-.02em",lineHeight:1.1,marginBottom:10}}>{todaySession?.label}</div><div style={{fontSize:16,color:C.ink3,marginBottom:18}}>{todaySession?.muscle}</div><div style={{display:"flex",gap:8}}><span style={{padding:"6px 12px",borderRadius:8,background:C.s3,fontSize:13,fontWeight:600,color:C.ink3}}>{(todaySession?.exercises||[]).length} exercices</span><span style={{padding:"6px 12px",borderRadius:8,background:C.s3,fontSize:13,fontWeight:600,color:C.ink3}}>{todaySession?.salle==="haut"?"Salle Haute":"Salle Basse"}</span></div></>
           }
         </div>
         <div style={{display:"flex",flexDirection:"column",gap:10}}>
@@ -427,9 +427,10 @@ function MiniRest({timer,label,onExpand}) {
 }
 
 // ─── EXERCISE FULL SCREEN ────────────────────────────────────────────────────
-function ExFullScreen({ex,weight,onWeightChange,log,onLogSet,onStartRest,onClose,lastKg,accent}) {
+function ExFullScreen({ex,weight,onWeightChange,log,onLogSet,onStartRest,onClose,lastKg,accent,dayIdx}) {
   const sets=typeof ex.sets==="number"?ex.sets:4;
-  const done=Array.from({length:sets},(_,i)=>!!log[`${ex.id}_s${i}`]?.done);
+  const lk=`d${dayIdx}_${ex.id}`;
+  const done=Array.from({length:sets},(_,i)=>!!log[`${lk}_s${i}`]?.done);
   const completed=done.filter(Boolean).length;
   const allDone=sets>0&&completed===sets;
   const kg=weight??ex.kg??0;
@@ -437,7 +438,7 @@ function ExFullScreen({ex,weight,onWeightChange,log,onLogSet,onStartRest,onClose
 
   const handleSet=i=>{
     const newDone=!done[i];
-    onLogSet(`${ex.id}_s${i}`,{done:newDone,weight:kg,date:todayKey()});
+    onLogSet(`${lk}_s${i}`,{done:newDone,weight:kg,date:todayKey()});
     if(newDone&&ex.rest>0) onStartRest(ex.rest,ex.n);
   };
 
@@ -456,7 +457,7 @@ function ExFullScreen({ex,weight,onWeightChange,log,onLogSet,onStartRest,onClose
           <span style={{fontSize:14,color:C.ink3}}>{ex.m}</span>
           <span style={{color:C.s4}}>·</span>
           <span style={{fontSize:13,fontWeight:600,padding:"2px 10px",borderRadius:980,background:C.s2,color:C.ink4}}>{EQ_LABELS[ex.eq]}</span>
-          {ex.kg>0&&!lastKg&&<><span style={{color:C.s4}}>·</span><span style={{fontSize:13,fontWeight:600,color:C.blue}}>Recommandé : {ex.kg}kg</span></>}
+          {oneRM&&<><span style={{color:C.s4}}>·</span><span style={{fontSize:13,fontWeight:600,color:C.blue}}>1RM ~{oneRM}kg</span></>}
         </div>
         {lastKg>0&&<div style={{padding:"12px 16px",borderRadius:12,background:C.orDim,marginBottom:20}}>
           <span style={{fontSize:14,fontWeight:600,color:C.orange}}>Dernière fois : {lastKg}kg · Essaie {lastKg+2.5}kg</span>
@@ -502,16 +503,17 @@ function ExFullScreen({ex,weight,onWeightChange,log,onLogSet,onStartRest,onClose
 }
 
 // ─── EXERCISE ROW ─────────────────────────────────────────────────────────────
-function ExRow({ex,weight,onWeightChange,log,onLogSet,onStartRest,idx,lastKg,onFullScreen}) {
+function ExRow({ex,weight,onWeightChange,log,onLogSet,onStartRest,idx,lastKg,onFullScreen,dayIdx}) {
   const sets=typeof ex.sets==="number"?ex.sets:4;
-  const done=Array.from({length:sets},(_,i)=>!!log[`${ex.id}_s${i}`]?.done);
+  const lk=`d${dayIdx}_${ex.id}`;
+  const done=Array.from({length:sets},(_,i)=>!!log[`${lk}_s${i}`]?.done);
   const completed=done.filter(Boolean).length;
   const allDone=sets>0&&completed===sets;
   const kg=weight??ex.kg??0;
   const oneRM=orm(kg,ex.reps);
 
   const handleSet=i=>{
-    onLogSet(`${ex.id}_s${i}`,{done:!done[i],weight:kg,date:todayKey()});
+    onLogSet(`${lk}_s${i}`,{done:!done[i],weight:kg,date:todayKey()});
     if(!done[i]&&ex.rest>0) onStartRest(ex.rest,ex.n);
   };
 
@@ -530,7 +532,7 @@ function ExRow({ex,weight,onWeightChange,log,onLogSet,onStartRest,idx,lastKg,onF
             <span style={{fontSize:14,color:C.ink3}}>{sets}×{ex.reps}</span>
             <span style={{color:C.s4}}>·</span>
             <span style={{fontSize:14,color:C.ink3}}>{ex.m}</span>
-            {ex.kg>0&&!lastKg&&<><span style={{color:C.s4}}>·</span><span style={{fontSize:13,fontWeight:600,color:C.blue}}>Reco: {ex.kg}kg</span></>}
+            {oneRM&&<><span style={{color:C.s4}}>·</span><span style={{fontSize:13,fontWeight:600,color:C.blue}}>~{oneRM}kg</span></>}
             {lastKg>0&&<span style={{fontSize:12,fontWeight:600,color:C.orange}}>↑{lastKg}kg</span>}
           </div>
         </div>
@@ -867,6 +869,51 @@ function StatsTab({sessions,weights,accent}) {
   );
 }
 
+
+// ─── PHOTO TRACKER ───────────────────────────────────────────────────────────
+function PhotoTracker(){
+  const[photos,setPhotos]=useState(()=>{try{return JSON.parse(localStorage.getItem("soma_photos")||"[]");}catch{return[];}});
+  const[weight,setWeight]=useState("");
+  const fileRef=useRef(null);
+  const handleFile=e=>{
+    const f=e.target.files[0];if(!f)return;
+    const reader=new FileReader();
+    reader.onload=ev=>{
+      const entry={id:Date.now(),date:new Date().toLocaleDateString("fr-FR"),weight:weight||null,img:ev.target.result};
+      const next=[entry,...photos].slice(0,24);
+      setPhotos(next);localStorage.setItem("soma_photos",JSON.stringify(next));
+      setWeight("");e.target.value="";
+    };
+    reader.readAsDataURL(f);
+  };
+  const del=id=>{const next=photos.filter(p=>p.id!==id);setPhotos(next);localStorage.setItem("soma_photos",JSON.stringify(next));};
+  return(
+    <div style={{background:C.s1,borderRadius:16,overflow:"hidden",marginBottom:16,fontFamily:F}}>
+      <div style={{padding:"14px 16px",borderBottom:`1px solid ${C.s3}`,display:"flex",gap:8,alignItems:"center"}}>
+        <input value={weight} onChange={e=>setWeight(e.target.value)} placeholder="Poids kg" type="number"
+          style={{width:90,padding:"9px 12px",borderRadius:10,border:`1px solid ${C.div}`,background:C.s2,fontFamily:F,fontSize:14,color:C.ink,outline:"none"}}/>
+        <Tap onTap={()=>fileRef.current?.click()} style={{flex:1,padding:"10px",borderRadius:10,background:C.blue,display:"flex",alignItems:"center",justifyContent:"center"}}>
+          <span style={{fontSize:14,fontWeight:600,color:"#000"}}>+ Photo</span>
+        </Tap>
+        <input ref={fileRef} type="file" accept="image/*" capture="environment" style={{display:"none"}} onChange={handleFile}/>
+      </div>
+      {photos.length===0
+        ?<div style={{padding:"24px",textAlign:"center",fontSize:14,color:C.ink4}}>Aucune photo. Ajoutes-en une pour suivre ta progression.</div>
+        :<div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:2,padding:2}}>
+          {photos.map(p=>(
+            <div key={p.id} style={{position:"relative",aspectRatio:"1",overflow:"hidden",borderRadius:6,background:C.s3}}>
+              <img src={p.img} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/>
+              <div style={{position:"absolute",bottom:0,left:0,right:0,background:"rgba(0,0,0,.7)",padding:"3px 6px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                <span style={{fontSize:9,color:"rgba(255,255,255,.8)",fontFamily:F}}>{p.date}{p.weight?` · ${p.weight}kg`:""}</span>
+                <Tap onTap={()=>del(p.id)}><span style={{fontSize:11,color:C.red}}>✕</span></Tap>
+              </div>
+            </div>
+          ))}
+        </div>
+      }
+    </div>
+  );
+}
 // ─── HISTORY TAB ─────────────────────────────────────────────────────────────
 function HistoryTab({sessions,onSelect,accent}) {
   const[view,setView]=useState(new Date());
@@ -903,7 +950,6 @@ function HistoryTab({sessions,onSelect,accent}) {
           })}
         </div>
       </div>
-      {/* Photos de suivi */}
       <div style={{fontSize:12,fontWeight:600,color:C.ink4,textTransform:"uppercase",letterSpacing:".1em",marginBottom:10,marginTop:4}}>Photos de suivi</div>
       <PhotoTracker/>
       <div style={{fontSize:12,fontWeight:600,color:C.ink4,textTransform:"uppercase",letterSpacing:".1em",marginBottom:12,marginTop:20}}>Séances récentes</div>
@@ -924,52 +970,6 @@ function HistoryTab({sessions,onSelect,accent}) {
           </div>
         </Tap>
       ))}
-    </div>
-  );
-}
-
-
-// ─── PHOTO TRACKER ───────────────────────────────────────────────────────────
-function PhotoTracker(){
-  const[photos,setPhotos]=useState(()=>{try{return JSON.parse(localStorage.getItem("soma_photos")||"[]");}catch{return[];}});
-  const[weight,setWeight]=useState("");
-  const fileRef=useRef(null);
-  const handleFile=e=>{
-    const f=e.target.files[0];if(!f)return;
-    const reader=new FileReader();
-    reader.onload=ev=>{
-      const entry={id:Date.now(),date:new Date().toLocaleDateString("fr-FR"),weight:weight||null,img:ev.target.result};
-      const next=[entry,...photos].slice(0,24);
-      setPhotos(next);localStorage.setItem("soma_photos",JSON.stringify(next));
-      setWeight("");e.target.value="";
-    };
-    reader.readAsDataURL(f);
-  };
-  const del=id=>{const next=photos.filter(p=>p.id!==id);setPhotos(next);localStorage.setItem("soma_photos",JSON.stringify(next));};
-  return(
-    <div style={{background:C.s1,borderRadius:16,overflow:"hidden",marginBottom:12,fontFamily:F}}>
-      <div style={{padding:"14px 16px",borderBottom:`1px solid ${C.s3}`,display:"flex",gap:8,alignItems:"center"}}>
-        <input value={weight} onChange={e=>setWeight(e.target.value)} placeholder="Poids kg" type="number"
-          style={{width:90,padding:"9px 12px",borderRadius:10,border:`1px solid ${C.div}`,background:C.s2,fontFamily:F,fontSize:14,color:C.ink,outline:"none"}}/>
-        <Tap onTap={()=>fileRef.current?.click()} style={{flex:1,padding:"10px",borderRadius:10,background:C.blue,display:"flex",alignItems:"center",justifyContent:"center"}}>
-          <span style={{fontSize:14,fontWeight:600,color:"#000"}}>+ Photo</span>
-        </Tap>
-        <input ref={fileRef} type="file" accept="image/*" capture="environment" style={{display:"none"}} onChange={handleFile}/>
-      </div>
-      {photos.length===0
-        ?<div style={{padding:"24px",textAlign:"center",fontSize:14,color:C.ink4}}>Aucune photo de suivi.</div>
-        :<div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:2,padding:2}}>
-          {photos.map(p=>(
-            <div key={p.id} style={{position:"relative",aspectRatio:"1",overflow:"hidden",borderRadius:6,background:C.s3}}>
-              <img src={p.img} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/>
-              <div style={{position:"absolute",bottom:0,left:0,right:0,background:"rgba(0,0,0,.7)",padding:"3px 6px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-                <span style={{fontSize:9,color:"rgba(255,255,255,.8)",fontFamily:F}}>{p.date}{p.weight?` · ${p.weight}kg`:""}</span>
-                <Tap onTap={()=>del(p.id)}><span style={{fontSize:11,color:C.red}}>✕</span></Tap>
-              </div>
-            </div>
-          ))}
-        </div>
-      }
     </div>
   );
 }
@@ -1026,7 +1026,7 @@ function SettingsTab({user,excluded,onToggleExclude,onSignOut,onReset}) {
           <span style={{fontSize:17,color:C.red}}>›</span>
         </Tap>
       </div>
-      <div style={{fontSize:12,color:C.ink4,textAlign:"center",marginTop:28}}>SŌMA · S15 · {DB.length} exercices</div>
+      <div style={{fontSize:12,color:C.ink4,textAlign:"center",marginTop:28}}>SŌMA · S14 · Auth Supabase · {DB.length} exercices</div>
     </div>
   );
 }
@@ -1100,13 +1100,23 @@ export default function SomaApp() {
         supabase.from("personal_bests").select("*").eq("user_id",uid),
         supabase.from("streaks").select("*").eq("user_id",uid).single(),
       ]);
-      if(sess?.length){const norm=sess.map(s=>({...s,dayLabel:s.day_label||s.dayLabel||s.day||"",totalKg:Number(s.total_kg||s.totalKg||0),totalSets:Number(s.total_sets||s.totalSets||0),duration:Number(s.duration_seconds||s.duration||0),exercises:typeof s.exercises==="string"?JSON.parse(s.exercises||"[]"):(s.exercises||[]),feedback:typeof s.feedback==="string"?JSON.parse(s.feedback||"null"):s.feedback}));setSessions(norm);computeStreak(norm);persist(uid,{sessions:norm});}
+      if(sess?.length){
+        const norm=sess.map(s=>({...s,
+          dayLabel:s.day_label||s.dayLabel||s.day||"",
+          totalKg:Number(s.total_kg||s.totalKg||0),
+          totalSets:Number(s.total_sets||s.totalSets||0),
+          duration:Number(s.duration_seconds||s.duration||0),
+          exercises:typeof s.exercises==="string"?JSON.parse(s.exercises||"[]"):(s.exercises||[]),
+          feedback:typeof s.feedback==="string"?JSON.parse(s.feedback||"null"):s.feedback,
+        }));
+        setSessions(norm);computeStreak(norm);persist(uid,{sessions:norm});
+      }
       if(pbs?.length){const w={};pbs.forEach(pb=>{w[pb.exercise_id||pb.exercise_name]=pb.weight_kg;});setWeights(prev=>{const next={...prev,...w};persist(uid,{weights:next});return next;});}
       if(strData) setStreak(strData.current_streak||0);
       setSbReady(true);
       setDataReady(true);
-      if(!sessionStorage.getItem("soma_welcome_seen")){setShowWelcome(true);sessionStorage.setItem("soma_welcome_seen","1");}
-    }catch(e){console.error("load err:",e);setDataReady(true);}
+      if(!sessionStorage.getItem('soma_seen')){setShowWelcome(true);sessionStorage.setItem('soma_seen','1');}
+    }catch(e){console.error('load err:',e);setDataReady(true);}
   },[]);
 
   useEffect(()=>{if(user) loadUserData(user.id);},[user]);
@@ -1124,12 +1134,12 @@ export default function SomaApp() {
   },[user]);
 
   const saveLog=useCallback((key,val)=>{
-    setLog(prev=>{const next={...prev,[key]:val};persist(user?.id,{log:next});return next;});
-    if(val.weight) setWeights(prev=>{const exId=key.split("_s")[0];if(!prev[exId]||val.weight>prev[exId]){const next={...prev,[exId]:val.weight};persist(user?.id,{weights:next});return next;}return prev;});
+    setLog(prev=>{const next={...prev,[key]:val};persist(null,{log:next});return next;});
+    if(val.weight) setWeights(prev=>{const exId=key.split("_s")[0];if(!prev[exId]||val.weight>prev[exId]){const next={...prev,[exId]:val.weight};persist(null,{weights:next});return next;}return prev;});
   },[persist]);
 
-  const saveWeight=useCallback((id,val)=>{setWeights(prev=>{const next={...prev,[id]:val};persist(user?.id,{weights:next});return next;});},[persist]);
-  const toggleExclude=useCallback(id=>{setExcluded(prev=>{const next=prev.includes(id)?prev.filter(x=>x!==id):[...prev,id];persist(user?.id,{excluded:next});return next;});},[persist]);
+  const saveWeight=useCallback((id,val)=>{setWeights(prev=>{const next={...prev,[id]:val};persist(null,{weights:next});return next;});},[persist]);
+  const toggleExclude=useCallback(id=>{setExcluded(prev=>{const next=prev.includes(id)?prev.filter(x=>x!==id):[...prev,id];persist(null,{excluded:next});return next;});},[persist]);
 
   const switchTab=useCallback(id=>{setPrevTab(tab);setTab(id);},[tab]);
 
@@ -1150,25 +1160,32 @@ export default function SomaApp() {
     const exercisesData=exos.map(ex=>{
       const s=typeof ex.sets==="number"?ex.sets:4;
       let completedSets=0,lastWeight=0;
-      const sessionKey=`${dayIdx}_${todayKey()}`;Array.from({length:s},(_,i)=>{const e=log[`${sessionKey}_${ex.id}_s${i}`]||log[`${ex.id}_s${i}`];if(e?.done){completedSets++;lastWeight=e.weight||0;const r=parseFloat(String(ex.reps||"8").split("–")[0])||8;totalKg+=lastWeight*r;totalSets++;}});
+      Array.from({length:s},(_,i)=>{const e=log[`d${dayIdx}_${ex.id}_s${i}`];if(e?.done){completedSets++;lastWeight=e.weight||0;const r=parseFloat(String(ex.reps||"8").split("–")[0])||8;totalKg+=lastWeight*r;totalSets++;}});
       return{id:ex.id,n:ex.n||ex.name,m:ex.m||ex.muscle,weight:lastWeight,completedSets};
     });
     const score=Math.round(Math.min(totalKg/5000*40,40)+Math.min(totalSets/25*30,30)+((fb.global+fb.energy)/10*30));
-    const entryLocal={day:day.day,dayLabel:aiOverride?.titre||day.label,date:todayKey(),exercises:exercisesData,totalKg:Math.round(totalKg),totalSets,duration:clock.sec,score,feedback:fb,user_id:user?.id,weights:{...weights}};
+    const entry={day:day.day,dayLabel:aiOverride?.titre||day.label,date:todayKey(),exercises:exercisesData,totalKg:Math.round(totalKg),totalSets,duration:clock.sec,score,feedback:fb,user_id:user?.id,weights:{...weights}};
     // Save Supabase
     if(user?.id){
-      const{error:sErr}=await supabase.from("sessions").upsert({user_id:user.id,date:todayKey(),week:"S24",day:day.day,day_label:entryLocal.dayLabel,session_type:entryLocal.dayLabel,total_kg:Math.round(totalKg),total_sets:totalSets,duration_seconds:clock.sec,score,exercises:JSON.stringify(exercisesData),feedback:JSON.stringify(fb),notes:fb.notes||""},{onConflict:"user_id,date"});
-      if(sErr) console.error("Session save error:",sErr.message);
+      const{error:sErr}=await supabase.from("sessions").upsert({
+        user_id:user.id,date:todayKey(),week:"S24",
+        day:day.day,day_label:entry.dayLabel,session_type:entry.dayLabel,
+        total_kg:Math.round(totalKg),total_sets:totalSets,
+        duration_seconds:clock.sec,score,
+        exercises:JSON.stringify(exercisesData),
+        feedback:JSON.stringify(fb),notes:fb.notes||""
+      },{onConflict:"user_id,date"});
+      if(sErr) console.error("Supabase session error:",sErr.message);
       const{data:ex2}=await supabase.from("streaks").select("*").eq("user_id",user.id).single().catch(()=>({data:null}));
       const yesterday=new Date(Date.now()-86400000).toISOString().slice(0,10);
       const cur=ex2?.last_session_date===yesterday?(ex2.current_streak||0)+1:1;
       await supabase.from("streaks").upsert({user_id:user.id,current_streak:cur,longest_streak:Math.max(cur,ex2?.longest_streak||0),last_session_date:todayKey(),total_sessions:(ex2?.total_sessions||0)+1,updated_at:new Date().toISOString()},{onConflict:"user_id"}).catch(()=>{});
       for(const e of exercisesData){
-        if(e.weight>0) await supabase.from("personal_bests").upsert({user_id:user.id,exercise_name:e.n||e.name||"",exercise_id:e.id,weight_kg:e.weight,reps:8,one_rm:orm(e.weight,"8"),achieved_at:todayKey()},{onConflict:"user_id,exercise_id"}).catch(()=>{});
+        if(e.weight>0) await supabase.from("personal_bests").upsert({user_id:user.id,exercise_name:e.n||"",exercise_id:e.id,weight_kg:e.weight,reps:8,one_rm:orm(e.weight,"8"),achieved_at:todayKey()},{onConflict:"user_id,exercise_id"}).catch(()=>{});
       }
     }
-    setSessions(prev=>{const next=[...prev.filter(s=>!(s.date===todayKey()&&s.user_id===user?.id)),entryLocal];computeStreak(next);return next;});
-    setSessionActive(false);clock.reset();setShowFeedback(false);setShowReport(entryLocal);
+    setSessions(prev=>{const next=[...prev.filter(s=>s.date!==todayKey()),entry];persist(null,{sessions:next});computeStreak(next);return next;});
+    setSessionActive(false);clock.reset();setShowFeedback(false);setShowReport(entry);
   };
 
   const lastKgPerEx=useMemo(()=>{
@@ -1228,7 +1245,7 @@ export default function SomaApp() {
         <div style={{background:C.bg,borderBottom:`1px solid ${C.s3}`,display:"flex",overflowX:"auto",padding:"10px 16px",gap:6,scrollbarWidth:"none"}}>
           {PROGRAM.map((d,i)=>{
             const exList=d.exercises||[];
-            const done=exList.filter(e=>Array.from({length:typeof e.sets==="number"?e.sets:4},(_,si)=>si).every(si=>log[`${e.id}_s${si}`]?.done)).length;
+            const done=exList.filter(e=>Array.from({length:typeof e.sets==="number"?e.sets:4},(_,si)=>si).every(si=>log[`d${i}_${e.id}_s${si}`]?.done)).length;
             const pct=exList.length?done/exList.length:0;
             const isSel=i===dayIdx,isToday=i===todayIdx();
             return(
@@ -1300,6 +1317,7 @@ export default function SomaApp() {
                         onStartRest={handleStartRest}
                         lastKg={lastKgPerEx[ex.id]||0}
                         onFullScreen={ex=>setFullScreenEx(ex)}
+                        dayIdx={dayIdx}
                       />
                     ))}
                   </div>
@@ -1345,7 +1363,7 @@ export default function SomaApp() {
       {/* OVERLAYS — z-index ordering per semantic scale */}
       {showRestFull&&<RestFullScreen timer={rest} label={restLabel} onSkip={()=>{rest.stop();setShowRestFull(false);}} onClose={()=>{rest.reset();setShowRestFull(false);}}/>}
       {!showRestFull&&rest.sec>0&&<MiniRest timer={rest} label={restLabel} onExpand={()=>setShowRestFull(true)}/>}
-      {fullScreenEx&&<ExFullScreen ex={fullScreenEx} weight={weights[fullScreenEx.id]??fullScreenEx.kg??0} onWeightChange={saveWeight} log={log} onLogSet={saveLog} onStartRest={handleStartRest} onClose={()=>setFullScreenEx(null)} lastKg={lastKgPerEx[fullScreenEx.id]||0} accent={accent}/>}
+      {fullScreenEx&&<ExFullScreen ex={fullScreenEx} weight={weights[fullScreenEx.id]??fullScreenEx.kg??0} onWeightChange={saveWeight} log={log} onLogSet={saveLog} onStartRest={handleStartRest} onClose={()=>setFullScreenEx(null)} lastKg={lastKgPerEx[fullScreenEx.id]||0} accent={accent} dayIdx={dayIdx}/>}
       {showFeedback&&<FeedbackSheet onClose={()=>setShowFeedback(false)} onSave={handleFeedbackSave}/>}
       {showAI&&<AISheet onClose={()=>setShowAI(false)} onResult={o=>{setAiOverride(o);setShowAI(false);}} excluded={excluded}/>}
       {showPicker&&<ExPicker onSelect={newEx=>handleReplaceEx(showPicker,newEx)} onClose={()=>setShowPicker(null)} currentId={showPicker.id} excluded={excluded}/>}
