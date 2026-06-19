@@ -1134,12 +1134,12 @@ export default function SomaApp() {
   },[user]);
 
   const saveLog=useCallback((key,val)=>{
-    setLog(prev=>{const next={...prev,[key]:val};persist(null,{log:next});return next;});
-    if(val.weight) setWeights(prev=>{const exId=key.split("_s")[0];if(!prev[exId]||val.weight>prev[exId]){const next={...prev,[exId]:val.weight};persist(null,{weights:next});return next;}return prev;});
+    setLog(prev=>{const next={...prev,[key]:val};persist(user?.id,{log:next});return next;});
+    if(val.weight) setWeights(prev=>{const exId=key.split("_s")[0];if(!prev[exId]||val.weight>prev[exId]){const next={...prev,[exId]:val.weight};persist(user?.id,{weights:next});return next;}return prev;});
   },[persist]);
 
-  const saveWeight=useCallback((id,val)=>{setWeights(prev=>{const next={...prev,[id]:val};persist(null,{weights:next});return next;});},[persist]);
-  const toggleExclude=useCallback(id=>{setExcluded(prev=>{const next=prev.includes(id)?prev.filter(x=>x!==id):[...prev,id];persist(null,{excluded:next});return next;});},[persist]);
+  const saveWeight=useCallback((id,val)=>{setWeights(prev=>{const next={...prev,[id]:val};persist(user?.id,{weights:next});return next;});},[persist]);
+  const toggleExclude=useCallback(id=>{setExcluded(prev=>{const next=prev.includes(id)?prev.filter(x=>x!==id):[...prev,id];persist(user?.id,{excluded:next});return next;});},[persist]);
 
   const switchTab=useCallback(id=>{setPrevTab(tab);setTab(id);},[tab]);
 
@@ -1184,7 +1184,7 @@ export default function SomaApp() {
         if(e.weight>0) await supabase.from("personal_bests").upsert({user_id:user.id,exercise_name:e.n||"",exercise_id:e.id,weight_kg:e.weight,reps:8,one_rm:orm(e.weight,"8"),achieved_at:todayKey()},{onConflict:"user_id,exercise_id"}).catch(()=>{});
       }
     }
-    setSessions(prev=>{const next=[...prev.filter(s=>s.date!==todayKey()),entry];persist(null,{sessions:next});computeStreak(next);return next;});
+    setSessions(prev=>{const next=[...prev.filter(s=>s.date!==todayKey()),entry];persist(user?.id,{sessions:next});computeStreak(next);return next;});
     setSessionActive(false);clock.reset();setShowFeedback(false);setShowReport(entry);
   };
 
