@@ -659,13 +659,23 @@ function ExPicker({onSelect,onClose,currentId,excluded}) {
 
 // ─── FEEDBACK SHEET ───────────────────────────────────────────────────────────
 function FeedbackSheet({onClose,onSave}) {
-  const[intensity,setIntensity]=useState(3);const[energy,setEnergy]=useState(3);const[notes,setNotes]=useState("");
+  const[intensity,setIntensity]=useState(3);
+  const[energy,setEnergy]=useState(3);
+  const[notes,setNotes]=useState("");
+  const[saving,setSaving]=useState(false);
   const IL=["","Très léger","Léger","Modéré","Intense","Maximum"];
   const EL=["","Épuisé","Fatigué","Normal","Énergisé","Au top"];
+  const handleSave=async()=>{
+    if(saving) return;
+    setSaving(true);
+    try{ await onSave({global:intensity,energy,notes}); }
+    catch(e){ console.error("FeedbackSheet save error:",e); setSaving(false); }
+  };
+  const btnBase={fontFamily:F,fontSize:17,fontWeight:600,padding:"16px",borderRadius:15,border:"none",cursor:"pointer",WebkitTapHighlightColor:"transparent",touchAction:"manipulation"};
   return(
-    <div style={{position:"fixed",inset:0,zIndex:Z.sheet+100,display:"flex",alignItems:"flex-end",justifyContent:"center",fontFamily:F}}>
-      <div onClick={onClose} style={{position:"absolute",inset:0,background:"rgba(0,0,0,.75)",backdropFilter:"blur(8px)"}}/>
-      <div style={{position:"relative",background:C.s1,borderRadius:"28px 28px 0 0",padding:"28px 24px calc(36px + env(safe-area-inset-bottom))",maxWidth:600,width:"100%",animation:`slideUp ${DUR.modal} ${ED} both`}}>
+    <div style={{position:"fixed",inset:0,zIndex:9999,display:"flex",alignItems:"flex-end",justifyContent:"center",fontFamily:F}}>
+      <div style={{position:"absolute",inset:0,background:"rgba(0,0,0,.75)"}} onClick={onClose}/>
+      <div style={{position:"relative",zIndex:10000,background:C.s1,borderRadius:"28px 28px 0 0",padding:"28px 24px calc(40px + env(safe-area-inset-bottom))",maxWidth:600,width:"100%"}}>
         <div style={{width:36,height:4,background:C.s4,borderRadius:2,margin:"0 auto 24px"}}/>
         <div style={{fontSize:26,fontWeight:700,color:C.ink,marginBottom:6}}>Bilan séance</div>
         <div style={{fontSize:17,color:C.ink3,marginBottom:24}}>Comment c'était ?</div>
@@ -677,22 +687,28 @@ function FeedbackSheet({onClose,onSave}) {
             </div>
             <div style={{display:"flex",gap:8}}>
               {[1,2,3,4,5].map(v=>(
-                <Tap key={v} onTap={()=>set(v)} style={{flex:1,height:52,borderRadius:12,border:`1.5px solid ${val===v?C.blue:C.div}`,background:val===v?C.blueDim:C.s2,display:"flex",alignItems:"center",justifyContent:"center",transition:`all 160ms ${EO}`}}>
-                  <span style={{fontSize:18,fontWeight:val===v?700:400,color:val===v?C.blue:C.ink4}}>{v}</span>
-                </Tap>
+                <button key={v} onClick={()=>set(v)}
+                  style={{...btnBase,flex:1,height:52,borderRadius:12,
+                    border:`1.5px solid ${val===v?C.blue:C.div}`,
+                    background:val===v?C.blueDim:C.s2,
+                    color:val===v?C.blue:C.ink4,
+                    fontSize:18,fontWeight:val===v?700:400}}>
+                  {v}
+                </button>
               ))}
             </div>
           </div>
         ))}
         <textarea value={notes} onChange={e=>setNotes(e.target.value)} placeholder="Notes libres..."
-          style={{width:"100%",minHeight:60,padding:"12px 16px",borderRadius:12,border:`1px solid ${C.div}`,fontFamily:F,fontSize:15,color:C.ink,background:C.s2,resize:"none",outline:"none",marginBottom:16,boxSizing:"border-box"}}/>
+          style={{width:"100%",minHeight:60,padding:"12px 16px",borderRadius:12,border:`1px solid ${C.div}`,fontFamily:F,fontSize:15,color:C.ink,background:C.s2,resize:"none",outline:"none",marginBottom:20,boxSizing:"border-box"}}/>
         <div style={{display:"flex",gap:10}}>
-          <Tap onTap={onClose} style={{flex:1,padding:"16px",borderRadius:15,border:`1px solid ${C.div}`,display:"flex",alignItems:"center",justifyContent:"center"}}>
-            <span style={{fontSize:17,fontWeight:600,color:C.ink3}}>Annuler</span>
-          </Tap>
-          <Tap onTap={()=>onSave({global:intensity,energy,notes})} style={{flex:2,padding:"16px",borderRadius:15,background:C.blue,display:"flex",alignItems:"center",justifyContent:"center"}}>
-            <span style={{fontSize:17,fontWeight:600,color:"#000"}}>Enregistrer</span>
-          </Tap>
+          <button onClick={onClose} style={{...btnBase,flex:1,background:C.s2,color:C.ink3}}>
+            Annuler
+          </button>
+          <button onClick={handleSave} disabled={saving}
+            style={{...btnBase,flex:2,background:saving?C.s3:C.blue,color:saving?C.ink4:"#000",opacity:saving?.7:1}}>
+            {saving?"Enregistrement...":"Enregistrer"}
+          </button>
         </div>
       </div>
     </div>
