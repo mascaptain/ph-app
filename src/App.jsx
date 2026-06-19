@@ -903,7 +903,10 @@ function HistoryTab({sessions,onSelect,accent}) {
           })}
         </div>
       </div>
-      <div style={{fontSize:12,fontWeight:600,color:C.ink4,textTransform:"uppercase",letterSpacing:".1em",marginBottom:12}}>Séances récentes</div>
+      {/* Photos de suivi */}
+      <div style={{fontSize:12,fontWeight:600,color:C.ink4,textTransform:"uppercase",letterSpacing:".1em",marginBottom:10,marginTop:4}}>Photos de suivi</div>
+      <PhotoTracker/>
+      <div style={{fontSize:12,fontWeight:600,color:C.ink4,textTransform:"uppercase",letterSpacing:".1em",marginBottom:12,marginTop:20}}>Séances récentes</div>
       {sessions.length===0&&<div style={{textAlign:"center",padding:"40px 0",fontSize:17,color:C.ink4}}>Aucune séance.</div>}
       {sessions.slice().reverse().map((s,i)=>(
         <Tap key={i} onTap={()=>onSelect(s)} style={{background:C.s1,borderRadius:16,padding:"16px 18px",marginBottom:10}}>
@@ -1023,8 +1026,6 @@ function SettingsTab({user,excluded,onToggleExclude,onSignOut,onReset}) {
           <span style={{fontSize:17,color:C.red}}>›</span>
         </Tap>
       </div>
-      <div style={{fontSize:12,fontWeight:600,color:C.ink4,textTransform:"uppercase",letterSpacing:".1em",marginBottom:10,marginTop:20}}>Photos de suivi corps</div>
-      <PhotoTracker/>
       <div style={{fontSize:12,color:C.ink4,textAlign:"center",marginTop:28}}>SŌMA · S15 · {DB.length} exercices</div>
     </div>
   );
@@ -1149,7 +1150,7 @@ export default function SomaApp() {
     const exercisesData=exos.map(ex=>{
       const s=typeof ex.sets==="number"?ex.sets:4;
       let completedSets=0,lastWeight=0;
-      Array.from({length:s},(_,i)=>{const e=log[`${ex.id}_s${i}`];if(e?.done){completedSets++;lastWeight=e.weight||0;const r=parseFloat(String(ex.reps||"8").split("–")[0])||8;totalKg+=lastWeight*r;totalSets++;}});
+      const sessionKey=`${dayIdx}_${todayKey()}`;Array.from({length:s},(_,i)=>{const e=log[`${sessionKey}_${ex.id}_s${i}`]||log[`${ex.id}_s${i}`];if(e?.done){completedSets++;lastWeight=e.weight||0;const r=parseFloat(String(ex.reps||"8").split("–")[0])||8;totalKg+=lastWeight*r;totalSets++;}});
       return{id:ex.id,n:ex.n||ex.name,m:ex.m||ex.muscle,weight:lastWeight,completedSets};
     });
     const score=Math.round(Math.min(totalKg/5000*40,40)+Math.min(totalSets/25*30,30)+((fb.global+fb.energy)/10*30));
@@ -1166,7 +1167,7 @@ export default function SomaApp() {
         if(e.weight>0) await supabase.from("personal_bests").upsert({user_id:user.id,exercise_name:e.n||e.name||"",exercise_id:e.id,weight_kg:e.weight,reps:8,one_rm:orm(e.weight,"8"),achieved_at:todayKey()},{onConflict:"user_id,exercise_id"}).catch(()=>{});
       }
     }
-    setSessions(prev=>{const next=[...prev.filter(s=>s.date!==todayKey()),entryLocal];computeStreak(next);return next;});
+    setSessions(prev=>{const next=[...prev.filter(s=>!(s.date===todayKey()&&s.user_id===user?.id)),entryLocal];computeStreak(next);return next;});
     setSessionActive(false);clock.reset();setShowFeedback(false);setShowReport(entryLocal);
   };
 
@@ -1342,8 +1343,8 @@ export default function SomaApp() {
       </div>
 
       {/* OVERLAYS — z-index ordering per semantic scale */}
-      {showRestFull&&<RestFullScreen timer={rest} label={restLabel} onSkip={()=>rest.stop()} onClose={()=>setShowRestFull(false)}/>}
-      {!showRestFull&&<MiniRest timer={rest} label={restLabel} onExpand={()=>setShowRestFull(true)}/>}
+      {showRestFull&&<RestFullScreen timer={rest} label={restLabel} onSkip={()=>{rest.stop();setShowRestFull(false);}} onClose={()=>{rest.reset();setShowRestFull(false);}}/>}
+      {!showRestFull&&rest.sec>0&&<MiniRest timer={rest} label={restLabel} onExpand={()=>setShowRestFull(true)}/>}
       {fullScreenEx&&<ExFullScreen ex={fullScreenEx} weight={weights[fullScreenEx.id]??fullScreenEx.kg??0} onWeightChange={saveWeight} log={log} onLogSet={saveLog} onStartRest={handleStartRest} onClose={()=>setFullScreenEx(null)} lastKg={lastKgPerEx[fullScreenEx.id]||0} accent={accent}/>}
       {showFeedback&&<FeedbackSheet onClose={()=>setShowFeedback(false)} onSave={handleFeedbackSave}/>}
       {showAI&&<AISheet onClose={()=>setShowAI(false)} onResult={o=>{setAiOverride(o);setShowAI(false);}} excluded={excluded}/>}
