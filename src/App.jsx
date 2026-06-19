@@ -457,7 +457,7 @@ function ExFullScreen({ex,weight,onWeightChange,log,onLogSet,onStartRest,onClose
           <span style={{fontSize:14,color:C.ink3}}>{ex.m}</span>
           <span style={{color:C.s4}}>·</span>
           <span style={{fontSize:13,fontWeight:600,padding:"2px 10px",borderRadius:980,background:C.s2,color:C.ink4}}>{EQ_LABELS[ex.eq]}</span>
-          {oneRM&&<><span style={{color:C.s4}}>·</span><span style={{fontSize:13,fontWeight:600,color:C.blue}}>1RM ~{oneRM}kg</span></>}
+
         </div>
         {lastKg>0&&<div style={{padding:"12px 16px",borderRadius:12,background:C.orDim,marginBottom:20}}>
           <span style={{fontSize:14,fontWeight:600,color:C.orange}}>Dernière fois : {lastKg}kg · Essaie {lastKg+2.5}kg</span>
@@ -532,7 +532,7 @@ function ExRow({ex,weight,onWeightChange,log,onLogSet,onStartRest,idx,lastKg,onF
             <span style={{fontSize:14,color:C.ink3}}>{sets}×{ex.reps}</span>
             <span style={{color:C.s4}}>·</span>
             <span style={{fontSize:14,color:C.ink3}}>{ex.m}</span>
-            {oneRM&&<><span style={{color:C.s4}}>·</span><span style={{fontSize:13,fontWeight:600,color:C.blue}}>~{oneRM}kg</span></>}
+
             {lastKg>0&&<span style={{fontSize:12,fontWeight:600,color:C.orange}}>↑{lastKg}kg</span>}
           </div>
         </div>
@@ -1169,39 +1169,61 @@ export default function SomaApp() {
     setShowPicker(null);setFullScreenEx(null);
   };
 
-  const handleFeedbackSave=async(fb)=>{
+  const handleFeedbackSave=(fb)=>{
+    // 1. Calculer les données
     const day=PROGRAM[dayIdx];
     const exos=aiOverride?.exercises||day.exercises||[];
     let totalKg=0,totalSets=0;
     const exercisesData=exos.map(ex=>{
       const s=typeof ex.sets==="number"?ex.sets:4;
       let completedSets=0,lastWeight=0;
-      Array.from({length:s},(_,i)=>{const e=log[`d${dayIdx}_${ex.id}_s${i}`];if(e?.done){completedSets++;lastWeight=e.weight||0;const r=parseFloat(String(ex.reps||"8").split("–")[0])||8;totalKg+=lastWeight*r;totalSets++;}});
+      Array.from({length:s},(_,i)=>{
+        const e=log[`d${dayIdx}_${ex.id}_s${i}`];
+        if(e?.done){completedSets++;lastWeight=e.weight||0;const r=parseFloat(String(ex.reps||"8").split("–")[0])||8;totalKg+=lastWeight*r;totalSets++;}
+      });
       return{id:ex.id,n:ex.n||ex.name,m:ex.m||ex.muscle,weight:lastWeight,completedSets};
     });
     const score=Math.round(Math.min(totalKg/5000*40,40)+Math.min(totalSets/25*30,30)+((fb.global+fb.energy)/10*30));
-    const entry={day:day.day,dayLabel:aiOverride?.titre||day.label,date:todayKey(),exercises:exercisesData,totalKg:Math.round(totalKg),totalSets,duration:clock.sec,score,feedback:fb,user_id:user?.id,weights:{...weights}};
-    // Save Supabase
-    if(user?.id){
-      const{error:sErr}=await supabase.from("sessions").upsert({
-        user_id:user.id,date:todayKey(),week:"S24",
+    const sessionDate=todayKey();
+    const entry={day:day.day,dayLabel:aiOverride?.titre||day.label,date:sessionDate,exercises:exercisesData,totalKg:Math.round(totalKg),totalSets,duration:clock.sec,score,feedback:fb,user_id:user?.id,weights:{...weights}};
+
+    // 2. Sauvegarder IMMÉDIATEMENT en localStorage
+    const uid=user?.id;
+    if(uid){
+      try{
+        const k=`soma_${uid}`;
+        const cur=JSON.parse(localStorage.getItem(k)||"{}" );
+        const next=[...(cur.sessions||[]).filter(s=>s.date!==sessionDate),entry];
+        localStorage.setItem(k,JSON.stringify({...cur,sessions:next}));
+      }catch(e){console.error("LS save",e);}
+    }
+
+    // 3. Mettre à jour le state React immédiatement
+    setSessions(prev=>{
+      const next=[...prev.filter(s=>s.date!==sessionDate),entry];
+      computeStreak(next);
+      return next;
+    });
+
+    // 4. Fermer le popup et afficher le rapport IMMÉDIATEMENT
+    clock.stop();
+    setSessionActive(false);
+    setShowFeedback(false);
+    setShowReport(entry);
+
+    // 5. Supabase en arrière-plan (ne bloque plus rien)
+    if(uid){
+      supabase.from("sessions").upsert({
+        user_id:uid,date:sessionDate,week:"S24",
         day:day.day,day_label:entry.dayLabel,session_type:entry.dayLabel,
         total_kg:Math.round(totalKg),total_sets:totalSets,
         duration_seconds:clock.sec,score,
         exercises:JSON.stringify(exercisesData),
         feedback:JSON.stringify(fb),notes:fb.notes||""
-      },{onConflict:"user_id,date"});
-      if(sErr) console.error("Supabase session error:",sErr.message);
-      const{data:ex2}=await supabase.from("streaks").select("*").eq("user_id",user.id).single().catch(()=>({data:null}));
-      const yesterday=new Date(Date.now()-86400000).toISOString().slice(0,10);
-      const cur=ex2?.last_session_date===yesterday?(ex2.current_streak||0)+1:1;
-      await supabase.from("streaks").upsert({user_id:user.id,current_streak:cur,longest_streak:Math.max(cur,ex2?.longest_streak||0),last_session_date:todayKey(),total_sessions:(ex2?.total_sessions||0)+1,updated_at:new Date().toISOString()},{onConflict:"user_id"}).catch(()=>{});
-      for(const e of exercisesData){
-        if(e.weight>0) await supabase.from("personal_bests").upsert({user_id:user.id,exercise_name:e.n||"",exercise_id:e.id,weight_kg:e.weight,reps:8,one_rm:orm(e.weight,"8"),achieved_at:todayKey()},{onConflict:"user_id,exercise_id"}).catch(()=>{});
-      }
+      },{onConflict:"user_id,date"}).then(({error})=>{
+        if(error) console.error("Supabase session:",error.message);
+      });
     }
-    setSessions(prev=>{const next=[...prev.filter(s=>s.date!==todayKey()),entry];persist(user?.id,{sessions:next});computeStreak(next);return next;});
-    setSessionActive(false);clock.reset();setShowFeedback(false);setShowReport(entry);
   };
 
   const lastKgPerEx=useMemo(()=>{
