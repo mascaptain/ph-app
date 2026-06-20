@@ -1217,6 +1217,10 @@ export default function SomaApp() {
 
   const handleReplaceEx=(replaced,newEx)=>{
     const day=schedule[dayIdx]||PROGRAM[dayIdx];
+  // Vérifie si la séance de ce jour est déjà terminée
+  const getDayDate=(dIdx)=>{const t=new Date();const dow=t.getDay()===0?6:t.getDay()-1;const d=new Date(t);d.setDate(t.getDate()+(dIdx-dow));return d.toISOString().slice(0,10);};
+  const dayDate=getDayDate(dayIdx);
+  const isDayDone=sessions.some(s=>s.date===dayDate&&s.day===day?.day);
     const src=aiOverride?.exercises||day.exercises||[];
     const newExos=src.map(ex=>ex.id===replaced.id?{...newEx,sets:ex.sets}:ex);
     setAiOverride(prev=>({...(prev||{titre:day.label,abs:day.abs}),exercises:newExos}));
@@ -1226,6 +1230,10 @@ export default function SomaApp() {
   const handleFeedbackSave=(fb)=>{
     // 1. Calculer les données
     const day=schedule[dayIdx]||PROGRAM[dayIdx];
+  // Vérifie si la séance de ce jour est déjà terminée
+  const getDayDate=(dIdx)=>{const t=new Date();const dow=t.getDay()===0?6:t.getDay()-1;const d=new Date(t);d.setDate(t.getDate()+(dIdx-dow));return d.toISOString().slice(0,10);};
+  const dayDate=getDayDate(dayIdx);
+  const isDayDone=sessions.some(s=>s.date===dayDate&&s.day===day?.day);
     const exos=aiOverride?.exercises||day.exercises||[];
     let totalKg=0,totalSets=0;
     const exercisesData=exos.map(ex=>{
@@ -1238,7 +1246,15 @@ export default function SomaApp() {
       return{id:ex.id,n:ex.n||ex.name,m:ex.m||ex.muscle,weight:lastWeight,completedSets};
     });
     const score=Math.round(Math.min(totalKg/5000*40,40)+Math.min(totalSets/25*30,30)+((fb.global+fb.energy)/10*30));
-    const sessionDate=todayKey();
+    // Date réelle du jour du programme dans la semaine courante
+    const getRealDate=(dIdx)=>{
+      const t=new Date();
+      const todayDow=t.getDay()===0?6:t.getDay()-1;
+      const d=new Date(t);
+      d.setDate(t.getDate()+(dIdx-todayDow));
+      return d.toISOString().slice(0,10);
+    };
+    const sessionDate=getRealDate(dayIdx);
     const entry={day:day.day,dayLabel:aiOverride?.titre||day.label,date:sessionDate,exercises:exercisesData,totalKg:Math.round(totalKg),totalSets,duration:clock.sec,score,feedback:fb,user_id:user?.id,weights:{...weights}};
 
     // 2. Sauvegarder IMMÉDIATEMENT en localStorage
@@ -1247,14 +1263,14 @@ export default function SomaApp() {
       try{
         const k=`soma_${uid}`;
         const cur=JSON.parse(localStorage.getItem(k)||"{}" );
-        const next=[...(cur.sessions||[]).filter(s=>s.date!==sessionDate),entry];
+        const next=[...(cur.sessions||[]).filter(s=>!(s.date===sessionDate&&s.day===entry.day)),entry];
         localStorage.setItem(k,JSON.stringify({...cur,sessions:next}));
       }catch(e){console.error("LS save",e);}
     }
 
     // 3. Mettre à jour le state React immédiatement
     setSessions(prev=>{
-      const next=[...prev.filter(s=>s.date!==sessionDate),entry];
+      const next=[...prev.filter(s=>!(s.date===sessionDate&&s.day===entry.day)),entry];
       computeStreak(next);
       return next;
     });
@@ -1297,6 +1313,10 @@ export default function SomaApp() {
   if(showWelcome) return(<WelcomeScreen user={user} todaySession={PROGRAM[todayIdx()]} streak={streak} onStart={()=>{setShowWelcome(false);setDayIdx(todayIdx());setSessionActive(true);clock.start();}} onSkip={()=>setShowWelcome(false)}/>);
 
   const day=schedule[dayIdx]||PROGRAM[dayIdx];
+  // Vérifie si la séance de ce jour est déjà terminée
+  const getDayDate=(dIdx)=>{const t=new Date();const dow=t.getDay()===0?6:t.getDay()-1;const d=new Date(t);d.setDate(t.getDate()+(dIdx-dow));return d.toISOString().slice(0,10);};
+  const dayDate=getDayDate(dayIdx);
+  const isDayDone=sessions.some(s=>s.date===dayDate&&s.day===day?.day);
   const isRest=!day?.salle;
   const exos=(aiOverride?.exercises||day?.exercises||[]).filter(e=>!excluded.includes(e.id));
   const absExos=aiOverride?.abs||day?.abs||[];
@@ -1375,9 +1395,15 @@ export default function SomaApp() {
                   </div>
                   {!sessionActive?(
                     <div style={{display:"flex",gap:10,marginBottom:24}}>
-                      <Tap onTap={()=>{setSessionActive(true);clock.start();}} style={{flex:1,padding:"16px",borderRadius:15,background:accent,display:"flex",alignItems:"center",justifyContent:"center",transition:`background 300ms ${EO}`}}>
-                        <span style={{fontSize:17,fontWeight:600,color:"#000"}}>Démarrer</span>
-                      </Tap>
+                      {isDayDone?(
+                        <div style={{flex:1,padding:"16px",borderRadius:15,background:C.greenDim,border:`1px solid ${C.green}`,display:"flex",alignItems:"center",justifyContent:"center",gap:10}}>
+                          <span style={{fontSize:17,fontWeight:600,color:C.green}}>Séance terminée</span>
+                        </div>
+                      ):(
+                        <Tap onTap={()=>{setSessionActive(true);clock.start();}} style={{flex:1,padding:"16px",borderRadius:15,background:accent,display:"flex",alignItems:"center",justifyContent:"center",transition:`background 300ms ${EO}`}}>
+                          <span style={{fontSize:17,fontWeight:600,color:"#000"}}>Démarrer</span>
+                        </Tap>
+                      )}
                       <Tap onTap={()=>setShowAI(true)} style={{padding:"16px 20px",borderRadius:15,border:`1px solid ${C.div}`,display:"flex",alignItems:"center",justifyContent:"center"}}>
                         <span style={{fontSize:14,fontWeight:600,color:C.ink3}}>IA</span>
                       </Tap>
@@ -1424,7 +1450,7 @@ export default function SomaApp() {
                       ))}
                     </div>
                   )}
-                  {!sessionActive&&(
+                  {!sessionActive&&!isDayDone&&(
                     <Tap onTap={()=>setShowFeedback(true)} style={{marginTop:28,marginBottom:16,padding:"16px",borderRadius:15,background:C.blue,display:"flex",alignItems:"center",justifyContent:"center"}}>
                       <span style={{fontSize:17,fontWeight:600,color:"#000"}}>Fin de séance</span>
                     </Tap>
