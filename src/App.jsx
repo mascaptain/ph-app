@@ -189,6 +189,15 @@ const SESSION_TYPES = ["KB Full","KB Endurance","KB Force","Push","Pull & Dos","
 
 // ─── UTILS ───────────────────────────────────────────────────────────────────
 const todayKey = () => new Date().toISOString().slice(0,10);
+// Date réelle du jour de programme dans la semaine courante
+// dayIdx 0=LUN ... 6=DIM
+const programDate = (dIdx) => {
+  const t = new Date();
+  const dow = t.getDay() === 0 ? 6 : t.getDay() - 1; // 0=lun
+  const d = new Date(t);
+  d.setDate(t.getDate() + (dIdx - dow));
+  return d.toISOString().slice(0, 10);
+};
 const todayIdx = () => { const d=new Date().getDay(); return d===0?6:d-1; };
 const fmtMSS = s => `${String(Math.floor(s/60)).padStart(2,"0")}:${String(s%60).padStart(2,"0")}`;
 const fmtDur = s => s>=3600?`${Math.floor(s/3600)}h${String(Math.floor((s%3600)/60)).padStart(2,"0")}m`:`${Math.floor(s/60)}m${String(s%60).padStart(2,"0")}s`;
@@ -254,7 +263,7 @@ function WelcomeScreen({user,todaySession,streak,onStart,onSkip}){
         <div>
           <div style={{fontSize:12,fontWeight:600,color:C.ink4,textTransform:"uppercase",letterSpacing:".14em",marginBottom:12}}>{greet}</div>
           <div style={{fontSize:42,fontWeight:700,color:C.ink,letterSpacing:"-.03em",lineHeight:1.05,marginBottom:24}}>{name}</div>
-          {streak>0&&<div style={{display:"inline-flex",alignItems:"center",gap:8,padding:"8px 16px",borderRadius:980,background:C.orDim}}><span style={{fontSize:17,fontWeight:700,color:C.orange}}>{streak}</span><span style={{fontSize:14,color:C.orange}}>{" jours de streak"}</span></div>}
+          {streak>0&&<div style={{display:"inline-flex",alignItems:"center",gap:8,padding:"8px 16px",borderRadius:980,background:C.orDim}}><span style={{fontSize:17,fontWeight:700,color:C.orange}}>{streak}</span><span style={{fontSize:14,color:C.orange}}>{" jours"}</span></div>}
         </div>
         <div style={{background:C.s1,borderRadius:22,padding:"24px",marginBottom:24}}>
           <div style={{fontSize:11,fontWeight:600,color:C.ink4,textTransform:"uppercase",letterSpacing:".14em",marginBottom:12}}>{isRest?"Aujourd'hui":(todaySession?.day||"")+" · Séance du jour"}</div>
@@ -264,8 +273,8 @@ function WelcomeScreen({user,todaySession,streak,onStart,onSkip}){
           }
         </div>
         <div style={{display:"flex",flexDirection:"column",gap:10}}>
-          {!isRest&&<Tap onTap={onStart} style={{padding:"17px",borderRadius:15,background:C.blue,display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{fontSize:17,fontWeight:600,color:"#000"}}>Commencer la séance</span></Tap>}
-          <Tap onTap={onSkip} style={{padding:"15px",borderRadius:15,border:`1px solid ${C.s4}`,display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{fontSize:17,fontWeight:600,color:C.ink3}}>{isRest?"Entrer dans l'app":"Voir tout le programme"}</span></Tap>
+          {!isRest&&<Tap onTap={onStart} style={{padding:"17px",borderRadius:15,background:C.blue,display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{fontSize:17,fontWeight:600,color:"#000"}}>Commencer</span></Tap>}
+          <Tap onTap={onSkip} style={{padding:"15px",borderRadius:15,border:`1px solid ${C.s4}`,display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{fontSize:17,fontWeight:600,color:C.ink3}}>{isRest?"Entrer":"Voir le programme"}</span></Tap>
         </div>
       </div>
     </div>
@@ -457,7 +466,7 @@ function ExFullScreen({ex,weight,onWeightChange,log,onLogSet,onStartRest,onClose
           <span style={{fontSize:14,color:C.ink3}}>{ex.m}</span>
           <span style={{color:C.s4}}>·</span>
           <span style={{fontSize:13,fontWeight:600,padding:"2px 10px",borderRadius:980,background:C.s2,color:C.ink4}}>{EQ_LABELS[ex.eq]}</span>
-
+          {oneRM&&<><span style={{color:C.s4}}>·</span><span style={{fontSize:13,fontWeight:600,color:C.blue}}>1RM ~{oneRM}kg</span></>}
         </div>
         {lastKg>0&&<div style={{padding:"12px 16px",borderRadius:12,background:C.orDim,marginBottom:20}}>
           <span style={{fontSize:14,fontWeight:600,color:C.orange}}>Dernière fois : {lastKg}kg · Essaie {lastKg+2.5}kg</span>
@@ -532,7 +541,7 @@ function ExRow({ex,weight,onWeightChange,log,onLogSet,onStartRest,idx,lastKg,onF
             <span style={{fontSize:14,color:C.ink3}}>{sets}×{ex.reps}</span>
             <span style={{color:C.s4}}>·</span>
             <span style={{fontSize:14,color:C.ink3}}>{ex.m}</span>
-
+            {oneRM&&<><span style={{color:C.s4}}>·</span><span style={{fontSize:13,fontWeight:600,color:C.blue}}>~{oneRM}kg</span></>}
             {lastKg>0&&<span style={{fontSize:12,fontWeight:600,color:C.orange}}>↑{lastKg}kg</span>}
           </div>
         </div>
@@ -662,20 +671,13 @@ function FeedbackSheet({onClose,onSave}) {
   const[intensity,setIntensity]=useState(3);
   const[energy,setEnergy]=useState(3);
   const[notes,setNotes]=useState("");
-  const[saving,setSaving]=useState(false);
   const IL=["","Très léger","Léger","Modéré","Intense","Maximum"];
   const EL=["","Épuisé","Fatigué","Normal","Énergisé","Au top"];
-  const handleSave=async()=>{
-    if(saving) return;
-    setSaving(true);
-    try{ await onSave({global:intensity,energy,notes}); }
-    catch(e){ console.error("FeedbackSheet save error:",e); setSaving(false); }
-  };
-  const btnBase={fontFamily:F,fontSize:17,fontWeight:600,padding:"16px",borderRadius:15,border:"none",cursor:"pointer",WebkitTapHighlightColor:"transparent",touchAction:"manipulation"};
+  const bs={fontFamily:F,fontSize:17,fontWeight:600,padding:"15px",borderRadius:14,border:"none",cursor:"pointer",WebkitTapHighlightColor:"transparent",touchAction:"manipulation",width:"100%"};
   return(
     <div style={{position:"fixed",inset:0,zIndex:9999,display:"flex",alignItems:"flex-end",justifyContent:"center",fontFamily:F}}>
-      <div style={{position:"absolute",inset:0,background:"rgba(0,0,0,.75)"}} onClick={onClose}/>
-      <div style={{position:"relative",zIndex:10000,background:C.s1,borderRadius:"28px 28px 0 0",padding:"28px 24px calc(40px + env(safe-area-inset-bottom))",maxWidth:600,width:"100%"}}>
+      <div style={{position:"absolute",inset:0,background:"rgba(0,0,0,.8)"}} onClick={onClose}/>
+      <div style={{position:"relative",zIndex:10000,background:C.s1,borderRadius:"28px 28px 0 0",padding:"28px 24px calc(44px + env(safe-area-inset-bottom))",maxWidth:600,width:"100%"}}>
         <div style={{width:36,height:4,background:C.s4,borderRadius:2,margin:"0 auto 24px"}}/>
         <div style={{fontSize:26,fontWeight:700,color:C.ink,marginBottom:6}}>Bilan séance</div>
         <div style={{fontSize:17,color:C.ink3,marginBottom:24}}>Comment c'était ?</div>
@@ -687,12 +689,7 @@ function FeedbackSheet({onClose,onSave}) {
             </div>
             <div style={{display:"flex",gap:8}}>
               {[1,2,3,4,5].map(v=>(
-                <button key={v} onClick={()=>set(v)}
-                  style={{...btnBase,flex:1,height:52,borderRadius:12,
-                    border:`1.5px solid ${val===v?C.blue:C.div}`,
-                    background:val===v?C.blueDim:C.s2,
-                    color:val===v?C.blue:C.ink4,
-                    fontSize:18,fontWeight:val===v?700:400}}>
+                <button key={v} onClick={()=>set(v)} style={{flex:1,height:52,borderRadius:12,border:`2px solid ${val===v?C.blue:C.div}`,background:val===v?C.blueDim:C.s2,color:val===v?C.blue:C.ink4,fontSize:18,fontWeight:val===v?700:400,cursor:"pointer",fontFamily:F,WebkitTapHighlightColor:"transparent"}}>
                   {v}
                 </button>
               ))}
@@ -702,13 +699,8 @@ function FeedbackSheet({onClose,onSave}) {
         <textarea value={notes} onChange={e=>setNotes(e.target.value)} placeholder="Notes libres..."
           style={{width:"100%",minHeight:60,padding:"12px 16px",borderRadius:12,border:`1px solid ${C.div}`,fontFamily:F,fontSize:15,color:C.ink,background:C.s2,resize:"none",outline:"none",marginBottom:20,boxSizing:"border-box"}}/>
         <div style={{display:"flex",gap:10}}>
-          <button onClick={onClose} style={{...btnBase,flex:1,background:C.s2,color:C.ink3}}>
-            Annuler
-          </button>
-          <button onClick={handleSave} disabled={saving}
-            style={{...btnBase,flex:2,background:saving?C.s3:C.blue,color:saving?C.ink4:"#000",opacity:saving?.7:1}}>
-            {saving?"Enregistrement...":"Enregistrer"}
-          </button>
+          <button onClick={onClose} style={{...bs,flex:1,background:C.s2,color:C.ink3}}>Annuler</button>
+          <button onClick={()=>onSave({global:intensity,energy,notes})} style={{...bs,flex:2,background:C.blue,color:"#000"}}>Enregistrer</button>
         </div>
       </div>
     </div>
@@ -885,51 +877,6 @@ function StatsTab({sessions,weights,accent}) {
   );
 }
 
-
-// ─── PHOTO TRACKER ───────────────────────────────────────────────────────────
-function PhotoTracker(){
-  const[photos,setPhotos]=useState(()=>{try{return JSON.parse(localStorage.getItem("soma_photos")||"[]");}catch{return[];}});
-  const[weight,setWeight]=useState("");
-  const fileRef=useRef(null);
-  const handleFile=e=>{
-    const f=e.target.files[0];if(!f)return;
-    const reader=new FileReader();
-    reader.onload=ev=>{
-      const entry={id:Date.now(),date:new Date().toLocaleDateString("fr-FR"),weight:weight||null,img:ev.target.result};
-      const next=[entry,...photos].slice(0,24);
-      setPhotos(next);localStorage.setItem("soma_photos",JSON.stringify(next));
-      setWeight("");e.target.value="";
-    };
-    reader.readAsDataURL(f);
-  };
-  const del=id=>{const next=photos.filter(p=>p.id!==id);setPhotos(next);localStorage.setItem("soma_photos",JSON.stringify(next));};
-  return(
-    <div style={{background:C.s1,borderRadius:16,overflow:"hidden",marginBottom:16,fontFamily:F}}>
-      <div style={{padding:"14px 16px",borderBottom:`1px solid ${C.s3}`,display:"flex",gap:8,alignItems:"center"}}>
-        <input value={weight} onChange={e=>setWeight(e.target.value)} placeholder="Poids kg" type="number"
-          style={{width:90,padding:"9px 12px",borderRadius:10,border:`1px solid ${C.div}`,background:C.s2,fontFamily:F,fontSize:14,color:C.ink,outline:"none"}}/>
-        <Tap onTap={()=>fileRef.current?.click()} style={{flex:1,padding:"10px",borderRadius:10,background:C.blue,display:"flex",alignItems:"center",justifyContent:"center"}}>
-          <span style={{fontSize:14,fontWeight:600,color:"#000"}}>+ Photo</span>
-        </Tap>
-        <input ref={fileRef} type="file" accept="image/*" capture="environment" style={{display:"none"}} onChange={handleFile}/>
-      </div>
-      {photos.length===0
-        ?<div style={{padding:"24px",textAlign:"center",fontSize:14,color:C.ink4}}>Aucune photo. Ajoutes-en une pour suivre ta progression.</div>
-        :<div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:2,padding:2}}>
-          {photos.map(p=>(
-            <div key={p.id} style={{position:"relative",aspectRatio:"1",overflow:"hidden",borderRadius:6,background:C.s3}}>
-              <img src={p.img} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/>
-              <div style={{position:"absolute",bottom:0,left:0,right:0,background:"rgba(0,0,0,.7)",padding:"3px 6px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-                <span style={{fontSize:9,color:"rgba(255,255,255,.8)",fontFamily:F}}>{p.date}{p.weight?` · ${p.weight}kg`:""}</span>
-                <Tap onTap={()=>del(p.id)}><span style={{fontSize:11,color:C.red}}>✕</span></Tap>
-              </div>
-            </div>
-          ))}
-        </div>
-      }
-    </div>
-  );
-}
 // ─── HISTORY TAB ─────────────────────────────────────────────────────────────
 function HistoryTab({sessions,onSelect,accent}) {
   const[view,setView]=useState(new Date());
@@ -966,9 +913,7 @@ function HistoryTab({sessions,onSelect,accent}) {
           })}
         </div>
       </div>
-      <div style={{fontSize:12,fontWeight:600,color:C.ink4,textTransform:"uppercase",letterSpacing:".1em",marginBottom:10,marginTop:4}}>Photos de suivi</div>
-      <PhotoTracker/>
-      <div style={{fontSize:12,fontWeight:600,color:C.ink4,textTransform:"uppercase",letterSpacing:".1em",marginBottom:12,marginTop:20}}>Séances récentes</div>
+      <div style={{fontSize:12,fontWeight:600,color:C.ink4,textTransform:"uppercase",letterSpacing:".1em",marginBottom:12}}>Séances récentes</div>
       {sessions.length===0&&<div style={{textAlign:"center",padding:"40px 0",fontSize:17,color:C.ink4}}>Aucune séance terminée.</div>}
       {sessions.slice().reverse().map((s,i)=>{
         const prog=PROGRAM.find(p=>p.day===s.day);
@@ -977,10 +922,10 @@ function HistoryTab({sessions,onSelect,accent}) {
           <Tap key={i} onTap={()=>onSelect(s)} style={{background:C.s1,borderRadius:16,padding:"16px 18px",marginBottom:10}}>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:8}}>
               <div>
-                <div style={{fontSize:17,fontWeight:600,color:C.ink,marginBottom:2}}>{label}</div>
-                <div style={{fontSize:13,color:C.ink4}}>{s.day} · {s.date}</div>
+                <div style={{fontSize:17,fontWeight:600,color:C.ink}}>{label}</div>
+                <div style={{fontSize:13,color:C.ink4,marginTop:2}}>{s.day} · {s.date}</div>
               </div>
-              {s.score>0&&<span style={{fontSize:17,fontWeight:700,color:accent||C.blue,padding:"4px 12px",background:C.s3,borderRadius:8}}>{s.score}</span>}
+              {s.score>0&&<span style={{fontSize:15,fontWeight:700,color:accent||C.blue,padding:"4px 12px",background:C.s3,borderRadius:8}}>{s.score}</span>}
             </div>
             <div style={{display:"flex",gap:14,flexWrap:"wrap"}}>
               {s.totalKg>0&&<span style={{fontSize:13,color:C.ink3}}>{s.totalKg.toLocaleString()}kg</span>}
@@ -994,54 +939,8 @@ function HistoryTab({sessions,onSelect,accent}) {
   );
 }
 
-
-// ─── PROGRAM EDITOR ──────────────────────────────────────────────────────────
-function ProgramEditor({schedule,onSave}){
-  const[open,setOpen]=useState(false);
-  const[draft,setDraft]=useState(()=>schedule||PROGRAM);
-  const TYPES=["Push Force","Pull & Legs","KB Power","KB Endurance","Full Power","Cardio HIIT","Bras","Corps entier"];
-  const toggleRest=i=>setDraft(prev=>prev.map((d,idx)=>idx!==i?d:{...d,salle:d.salle?null:"haut",exercises:d.salle?[]:PROGRAM[idx]?.exercises||[],abs:d.salle?[]:PROGRAM[idx]?.abs||[],label:d.salle?"Repos":PROGRAM[idx]?.label||"Push Force",muscle:d.salle?"Récupération active":PROGRAM[idx]?.muscle||""}));
-  const setType=i=>e=>{const found=PROGRAM.find(p=>p.label===e.target.value);setDraft(prev=>prev.map((d,idx)=>idx!==i?d:{...d,...(found||{}),day:d.day,salle:"haut"}));};
-  if(!open) return(
-    <Tap onTap={()=>setOpen(true)} style={{background:C.s1,borderRadius:14,padding:"16px 20px",display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
-      <div>
-        <div style={{fontSize:17,color:C.ink}}>Modifier le programme</div>
-        <div style={{fontSize:13,color:C.ink4,marginTop:2}}>{(draft||PROGRAM).filter(d=>d.salle).length} séances cette semaine</div>
-      </div>
-      <span style={{fontSize:17,color:C.blue}}>›</span>
-    </Tap>
-  );
-  return(
-    <div style={{background:C.s1,borderRadius:16,overflow:"hidden",marginBottom:12}}>
-      <div style={{padding:"14px 16px",borderBottom:`1px solid ${C.s3}`,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-        <span style={{fontSize:16,fontWeight:600,color:C.ink}}>Programme S24</span>
-        <div style={{display:"flex",gap:8}}>
-          <button onClick={()=>setOpen(false)} style={{fontSize:13,padding:"6px 12px",borderRadius:8,border:`1px solid ${C.div}`,background:"transparent",color:C.ink3,cursor:"pointer",fontFamily:F}}>Annuler</button>
-          <button onClick={()=>{onSave(draft);setOpen(false);}} style={{fontSize:13,padding:"6px 12px",borderRadius:8,border:"none",background:C.blue,color:"#000",cursor:"pointer",fontFamily:F,fontWeight:600}}>Sauvegarder</button>
-        </div>
-      </div>
-      {(draft||PROGRAM).map((d,i)=>(
-        <div key={d.day} style={{padding:"12px 16px",borderBottom:`1px solid ${C.s3}`,display:"flex",alignItems:"center",gap:10}}>
-          <div style={{width:34,height:34,borderRadius:8,background:d.salle?C.blue:C.s3,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
-            <span style={{fontSize:10,fontWeight:700,color:d.salle?"#000":C.ink4}}>{d.day}</span>
-          </div>
-          {d.salle?(
-            <select value={d.label} onChange={setType(i)} style={{flex:1,background:C.s2,color:C.ink,border:`1px solid ${C.div}`,borderRadius:8,padding:"7px 10px",fontSize:13,fontFamily:F,outline:"none"}}>
-              {TYPES.map(t=><option key={t} value={t}>{t}</option>)}
-            </select>
-          ):(
-            <span style={{flex:1,fontSize:13,color:C.ink4}}>Repos</span>
-          )}
-          <button onClick={()=>toggleRest(i)} style={{padding:"6px 12px",borderRadius:8,border:`1px solid ${d.salle?C.div:C.green}`,background:d.salle?"transparent":C.greenDim,color:d.salle?C.ink4:C.green,fontSize:12,fontWeight:600,cursor:"pointer",fontFamily:F,flexShrink:0}}>
-            {d.salle?"Repos":"Séance"}
-          </button>
-        </div>
-      ))}
-    </div>
-  );
-}
 // ─── SETTINGS TAB ────────────────────────────────────────────────────────────
-function SettingsTab({user,excluded,onToggleExclude,onSignOut,onReset,schedule,onScheduleSave}) {
+function SettingsTab({user,excluded,onToggleExclude,onSignOut,onReset}) {
   const[showLib,setShowLib]=useState(false);
   return(
     <div style={{padding:"20px 20px 100px",maxWidth:600,margin:"0 auto",fontFamily:F}}>
@@ -1055,8 +954,6 @@ function SettingsTab({user,excluded,onToggleExclude,onSignOut,onReset,schedule,o
           <div style={{fontSize:14,color:C.ink3,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{user?.email||""}</div>
         </div>
       </div>
-      <div style={{fontSize:12,fontWeight:600,color:C.ink4,textTransform:"uppercase",letterSpacing:".1em",marginBottom:10}}>Programme</div>
-      <ProgramEditor schedule={schedule||PROGRAM} onSave={onScheduleSave}/>
       {/* Compte */}
       <div style={{background:C.s1,borderRadius:16,overflow:"hidden",marginBottom:12}}>
         <Tap onTap={onSignOut} style={{padding:"18px 20px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
@@ -1185,8 +1082,8 @@ export default function SomaApp() {
       if(strData) setStreak(strData.current_streak||0);
       setSbReady(true);
       setDataReady(true);
-      if(!sessionStorage.getItem('soma_seen')){setShowWelcome(true);sessionStorage.setItem('soma_seen','1');}
-    }catch(e){console.error('load err:',e);setDataReady(true);}
+      if(!sessionStorage.getItem('sw')){setShowWelcome(true);sessionStorage.setItem('sw','1');}
+    }catch(e){console.error(e);setDataReady(true);}
   },[]);
 
   useEffect(()=>{if(user) loadUserData(user.id);},[user]);
@@ -1217,10 +1114,8 @@ export default function SomaApp() {
 
   const handleReplaceEx=(replaced,newEx)=>{
     const day=schedule[dayIdx]||PROGRAM[dayIdx];
-  // Vérifie si la séance de ce jour est déjà terminée
-  const getDayDate=(dIdx)=>{const t=new Date();const dow=t.getDay()===0?6:t.getDay()-1;const d=new Date(t);d.setDate(t.getDate()+(dIdx-dow));return d.toISOString().slice(0,10);};
-  const dayDate=getDayDate(dayIdx);
-  const isDayDone=sessions.some(s=>s.date===dayDate&&s.day===day?.day);
+  const sDate=programDate(dayIdx);
+  const isDayDone=sessions.some(s=>s.date===sDate&&s.day===day?.day);
     const src=aiOverride?.exercises||day.exercises||[];
     const newExos=src.map(ex=>ex.id===replaced.id?{...newEx,sets:ex.sets}:ex);
     setAiOverride(prev=>({...(prev||{titre:day.label,abs:day.abs}),exercises:newExos}));
@@ -1228,12 +1123,9 @@ export default function SomaApp() {
   };
 
   const handleFeedbackSave=(fb)=>{
-    // 1. Calculer les données
     const day=schedule[dayIdx]||PROGRAM[dayIdx];
-  // Vérifie si la séance de ce jour est déjà terminée
-  const getDayDate=(dIdx)=>{const t=new Date();const dow=t.getDay()===0?6:t.getDay()-1;const d=new Date(t);d.setDate(t.getDate()+(dIdx-dow));return d.toISOString().slice(0,10);};
-  const dayDate=getDayDate(dayIdx);
-  const isDayDone=sessions.some(s=>s.date===dayDate&&s.day===day?.day);
+  const sDate=programDate(dayIdx);
+  const isDayDone=sessions.some(s=>s.date===sDate&&s.day===day?.day);
     const exos=aiOverride?.exercises||day.exercises||[];
     let totalKg=0,totalSets=0;
     const exercisesData=exos.map(ex=>{
@@ -1246,53 +1138,63 @@ export default function SomaApp() {
       return{id:ex.id,n:ex.n||ex.name,m:ex.m||ex.muscle,weight:lastWeight,completedSets};
     });
     const score=Math.round(Math.min(totalKg/5000*40,40)+Math.min(totalSets/25*30,30)+((fb.global+fb.energy)/10*30));
-    // Date réelle du jour du programme dans la semaine courante
-    const getRealDate=(dIdx)=>{
-      const t=new Date();
-      const todayDow=t.getDay()===0?6:t.getDay()-1;
-      const d=new Date(t);
-      d.setDate(t.getDate()+(dIdx-todayDow));
-      return d.toISOString().slice(0,10);
+    // Date = jour du programme (ex: LUN = date du lundi de cette semaine)
+    const sDate=programDate(dayIdx);
+    const entry={
+      day:day.day,
+      dayLabel:aiOverride?.titre||day.label,
+      date:sDate,
+      exercises:exercisesData,
+      totalKg:Math.round(totalKg),
+      totalSets,
+      duration:clock.sec,
+      score,
+      feedback:fb,
+      user_id:user?.id,
+      weights:{...weights}
     };
-    const sessionDate=getRealDate(dayIdx);
-    const entry={day:day.day,dayLabel:aiOverride?.titre||day.label,date:sessionDate,exercises:exercisesData,totalKg:Math.round(totalKg),totalSets,duration:clock.sec,score,feedback:fb,user_id:user?.id,weights:{...weights}};
-
-    // 2. Sauvegarder IMMÉDIATEMENT en localStorage
+    // 1. localStorage immédiat
     const uid=user?.id;
     if(uid){
       try{
         const k=`soma_${uid}`;
         const cur=JSON.parse(localStorage.getItem(k)||"{}" );
-        const next=[...(cur.sessions||[]).filter(s=>!(s.date===sessionDate&&s.day===entry.day)),entry];
+        const prev=cur.sessions||[];
+        const next=[...prev.filter(s=>!(s.date===sDate&&s.day===day.day)),entry];
         localStorage.setItem(k,JSON.stringify({...cur,sessions:next}));
-      }catch(e){console.error("LS save",e);}
+      }catch(e){console.error("LS",e);}
     }
-
-    // 3. Mettre à jour le state React immédiatement
+    // 2. State React
     setSessions(prev=>{
-      const next=[...prev.filter(s=>!(s.date===sessionDate&&s.day===entry.day)),entry];
+      const next=[...prev.filter(s=>!(s.date===sDate&&s.day===day.day)),entry];
       computeStreak(next);
       return next;
     });
-
-    // 4. Fermer le popup et afficher le rapport IMMÉDIATEMENT
+    // 3. Fermer popup immédiatement
     clock.stop();
     setSessionActive(false);
     setShowFeedback(false);
     setShowReport(entry);
-
-    // 5. Supabase en arrière-plan (ne bloque plus rien)
+    // 4. Supabase en arrière-plan
     if(uid){
       supabase.from("sessions").upsert({
-        user_id:uid,date:sessionDate,week:"S24",
-        day:day.day,day_label:entry.dayLabel,session_type:entry.dayLabel,
+        user_id:uid,date:sDate,week:"S24",
+        day:day.day,day_label:entry.dayLabel,
+        session_type:entry.dayLabel,
         total_kg:Math.round(totalKg),total_sets:totalSets,
         duration_seconds:clock.sec,score,
         exercises:JSON.stringify(exercisesData),
-        feedback:JSON.stringify(fb),notes:fb.notes||""
-      },{onConflict:"user_id,date"}).then(({error})=>{
-        if(error) console.error("Supabase session:",error.message);
+        feedback:JSON.stringify(fb),
+        notes:fb.notes||""
+      },{onConflict:"user_id,date"}).then(({error:e})=>{
+        if(e) console.error("SB session:",e.message);
       });
+      supabase.from("personal_bests").upsert(
+        exercisesData.filter(e=>e.weight>0).map(e=>({
+          user_id:uid,exercise_id:e.id,exercise_name:e.n||e.name||"",
+          weight_kg:e.weight,reps:8,one_rm:orm(e.weight,"8"),achieved_at:sDate
+        })),{onConflict:"user_id,exercise_id"}
+      ).then(({error:e})=>{ if(e) console.error("SB pb:",e.message); });
     }
   };
 
@@ -1310,13 +1212,11 @@ export default function SomaApp() {
 
   if(!user) return <AuthScreen onAuth={u=>{setUser(u);loadUserData(u.id);}}/>;
   if(!dataReady) return(<div style={{position:"fixed",inset:0,background:C.bg,display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",gap:20,fontFamily:F}}><style>{"@keyframes p{0%,100%{opacity:.3}50%{opacity:1}}"}</style><div style={{fontSize:36,fontWeight:700,color:C.ink,letterSpacing:"-.03em"}}>SŌMA</div><div style={{width:8,height:8,borderRadius:"50%",background:C.blue,animation:"p 1s ease-in-out infinite"}}/></div>);
-  if(showWelcome) return(<WelcomeScreen user={user} todaySession={PROGRAM[todayIdx()]} streak={streak} onStart={()=>{setShowWelcome(false);setDayIdx(todayIdx());setSessionActive(true);clock.start();}} onSkip={()=>setShowWelcome(false)}/>);
+  if(showWelcome) return(<WelcomeScreen user={user} todaySession={schedule[todayIdx()]||PROGRAM[todayIdx()]} streak={streak} onStart={()=>{setShowWelcome(false);setDayIdx(todayIdx());setSessionActive(true);clock.start();}} onSkip={()=>setShowWelcome(false)}/>);
 
   const day=schedule[dayIdx]||PROGRAM[dayIdx];
-  // Vérifie si la séance de ce jour est déjà terminée
-  const getDayDate=(dIdx)=>{const t=new Date();const dow=t.getDay()===0?6:t.getDay()-1;const d=new Date(t);d.setDate(t.getDate()+(dIdx-dow));return d.toISOString().slice(0,10);};
-  const dayDate=getDayDate(dayIdx);
-  const isDayDone=sessions.some(s=>s.date===dayDate&&s.day===day?.day);
+  const sDate=programDate(dayIdx);
+  const isDayDone=sessions.some(s=>s.date===sDate&&s.day===day?.day);
   const isRest=!day?.salle;
   const exos=(aiOverride?.exercises||day?.exercises||[]).filter(e=>!excluded.includes(e.id));
   const absExos=aiOverride?.abs||day?.abs||[];
@@ -1396,11 +1296,11 @@ export default function SomaApp() {
                   {!sessionActive?(
                     <div style={{display:"flex",gap:10,marginBottom:24}}>
                       {isDayDone?(
-                        <div style={{flex:1,padding:"16px",borderRadius:15,background:C.greenDim,border:`1px solid ${C.green}`,display:"flex",alignItems:"center",justifyContent:"center",gap:10}}>
-                          <span style={{fontSize:17,fontWeight:600,color:C.green}}>Séance terminée</span>
+                        <div style={{flex:1,padding:"16px",borderRadius:15,background:C.greenDim,border:`1px solid ${C.green}`,display:"flex",alignItems:"center",justifyContent:"center"}}>
+                          <span style={{fontSize:17,fontWeight:600,color:C.green}}>Séance terminée ✓</span>
                         </div>
                       ):(
-                        <Tap onTap={()=>{setSessionActive(true);clock.start();}} style={{flex:1,padding:"16px",borderRadius:15,background:accent,display:"flex",alignItems:"center",justifyContent:"center",transition:`background 300ms ${EO}`}}>
+                        <Tap onTap={()=>{setSessionActive(true);clock.start();}} style={{flex:1,padding:"16px",borderRadius:15,background:C.blue,display:"flex",alignItems:"center",justifyContent:"center"}}>
                           <span style={{fontSize:17,fontWeight:600,color:"#000"}}>Démarrer</span>
                         </Tap>
                       )}
@@ -1450,10 +1350,10 @@ export default function SomaApp() {
                       ))}
                     </div>
                   )}
-                  {!sessionActive&&!isDayDone&&(
-                    <Tap onTap={()=>setShowFeedback(true)} style={{marginTop:28,marginBottom:16,padding:"16px",borderRadius:15,background:C.blue,display:"flex",alignItems:"center",justifyContent:"center"}}>
+                  {!sessionActive&&(
+                    {!isDayDone&&<Tap onTap={()=>setShowFeedback(true)} style={{marginTop:28,marginBottom:16,padding:"16px",borderRadius:15,background:C.blue,display:"flex",alignItems:"center",justifyContent:"center"}}>
                       <span style={{fontSize:17,fontWeight:600,color:"#000"}}>Fin de séance</span>
-                    </Tap>
+                    </Tap>}
                   )}
                 </>
               )}
@@ -1461,7 +1361,7 @@ export default function SomaApp() {
           )}
           {tab==="stats"&&<StatsTab sessions={sessions} weights={weights} accent={accent}/>}
           {tab==="history"&&<HistoryTab sessions={sessions} onSelect={setShowReport} accent={accent}/>}
-          {tab==="settings"&&<SettingsTab user={user} excluded={excluded} onToggleExclude={toggleExclude} schedule={schedule} onScheduleSave={s=>{setSchedule(s);persist(user?.id,{schedule:s});}}
+          {tab==="settings"&&<SettingsTab user={user} excluded={excluded} onToggleExclude={toggleExclude}
             onSignOut={async()=>{await supabase.auth.signOut();setUser(null);setLog({});setWeights({});setSessions([]);setExcluded([]);setStreak(0);}}
             onReset={()=>{const key=`soma_${user?.id||"anon"}`;localStorage.removeItem(key);setLog({});setWeights({});setSessions([]);setExcluded([]);setStreak(0);}}
           />}
