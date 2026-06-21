@@ -1350,10 +1350,10 @@ export default function SomaApp() {
                       ))}
                     </div>
                   )}
-                  {!sessionActive&&(
-                    {!isDayDone&&<Tap onTap={()=>setShowFeedback(true)} style={{marginTop:28,marginBottom:16,padding:"16px",borderRadius:15,background:C.blue,display:"flex",alignItems:"center",justifyContent:"center"}}>
+                  {!sessionActive&&!isDayDone&&(
+                    <Tap onTap={()=>setShowFeedback(true)} style={{marginTop:28,marginBottom:16,padding:"16px",borderRadius:15,background:C.blue,display:"flex",alignItems:"center",justifyContent:"center"}}>
                       <span style={{fontSize:17,fontWeight:600,color:"#000"}}>Fin de séance</span>
-                    </Tap>}
+                    </Tap>
                   )}
                 </>
               )}
