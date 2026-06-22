@@ -675,9 +675,10 @@ function ExFullScreen({ex,weight,onWeightChange,log,onLogSet,onStartRest,onClose
   const kg=weight??ex.kg??0;
   const oneRM=orm(kg,ex.reps);
 
+  const [reps,setReps]=useState(()=>{const m=String(ex.reps||"").match(/\d+/);return m?parseInt(m[0]):10;});
   const handleSet=i=>{
     const newDone=!done[i];
-    onLogSet(`${lk}_s${i}`,{done:newDone,weight:kg,date:todayKey()});
+    onLogSet(`${lk}_s${i}`,{done:newDone,weight:kg,reps,date:todayKey()});
     if(newDone&&ex.rest>0) onStartRest(ex.rest,ex.n);
   };
 
@@ -714,6 +715,15 @@ function ExFullScreen({ex,weight,onWeightChange,log,onLogSet,onStartRest,onClose
             <Tap onTap={()=>onWeightChange(ex.id,kg+2.5)} style={{width:56,height:56,borderRadius:14,background:C.s3,display:"flex",alignItems:"center",justifyContent:"center"}}>
               <span style={{fontSize:28,fontWeight:300,color:C.ink}}>+</span>
             </Tap>
+          </div>
+        </div>
+        {/* Reps */}
+        <div style={{background:C.s2,borderRadius:18,padding:"16px 20px",marginBottom:20,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+          <div style={{fontSize:11,fontWeight:600,color:C.ink4,textTransform:"uppercase",letterSpacing:".1em"}}>Reps effectuées</div>
+          <div style={{display:"flex",alignItems:"center",gap:14}}>
+            <Tap onTap={()=>setReps(r=>Math.max(1,r-1))} style={{width:44,height:44,borderRadius:12,background:C.s3,display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{fontSize:24,fontWeight:300,color:C.ink}}>−</span></Tap>
+            <span style={{fontSize:30,fontWeight:700,color:C.ink,minWidth:42,textAlign:"center"}}>{reps}</span>
+            <Tap onTap={()=>setReps(r=>r+1)} style={{width:44,height:44,borderRadius:12,background:C.s3,display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{fontSize:24,fontWeight:300,color:C.ink}}>+</span></Tap>
           </div>
         </div>
         {/* Cue */}
@@ -936,7 +946,7 @@ function FeedbackSheet({onClose,onSave}) {
 }
 
 // ─── SESSION REPORT ───────────────────────────────────────────────────────────
-function SessionReport({session,onClose}) {
+function SessionReport({session,onClose,onDelete}) {
   if(!session) return null;
   const{totalKg=0,totalSets=0,duration=0,exercises=[],date="",dayLabel="",score=0,feedback}=session;
   const animScore=useCountUp(score,1200);
@@ -995,10 +1005,13 @@ function SessionReport({session,onClose}) {
             {feedback.notes&&<div style={{fontSize:15,color:C.ink3,lineHeight:1.65}}>{feedback.notes}</div>}
           </div>
         )}
-        <div style={{padding:"0 24px 60px"}}>
+        <div style={{padding:"0 24px 60px",display:"flex",flexDirection:"column",gap:10}}>
           <Tap onTap={onClose} style={{padding:"16px",borderRadius:15,background:C.s2,display:"flex",alignItems:"center",justifyContent:"center"}}>
             <span style={{fontSize:17,fontWeight:600,color:C.ink3}}>Fermer</span>
           </Tap>
+          {onDelete&&<Tap onTap={()=>{if(window.confirm("Supprimer cette séance ? Action définitive.")) onDelete(session);}} style={{padding:"14px",borderRadius:15,background:"transparent",border:`1px solid ${C.red}`,display:"flex",alignItems:"center",justifyContent:"center"}}>
+            <span style={{fontSize:15,fontWeight:600,color:C.red}}>Supprimer la séance</span>
+          </Tap>}
         </div>
       </div>
     </div>
@@ -1345,21 +1358,16 @@ export default function SomaApp() {
         supabase.from("personal_bests").select("*").eq("user_id",uid),
         supabase.from("streaks").select("*").eq("user_id",uid).single(),
       ]);
-      if(sess?.length){
-        const norm=sess.map(s=>({...s,
-          dayLabel:s.day_label||s.dayLabel||s.day||"",
-          totalKg:Number(s.total_kg||s.totalKg||0),
-          totalSets:Number(s.total_sets||s.totalSets||0),
-          duration:Number(s.duration_seconds||s.duration||0),
-          exercises:typeof s.exercises==="string"?JSON.parse(s.exercises||"[]"):(s.exercises||[]),
-          feedback:typeof s.feedback==="string"?JSON.parse(s.feedback||"null"):s.feedback,
-        }));
-        // Fusion : on garde les seances locales pas encore presentes sur le serveur (offline-first)
-        const dbDates=new Set(norm.map(s=>s.date));
-        const localOnly=(local.sessions||[]).filter(s=>!dbDates.has(s.date));
-        const merged=[...norm,...localOnly];
-        setSessions(merged);computeStreak(merged);persist(uid,{sessions:merged});
-      }
+      // Le serveur fait autorite : sa liste remplace le local (evite les seances fantomes apres suppression/wipe)
+      const norm=(sess||[]).map(s=>({...s,
+        dayLabel:s.day_label||s.dayLabel||s.day||"",
+        totalKg:Number(s.total_kg||s.totalKg||0),
+        totalSets:Number(s.total_sets||s.totalSets||0),
+        duration:Number(s.duration_seconds||s.duration||0),
+        exercises:typeof s.exercises==="string"?JSON.parse(s.exercises||"[]"):(s.exercises||[]),
+        feedback:typeof s.feedback==="string"?JSON.parse(s.feedback||"null"):s.feedback,
+      }));
+      setSessions(norm);computeStreak(norm);persist(uid,{sessions:norm});
       if(pbs?.length){const w={};pbs.forEach(pb=>{w[pb.exercise_id||pb.exercise_name]=pb.weight_kg;});setWeights(prev=>{const next={...prev,...w};persist(uid,{weights:next});return next;});}
       if(strData) setStreak(strData.current_streak||0);
       setSbReady(true);
@@ -1391,6 +1399,13 @@ export default function SomaApp() {
   const saveWeight=useCallback((id,val)=>{setWeights(prev=>{const next={...prev,[id]:val};persist(user?.id,{weights:next});return next;});},[persist]);
   const toggleExclude=useCallback(id=>{setExcluded(prev=>{const next=prev.includes(id)?prev.filter(x=>x!==id):[...prev,id];persist(user?.id,{excluded:next});return next;});},[persist]);
 
+  const deleteSession=useCallback(async(s)=>{
+    const uid=user?.id;
+    setSessions(prev=>{const next=prev.filter(x=>x.date!==s.date);computeStreak(next);persist(uid,{sessions:next});return next;});
+    setShowReport(null);
+    if(uid){try{await supabase.from("sessions").delete().eq("user_id",uid).eq("date",s.date);}catch(e){console.error("del session",e);}}
+  },[user,persist]);
+
   const switchTab=useCallback(id=>{setPrevTab(tab);setTab(id);},[tab]);
 
   const handleStartRest=(s,n)=>{setRestLabel(n);rest.start(s);setShowRestFull(true);};
@@ -1413,7 +1428,7 @@ export default function SomaApp() {
       let completedSets=0,lastWeight=0;
       Array.from({length:s},(_,i)=>{
         const e=log[`d${dayIdx}_${ex.id}_s${i}`];
-        if(e?.done){completedSets++;lastWeight=e.weight||0;const r=parseFloat(String(ex.reps||"8").split("–")[0])||8;totalKg+=lastWeight*r;totalSets++;}
+        if(e?.done){completedSets++;lastWeight=e.weight||0;const r=Number(e.reps)||parseFloat(String(ex.reps||"8").split("–")[0])||8;totalKg+=lastWeight*r;totalSets++;}
       });
       return{id:ex.id,n:ex.n||ex.name,m:ex.m||ex.muscle,weight:lastWeight,completedSets};
     });
@@ -1685,7 +1700,7 @@ export default function SomaApp() {
       {showFeedback&&<FeedbackSheet onClose={()=>setShowFeedback(false)} onSave={handleFeedbackSave}/>}
       {showAI&&<AISheet onClose={()=>setShowAI(false)} onResult={o=>{setAiOverride(o);setShowAI(false);}} excluded={excluded}/>}
       {showPicker&&<ExPicker onSelect={newEx=>handleReplaceEx(showPicker,newEx)} onClose={()=>setShowPicker(null)} currentId={showPicker.id} excluded={excluded}/>}
-      {showReport&&<SessionReport session={showReport} onClose={()=>setShowReport(null)}/>}
+      {showReport&&<SessionReport session={showReport} onClose={()=>setShowReport(null)} onDelete={deleteSession}/>}
       {showSched&&<ScheduleEditor schedule={schedule}
         onChange={ns=>{setSchedule(ns);persist(user?.id,{schedule:ns});}}
         onReset={()=>{setSchedule(PROGRAM);persist(user?.id,{schedule:PROGRAM});}}
