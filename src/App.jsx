@@ -1294,12 +1294,76 @@ function TabContent({tab,prevTab,children}) {
   );
 }
 
+// ─── ONBOARDING (epic A) ────────────────────────────────
+const FREQ_DAYS = {3:[0,2,4],4:[0,1,3,4],5:[0,1,2,3,4],6:[0,1,2,3,4,5]};
+const DAY_LBL = ["LUN","MAR","MER","JEU","VEN","SAM","DIM"];
+const generateSchedule = (freq) => {
+  const trainIdx = FREQ_DAYS[freq] || FREQ_DAYS[4];
+  const train = PROGRAM.filter(d=>d.salle);
+  let ti=0;
+  return DAY_LBL.map((lbl,i)=>{
+    if(trainIdx.includes(i)){ const tpl=train[ti%train.length]; ti++; return {label:tpl.label,salle:tpl.salle,muscle:tpl.muscle,exercises:tpl.exercises,abs:tpl.abs,ids:tpl.ids,day:lbl}; }
+    return {...REST_TPL,day:lbl};
+  });
+};
+
+function OnboardingScreen({user,onDone}) {
+  const [step,setStep]=useState(0);
+  const [goal,setGoal]=useState(null);
+  const [level,setLevel]=useState(null);
+  const [equip,setEquip]=useState([]);
+  const [freq,setFreq]=useState(4);
+  const [weight,setWeight]=useState("");
+  const [saving,setSaving]=useState(false);
+  const GOALS=[["force","Force","Soulever plus lourd"],["endurance","Endurance","Tenir plus longtemps"],["hybride","Hybride","Force + condition"],["seche","Perte de gras","Bruler, rester sec"]];
+  const LEVELS=[["debutant","Debutant","Je debute"],["inter","Intermediaire","Quelques mois ou annees"],["avance","Avance","Entraine et regulier"],["athlete","Athlete","Niveau competition"]];
+  const EQUIP=[["bw","Poids du corps"],["kb","Kettlebell"],["db","Halteres"],["bar","Barre"],["mc","Machine / salle"],["cd","Cardio"]];
+  const FREQS=[3,4,5,6];
+  const toggleEq=(k)=>setEquip(pr=>pr.includes(k)?pr.filter(x=>x!==k):[...pr,k]);
+  const canNext = step===0?!!goal : step===1?!!level : step===2?equip.length>0 : true;
+  const last = step===4;
+  const card=(sel)=>({display:"flex",justifyContent:"space-between",alignItems:"center",padding:"18px 20px",borderRadius:16,background:sel?C.blue:C.s1,border:`1px solid ${sel?C.blue:C.s3}`,marginBottom:12,cursor:"pointer"});
+  const ttl=(sel)=>({fontSize:17,fontWeight:600,color:sel?"#000":C.ink});
+  const dsc=(sel)=>({fontSize:13,color:sel?"rgba(0,0,0,.6)":C.ink4,marginTop:3});
+  const chk=(sel)=> sel?<span style={{fontSize:18,fontWeight:700,color:"#000"}}>✓</span>:null;
+  const next = async () => {
+    if(!last){ setStep(step+1); return; }
+    setSaving(true);
+    await onDone({goal,level,equipment:equip,frequency:freq,weight_kg:weight?Number(weight):null});
+  };
+  const titles=["Ton objectif","Ton niveau","Ton equipement","Jours par semaine","Ton poids (optionnel)"];
+  const subs=["Pour orienter ton programme","On calibre l'intensite","On choisit les exercices adaptes","On repartit tes seances","Pour suivre ta progression"];
+  return (
+    <div style={{position:"fixed",inset:0,zIndex:Z.fullscreen,background:C.bg,display:"flex",flexDirection:"column",fontFamily:F}}>
+      <div style={{padding:`calc(22px + env(safe-area-inset-top)) 24px 8px`}}>
+        <div style={{display:"flex",gap:6,marginBottom:28}}>
+          {[0,1,2,3,4].map(i=>(<div key={i} style={{flex:1,height:4,borderRadius:980,background:i<=step?C.blue:C.s3,transition:`background 250ms ${EO}`}}/>))}
+        </div>
+        <div style={{fontSize:28,fontWeight:700,color:C.ink,letterSpacing:"-.03em",lineHeight:1.1}}>{titles[step]}</div>
+        <div style={{fontSize:15,color:C.ink4,marginTop:6}}>{subs[step]}</div>
+      </div>
+      <div style={{flex:1,overflowY:"auto",padding:"20px 24px"}}>
+        {step===0 && GOALS.map(([k,tt,d])=>(<Tap key={k} onTap={()=>setGoal(k)} style={card(goal===k)}><div><div style={ttl(goal===k)}>{tt}</div><div style={dsc(goal===k)}>{d}</div></div>{chk(goal===k)}</Tap>))}
+        {step===1 && LEVELS.map(([k,tt,d])=>(<Tap key={k} onTap={()=>setLevel(k)} style={card(level===k)}><div><div style={ttl(level===k)}>{tt}</div><div style={dsc(level===k)}>{d}</div></div>{chk(level===k)}</Tap>))}
+        {step===2 && EQUIP.map(([k,tt])=>(<Tap key={k} onTap={()=>toggleEq(k)} style={card(equip.includes(k))}><div style={ttl(equip.includes(k))}>{tt}</div>{chk(equip.includes(k))}</Tap>))}
+        {step===3 && FREQS.map(f=>(<Tap key={f} onTap={()=>setFreq(f)} style={card(freq===f)}><div style={ttl(freq===f)}>{f} jours / semaine</div>{chk(freq===f)}</Tap>))}
+        {step===4 && (<div style={{display:"flex",alignItems:"center",gap:14,background:C.s1,borderRadius:16,padding:"20px",border:`1px solid ${C.s3}`}}><input value={weight} onChange={e=>setWeight(e.target.value.replace(/[^0-9.]/g,""))} inputMode="decimal" placeholder="75" style={{flex:1,background:"transparent",border:"none",outline:"none",color:C.ink,fontSize:32,fontWeight:700,fontFamily:F,width:"100%"}}/><span style={{fontSize:18,color:C.ink4}}>kg</span></div>)}
+      </div>
+      <div style={{padding:`14px 24px calc(20px + env(safe-area-inset-bottom))`,display:"flex",gap:10}}>
+        {step>0&&<Tap onTap={()=>setStep(step-1)} style={{padding:"17px 22px",borderRadius:15,background:C.s2,display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{fontSize:17,fontWeight:600,color:C.ink3}}>Retour</span></Tap>}
+        <Tap onTap={canNext&&!saving?next:undefined} style={{flex:1,padding:"17px",borderRadius:15,background:canNext?C.blue:C.s3,display:"flex",alignItems:"center",justifyContent:"center",opacity:saving?0.6:1}}><span style={{fontSize:17,fontWeight:600,color:canNext?"#000":C.ink4}}>{saving?"Creation...":last?"Creer mon programme":"Continuer"}</span></Tap>
+      </div>
+    </div>
+  );
+}
+
 // ─── MAIN ────────────────────────────────────────────────────────────────────
 export default function SomaApp() {
   const[user,setUser]=useState(null);
   const[authLoading,setAuthLoading]=useState(true);
   const[showWelcome,setShowWelcome]=useState(false);
   const[dataReady,setDataReady]=useState(false);
+  const[profile,setProfile]=useState(null);
   const[tab,setTab]=useState("seance");
   const[prevTab,setPrevTab]=useState(null);
   const[dayIdx,setDayIdx]=useState(todayIdx());
@@ -1351,13 +1415,16 @@ export default function SomaApp() {
     if(local.accent) setAccent(local.accent);
     if(local.schedule) setSchedule(local.schedule);
     if(typeof local.autoRotate==="boolean") setAutoRotate(local.autoRotate);
+    if(local.profile) setProfile(local.profile);
     // Then sync from Supabase
     try{
-      const[{data:sess},{data:pbs},{data:strData}]=await Promise.all([
+      const[{data:sess},{data:pbs},{data:strData},{data:prof}]=await Promise.all([
         supabase.from("sessions").select("*").eq("user_id",uid).order("date",{ascending:false}),
         supabase.from("personal_bests").select("*").eq("user_id",uid),
         supabase.from("streaks").select("*").eq("user_id",uid).single(),
+        supabase.from("profiles").select("*").eq("id",uid).maybeSingle(),
       ]);
+      setProfile(prof||null); if(prof) persist(uid,{profile:prof});
       // Le serveur fait autorite : sa liste remplace le local (evite les seances fantomes apres suppression/wipe)
       const norm=(sess||[]).map(s=>({...s,
         dayLabel:s.day_label||s.dayLabel||s.day||"",
@@ -1506,6 +1573,15 @@ export default function SomaApp() {
 
   if(!user) return <AuthScreen onAuth={u=>{setUser(u);loadUserData(u.id);}}/>;
   if(!dataReady) return(<div style={{position:"fixed",inset:0,background:C.bg,display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",gap:20,fontFamily:F}}><style>{"@keyframes p{0%,100%{opacity:.3}50%{opacity:1}}"}</style><div style={{fontSize:36,fontWeight:700,color:C.ink,letterSpacing:"-.03em"}}>SŌMA</div><div style={{width:8,height:8,borderRadius:"50%",background:C.blue,animation:"p 1s ease-in-out infinite"}}/></div>);
+  if(!profile) return <OnboardingScreen user={user} onDone={async(data)=>{
+    const uid=user.id;
+    const sched=generateSchedule(data.frequency);
+    setSchedule(sched);
+    const prof={id:uid,name:user?.user_metadata?.name||null,goal:data.goal,level:data.level,equipment:data.equipment,frequency:data.frequency,weight_kg:data.weight_kg,updated_at:new Date().toISOString()};
+    setProfile(prof);
+    persist(uid,{schedule:sched,profile:prof});
+    try{await supabase.from("profiles").upsert(prof,{onConflict:"id"});}catch(e){console.error("profile",e);}
+  }}/>;
   if(showWelcome) return(<WelcomeScreen user={user} todaySession={viewSchedule[todayIdx()]||PROGRAM[todayIdx()]} streak={streak} onStart={()=>{setShowWelcome(false);setDayIdx(todayIdx());}} onSkip={()=>setShowWelcome(false)}/>);
 
   const day=viewSchedule[dayIdx]||PROGRAM[dayIdx];
