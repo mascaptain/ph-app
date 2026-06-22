@@ -1283,13 +1283,79 @@ function SettingsTab({user,excluded,onToggleExclude,onSignOut,onReset}) {
 // ─── TAB TRANSITION — slide between tabs ─────────────────────────────────────
 function TabContent({tab,prevTab,children}) {
   const dir = useMemo(()=>{
-    const order=["seance","stats","history","settings"];
+    const order=["seance","biblio","stats","history","settings"];
     const ci=order.indexOf(tab),pi=order.indexOf(prevTab||tab);
     return ci>pi?1:-1;
   },[tab,prevTab]);
   return(
     <div key={tab} style={{animation:`slideTab${dir>0?"Right":"Left"} ${DUR.page} ${EO} both`}}>
       {children}
+    </div>
+  );
+}
+
+// \u2500\u2500\u2500 BIBLIOTHEQUE (epic C) \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+function ExerciseSheet({ex,fav,onToggleFav,onClose}) {
+  const variants=altPool(ex).slice(0,6);
+  const meta=[["Reps",ex.reps],["Repos",ex.rest?ex.rest+"s":"\u2014"],["RPE",ex.rpe||"\u2014"]];
+  return(
+    <div style={{position:"fixed",inset:0,zIndex:Z.sheet,display:"flex",alignItems:"flex-end",justifyContent:"center",fontFamily:F}}>
+      <div onClick={onClose} style={{position:"absolute",inset:0,background:"rgba(0,0,0,.72)",backdropFilter:"blur(8px)"}}/>
+      <div style={{position:"relative",background:C.s1,borderRadius:"28px 28px 0 0",width:"100%",maxWidth:600,maxHeight:"88vh",display:"flex",flexDirection:"column",animation:`slideUp ${DUR.modal} ${ED} both`}}>
+        <div style={{padding:"20px 20px 16px",borderBottom:`1px solid ${C.s3}`}}>
+          <div style={{width:36,height:4,background:C.s4,borderRadius:2,margin:"0 auto 18px"}}/>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:12}}>
+            <div style={{minWidth:0}}>
+              <div style={{fontSize:24,fontWeight:700,color:C.ink,letterSpacing:"-.02em",lineHeight:1.1}}>{ex.n}</div>
+              <div style={{display:"flex",gap:8,alignItems:"center",marginTop:8}}><span style={{fontSize:14,color:C.ink3}}>{ex.m}</span><span style={{fontSize:11,fontWeight:600,padding:"2px 9px",borderRadius:980,background:C.s3,color:C.ink4}}>{EQ_LABELS[ex.eq]}</span></div>
+            </div>
+            <Tap onTap={()=>onToggleFav(ex.id)} style={{width:44,height:44,borderRadius:12,background:fav?C.blueDim:C.s2,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}><span style={{fontSize:20,color:fav?C.blue:C.ink4}}>{fav?"\u2605":"\u2606"}</span></Tap>
+          </div>
+        </div>
+        <div style={{overflowY:"auto",flex:1,padding:"18px 20px 40px"}}>
+          <div style={{display:"flex",gap:10,marginBottom:20}}>
+            {meta.map(([l,v])=>(<div key={l} style={{flex:1,background:C.s2,borderRadius:14,padding:"14px",textAlign:"center"}}><div style={{fontSize:11,fontWeight:600,color:C.ink4,textTransform:"uppercase",letterSpacing:".08em",marginBottom:4}}>{l}</div><div style={{fontSize:18,fontWeight:700,color:C.ink}}>{v}</div></div>))}
+          </div>
+          {ex.cue&&<div style={{background:C.s2,borderRadius:14,padding:"16px",marginBottom:20}}><div style={{fontSize:11,fontWeight:600,color:C.ink4,textTransform:"uppercase",letterSpacing:".08em",marginBottom:6}}>Technique</div><div style={{fontSize:15,color:C.ink2,lineHeight:1.5}}>{ex.cue}</div></div>}
+          {variants.length>0&&<div><div style={{fontSize:11,fontWeight:600,color:C.ink4,textTransform:"uppercase",letterSpacing:".08em",marginBottom:10}}>Variantes</div>{variants.map(v=>(<div key={v.id} style={{padding:"12px 0",borderBottom:`1px solid ${C.s3}`,display:"flex",justifyContent:"space-between",alignItems:"center"}}><span style={{fontSize:15,color:C.ink}}>{v.n}</span><span style={{fontSize:11,fontWeight:600,padding:"1px 8px",borderRadius:980,background:C.s3,color:C.ink4}}>{EQ_LABELS[v.eq]}</span></div>))}</div>}
+        </div>
+        <div style={{padding:"0 20px calc(24px + env(safe-area-inset-bottom))"}}><Tap onTap={onClose} style={{padding:"16px",borderRadius:15,background:C.s2,display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{fontSize:17,fontWeight:600,color:C.ink3}}>Fermer</span></Tap></div>
+      </div>
+    </div>
+  );
+}
+
+function LibraryTab({favorites,onToggleFav}) {
+  const [search,setSearch]=useState("");
+  const [eq,setEq]=useState(null);
+  const [mg,setMg]=useState(null);
+  const [favOnly,setFavOnly]=useState(false);
+  const [sel,setSel]=useState(null);
+  const MG=[["Pecs",["pec"]],["Dos",["dos","dorsal","trap"]],["Epaules",["\u00e9paul","epaul","delt"]],["Bras",["biceps","triceps","avant-bras"]],["Jambes",["quad","ischio","mollet","adduct","jambe"]],["Fessiers",["fessier"]],["Core",["core","oblique","lombaire","abdo","gainage","\u00e9quilibre","equilibre","stab"]],["Full / Cardio",["full","cardio","puissance"]]];
+  const mgKeys=mg?((MG.find(x=>x[0]===mg)||[])[1]||[]):null;
+  const sl=search.toLowerCase();
+  const filtered=DB.filter(e=>(!sl||e.n.toLowerCase().includes(sl)||e.m.toLowerCase().includes(sl))&&(!eq||e.eq===eq)&&(!mgKeys||mgKeys.some(k=>e.m.toLowerCase().includes(k)))&&(!favOnly||favorites.includes(e.id)));
+  const chip=(active)=>({flexShrink:0,padding:"6px 14px",borderRadius:980,border:`1px solid ${active?C.blue:C.div}`,background:active?C.blueDim:"transparent"});
+  return(
+    <div style={{padding:"4px 0 40px"}}>
+      <div style={{fontSize:28,fontWeight:700,color:C.ink,letterSpacing:"-.03em",marginBottom:4}}>Biblioth\u00e8que</div>
+      <div style={{fontSize:14,color:C.ink4,marginBottom:18}}>{DB.length} exercices</div>
+      <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Rechercher un exercice..." style={{width:"100%",padding:"13px 16px",borderRadius:12,border:`1px solid ${C.div}`,fontFamily:F,fontSize:15,color:C.ink,background:C.s2,outline:"none",boxSizing:"border-box",marginBottom:12}}/>
+      <div style={{display:"flex",gap:6,overflowX:"auto",scrollbarWidth:"none",marginBottom:10}}>
+        <Tap onTap={()=>setFavOnly(v=>!v)} style={chip(favOnly)}><span style={{fontSize:12,fontWeight:600,color:favOnly?C.blue:C.ink4}}>\u2605 Favoris</span></Tap>
+        {Object.entries(EQ_LABELS).map(([k,l])=>(<Tap key={k} onTap={()=>setEq(eq===k?null:k)} style={chip(eq===k)}><span style={{fontSize:12,fontWeight:600,color:eq===k?C.blue:C.ink4}}>{l}</span></Tap>))}
+      </div>
+      <div style={{display:"flex",gap:6,overflowX:"auto",scrollbarWidth:"none",marginBottom:16}}>
+        {MG.map(([l])=>(<Tap key={l} onTap={()=>setMg(mg===l?null:l)} style={chip(mg===l)}><span style={{fontSize:12,fontWeight:600,color:mg===l?C.blue:C.ink4}}>{l}</span></Tap>))}
+      </div>
+      {filtered.length===0&&<div style={{textAlign:"center",padding:"40px 0",fontSize:15,color:C.ink4}}>Aucun r\u00e9sultat.</div>}
+      {filtered.map(ex=>(
+        <Tap key={ex.id} onTap={()=>setSel(ex)} style={{padding:"14px 0",borderBottom:`1px solid ${C.s3}`,display:"flex",justifyContent:"space-between",alignItems:"center",gap:10}}>
+          <div style={{minWidth:0}}><div style={{fontSize:15,fontWeight:600,color:C.ink,marginBottom:4}}>{ex.n}</div><div style={{display:"flex",gap:8,alignItems:"center"}}><span style={{fontSize:13,color:C.ink3}}>{ex.m}</span><span style={{fontSize:11,fontWeight:600,padding:"1px 8px",borderRadius:980,background:C.s3,color:C.ink4}}>{EQ_LABELS[ex.eq]}</span></div></div>
+          {favorites.includes(ex.id)&&<span style={{fontSize:16,color:C.blue,flexShrink:0}}>\u2605</span>}
+        </Tap>
+      ))}
+      {sel&&<ExerciseSheet ex={sel} fav={favorites.includes(sel.id)} onToggleFav={onToggleFav} onClose={()=>setSel(null)}/>}
     </div>
   );
 }
@@ -1364,6 +1430,7 @@ export default function SomaApp() {
   const[showWelcome,setShowWelcome]=useState(false);
   const[dataReady,setDataReady]=useState(false);
   const[profile,setProfile]=useState(null);
+  const[favorites,setFavorites]=useState([]);
   const[tab,setTab]=useState("seance");
   const[prevTab,setPrevTab]=useState(null);
   const[dayIdx,setDayIdx]=useState(todayIdx());
@@ -1416,6 +1483,7 @@ export default function SomaApp() {
     if(local.schedule) setSchedule(local.schedule);
     if(typeof local.autoRotate==="boolean") setAutoRotate(local.autoRotate);
     if(local.profile) setProfile(local.profile);
+    if(local.favorites) setFavorites(local.favorites);
     // Then sync from Supabase
     try{
       const[{data:sess},{data:pbs},{data:strData},{data:prof}]=await Promise.all([
@@ -1472,6 +1540,8 @@ export default function SomaApp() {
     setShowReport(null);
     if(uid){try{await supabase.from("sessions").delete().eq("user_id",uid).eq("date",s.date);}catch(e){console.error("del session",e);}}
   },[user,persist]);
+
+  const toggleFav=useCallback(id=>{setFavorites(prev=>{const next=prev.includes(id)?prev.filter(x=>x!==id):[...prev,id];persist(user?.id,{favorites:next});return next;});},[persist]);
 
   const switchTab=useCallback(id=>{setPrevTab(tab);setTab(id);},[tab]);
 
@@ -1590,7 +1660,7 @@ export default function SomaApp() {
   const isRest=!day?.salle;
   const exos=(aiOverride?.exercises||day?.exercises||[]).filter(e=>!excluded.includes(e.id));
   const absExos=aiOverride?.abs||day?.abs||[];
-  const NAV=[{id:"seance",l:"Séance"},{id:"stats",l:"Stats"},{id:"history",l:"Historique"},{id:"settings",l:"Réglages"}];
+  const NAV=[{id:"seance",l:"Séance"},{id:"biblio",l:"Biblio"},{id:"stats",l:"Stats"},{id:"history",l:"Historique"},{id:"settings",l:"Réglages"}];
 
   return(
     <div style={{background:C.bg,minHeight:"100dvh",color:C.ink,fontFamily:F,overflowX:"hidden"}}>
@@ -1735,6 +1805,7 @@ export default function SomaApp() {
               )}
             </div>
           )}
+          {tab==="biblio"&&<LibraryTab favorites={favorites} onToggleFav={toggleFav}/>}
           {tab==="stats"&&<StatsTab sessions={sessions} weights={weights} accent={accent}/>}
           {tab==="history"&&<HistoryTab sessions={sessions} onSelect={setShowReport} accent={accent}/>}
           {tab==="settings"&&<SettingsTab user={user} excluded={excluded} onToggleExclude={toggleExclude}
