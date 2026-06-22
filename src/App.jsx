@@ -188,7 +188,14 @@ const PROGRAM = PROG_DEF.map(d=>({...d,exercises:d.ids.map(([id,sets])=>{const e
 const SESSION_TYPES = ["KB Full","KB Endurance","KB Force","Push","Pull & Dos","Jambes","Corps entier","Bras","Cardio HIIT"];
 
 // ─── UTILS ───────────────────────────────────────────────────────────────────
-const todayKey = () => new Date().toISOString().slice(0,10);
+// Cle de date LOCALE (jamais UTC) - evite le decalage d'un jour selon le fuseau.
+const localDateKey = (date = new Date()) => {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+};
+const todayKey = () => localDateKey();
 // Date réelle du jour de programme dans la semaine courante
 // dayIdx 0=LUN ... 6=DIM
 const programDate = (dIdx) => {
@@ -196,7 +203,7 @@ const programDate = (dIdx) => {
   const dow = t.getDay() === 0 ? 6 : t.getDay() - 1; // 0=lun
   const d = new Date(t);
   d.setDate(t.getDate() + (dIdx - dow));
-  return d.toISOString().slice(0, 10);
+  return localDateKey(d);
 };
 const todayIdx = () => { const d=new Date().getDay(); return d===0?6:d-1; };
 const fmtMSS = s => `${String(Math.floor(s/60)).padStart(2,"0")}:${String(s%60).padStart(2,"0")}`;
@@ -782,7 +789,7 @@ function WeekSummary({sessions,accent}) {
   const days=["LUN","MAR","MER","JEU","VEN","SAM","DIM"];
   const today=new Date();
   const dow=today.getDay()===0?6:today.getDay()-1;
-  const weekDates=Array.from({length:7},(_,i)=>{const d=new Date(today);d.setDate(today.getDate()-dow+i);return d.toISOString().slice(0,10);});
+  const weekDates=Array.from({length:7},(_,i)=>{const d=new Date(today);d.setDate(today.getDate()-dow+i);return localDateKey(d);});
   const thisWeek=sessions.filter(s=>weekDates.includes(s.date));
   const weekVol=thisWeek.reduce((a,s)=>a+(s.totalKg||0),0);
   return(
@@ -830,7 +837,7 @@ function StatsTab({sessions,weights,accent}) {
       <WeekSummary sessions={sessions} accent={accent}/>
       {/* Metrics grid */}
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:16}}>
-        {[{l:"Séances",v:total},{l:"Volume total",v:totalKg>0?`${(totalKg/1000).toFixed(1)}t`:"—"},{l:"Score moyen",v:avgScore||"—"},{l:"Semaine",v:`${sessions.filter(s=>{const d=new Date();const dow=d.getDay()===0?6:d.getDay()-1;const wd=new Date(d);wd.setDate(d.getDate()-dow);return new Date(s.date)>=wd;}).length}/5`}].map(({l,v})=>(
+        {[{l:"Séances",v:total},{l:"Volume total",v:totalKg>0?`${(totalKg/1000).toFixed(1)}t`:"—"},{l:"Score moyen",v:avgScore||"—"},{l:"Semaine",v:`${sessions.filter(s=>{const d=new Date();const dow=d.getDay()===0?6:d.getDay()-1;const wd=new Date(d);wd.setDate(d.getDate()-dow);return s.date>=localDateKey(wd);}).length}/5`}].map(({l,v})=>(
           <div key={l} style={{background:C.s1,borderRadius:16,padding:"18px 16px"}}>
             <div style={{fontSize:11,fontWeight:600,color:C.ink4,textTransform:"uppercase",letterSpacing:".1em",marginBottom:8}}>{l}</div>
             <div style={{fontSize:32,fontWeight:700,color:C.ink,letterSpacing:"-.02em"}}>{v}</div>
@@ -1046,12 +1053,14 @@ export default function SomaApp() {
     });
     const{data:{subscription}}=supabase.auth.onAuthStateChange((_,session)=>{
       setUser(session?.user||null);
-      if(session?.user) loadUserData(session.user.id);
     });
     return()=>subscription.unsubscribe();
   },[]);
 
+  const loadingRef=useRef(null);
   const loadUserData = useCallback(async(uid)=>{
+    if(!uid||loadingRef.current===uid) return; // garde anti-doublon
+    loadingRef.current=uid;
     // Load from local first (instant)
     const local=JSON.parse(localStorage.getItem(`soma_${uid}`)||"{}");
     if(local.log) setLog(local.log);
@@ -1076,7 +1085,11 @@ export default function SomaApp() {
           exercises:typeof s.exercises==="string"?JSON.parse(s.exercises||"[]"):(s.exercises||[]),
           feedback:typeof s.feedback==="string"?JSON.parse(s.feedback||"null"):s.feedback,
         }));
-        setSessions(norm);computeStreak(norm);persist(uid,{sessions:norm});
+        // Fusion : on garde les seances locales pas encore presentes sur le serveur (offline-first)
+        const dbDates=new Set(norm.map(s=>s.date));
+        const localOnly=(local.sessions||[]).filter(s=>!dbDates.has(s.date));
+        const merged=[...norm,...localOnly];
+        setSessions(merged);computeStreak(merged);persist(uid,{sessions:merged});
       }
       if(pbs?.length){const w={};pbs.forEach(pb=>{w[pb.exercise_id||pb.exercise_name]=pb.weight_kg;});setWeights(prev=>{const next={...prev,...w};persist(uid,{weights:next});return next;});}
       if(strData) setStreak(strData.current_streak||0);
@@ -1084,13 +1097,14 @@ export default function SomaApp() {
       setDataReady(true);
       if(!sessionStorage.getItem('sw')){setShowWelcome(true);sessionStorage.setItem('sw','1');}
     }catch(e){console.error(e);setDataReady(true);}
+    finally{loadingRef.current=null;}
   },[]);
 
   useEffect(()=>{if(user) loadUserData(user.id);},[user]);
 
   function computeStreak(sess){
     const dates=(sess||[]).map(s=>s.date);let s=0;
-    for(let i=0;i<60;i++){const d=new Date();d.setDate(d.getDate()-i);if(dates.includes(d.toISOString().slice(0,10)))s++;else break;}
+    for(let i=0;i<60;i++){const d=new Date();d.setDate(d.getDate()-i);if(dates.includes(localDateKey(d)))s++;else break;}
     setStreak(s);
   }
 
@@ -1114,8 +1128,6 @@ export default function SomaApp() {
 
   const handleReplaceEx=(replaced,newEx)=>{
     const day=schedule[dayIdx]||PROGRAM[dayIdx];
-  const sDate=programDate(dayIdx);
-  const isDayDone=sessions.some(s=>s.date===sDate&&s.day===day?.day);
     const src=aiOverride?.exercises||day.exercises||[];
     const newExos=src.map(ex=>ex.id===replaced.id?{...newEx,sets:ex.sets}:ex);
     setAiOverride(prev=>({...(prev||{titre:day.label,abs:day.abs}),exercises:newExos}));
@@ -1124,8 +1136,7 @@ export default function SomaApp() {
 
   const handleFeedbackSave=(fb)=>{
     const day=schedule[dayIdx]||PROGRAM[dayIdx];
-  const sDate=programDate(dayIdx);
-  const isDayDone=sessions.some(s=>s.date===sDate&&s.day===day?.day);
+    const sDate=programDate(dayIdx);
     const exos=aiOverride?.exercises||day.exercises||[];
     let totalKg=0,totalSets=0;
     const exercisesData=exos.map(ex=>{
@@ -1139,7 +1150,6 @@ export default function SomaApp() {
     });
     const score=Math.round(Math.min(totalKg/5000*40,40)+Math.min(totalSets/25*30,30)+((fb.global+fb.energy)/10*30));
     // Date = jour du programme (ex: LUN = date du lundi de cette semaine)
-    const sDate=programDate(dayIdx);
     const entry={
       day:day.day,
       dayLabel:aiOverride?.titre||day.label,
@@ -1160,13 +1170,13 @@ export default function SomaApp() {
         const k=`soma_${uid}`;
         const cur=JSON.parse(localStorage.getItem(k)||"{}" );
         const prev=cur.sessions||[];
-        const next=[...prev.filter(s=>!(s.date===sDate&&s.day===day.day)),entry];
+        const next=[...prev.filter(s=>s.date!==sDate),entry];
         localStorage.setItem(k,JSON.stringify({...cur,sessions:next}));
       }catch(e){console.error("LS",e);}
     }
     // 2. State React
     setSessions(prev=>{
-      const next=[...prev.filter(s=>!(s.date===sDate&&s.day===day.day)),entry];
+      const next=[...prev.filter(s=>s.date!==sDate),entry];
       computeStreak(next);
       return next;
     });
