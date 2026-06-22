@@ -185,6 +185,10 @@ const PROG_DEF = [
 ];
 const PROGRAM = PROG_DEF.map(d=>({...d,exercises:d.ids.map(([id,sets])=>{const ex=DB.find(e=>e.id===id);return ex?{...ex,sets}:null}).filter(Boolean)}));
 
+// Templates de seances reassignables (les 5 seances + Repos) pour l'editeur de semaine
+const REST_TPL = {label:"Repos",salle:null,muscle:"Recuperation active",exercises:[],abs:[],ids:[]};
+const SESSION_TEMPLATES = [...PROGRAM.filter(d=>d.salle).map(d=>({label:d.label,salle:d.salle,muscle:d.muscle,exercises:d.exercises,abs:d.abs,ids:d.ids})), REST_TPL];
+
 const SESSION_TYPES = ["KB Full","KB Endurance","KB Force","Push","Pull & Dos","Jambes","Corps entier","Bras","Cardio HIIT"];
 
 // ─── UTILS ───────────────────────────────────────────────────────────────────
@@ -220,11 +224,12 @@ function beep() {
 // ─── HOOKS ───────────────────────────────────────────────────────────────────
 function useStopwatch() {
   const [sec,setSec]=useState(0);const[running,setRunning]=useState(false);const ref=useRef(null);
-  const start=()=>{setSec(0);setRunning(true);ref.current=setInterval(()=>setSec(p=>p+1),1000);};
+  const start=()=>{setSec(0);setRunning(true);clearInterval(ref.current);ref.current=setInterval(()=>setSec(p=>p+1),1000);};
+  const resume=()=>{if(ref.current)clearInterval(ref.current);setRunning(true);ref.current=setInterval(()=>setSec(p=>p+1),1000);};
   const stop=()=>{clearInterval(ref.current);setRunning(false);};
   const reset=()=>{clearInterval(ref.current);setRunning(false);setSec(0);};
   useEffect(()=>()=>clearInterval(ref.current),[]);
-  return{sec,running,start,stop,reset};
+  return{sec,running,start,resume,stop,reset};
 }
 
 function useCountdown(onDone) {
@@ -473,7 +478,6 @@ function ExFullScreen({ex,weight,onWeightChange,log,onLogSet,onStartRest,onClose
           <span style={{fontSize:14,color:C.ink3}}>{ex.m}</span>
           <span style={{color:C.s4}}>·</span>
           <span style={{fontSize:13,fontWeight:600,padding:"2px 10px",borderRadius:980,background:C.s2,color:C.ink4}}>{EQ_LABELS[ex.eq]}</span>
-          {oneRM&&<><span style={{color:C.s4}}>·</span><span style={{fontSize:13,fontWeight:600,color:C.blue}}>1RM ~{oneRM}kg</span></>}
         </div>
         {lastKg>0&&<div style={{padding:"12px 16px",borderRadius:12,background:C.orDim,marginBottom:20}}>
           <span style={{fontSize:14,fontWeight:600,color:C.orange}}>Dernière fois : {lastKg}kg · Essaie {lastKg+2.5}kg</span>
@@ -548,7 +552,6 @@ function ExRow({ex,weight,onWeightChange,log,onLogSet,onStartRest,idx,lastKg,onF
             <span style={{fontSize:14,color:C.ink3}}>{sets}×{ex.reps}</span>
             <span style={{color:C.s4}}>·</span>
             <span style={{fontSize:14,color:C.ink3}}>{ex.m}</span>
-            {oneRM&&<><span style={{color:C.s4}}>·</span><span style={{fontSize:13,fontWeight:600,color:C.blue}}>~{oneRM}kg</span></>}
             {lastKg>0&&<span style={{fontSize:12,fontWeight:600,color:C.orange}}>↑{lastKg}kg</span>}
           </div>
         </div>
@@ -947,6 +950,45 @@ function HistoryTab({sessions,onSelect,accent}) {
 }
 
 // ─── SETTINGS TAB ────────────────────────────────────────────────────────────
+function ScheduleEditor({schedule,onChange,onReset,onClose}) {
+  const assign=(i,tpl)=>{
+    const next=schedule.map((d,idx)=>idx===i?{...tpl,day:d.day}:d);
+    onChange(next);
+  };
+  return(
+    <div style={{position:"fixed",inset:0,zIndex:Z.fullscreen,background:C.bg,display:"flex",flexDirection:"column",fontFamily:F,animation:`slideUp 280ms ${EO}`}}>
+      <div style={{padding:`calc(16px + env(safe-area-inset-top)) 20px 14px`,borderBottom:`1px solid ${C.s3}`,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+        <div>
+          <div style={{fontSize:22,fontWeight:700,color:C.ink,letterSpacing:"-.03em"}}>Modifier la semaine</div>
+          <div style={{fontSize:13,color:C.ink4,marginTop:2}}>Choisis la séance de chaque jour</div>
+        </div>
+        <Tap onTap={onClose} style={{width:38,height:38,borderRadius:10,background:C.s2,display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{fontSize:18,color:C.ink3}}>✕</span></Tap>
+      </div>
+      <div style={{flex:1,overflowY:"auto",padding:"16px 20px 24px"}}>
+        {schedule.map((d,i)=>(
+          <div key={i} style={{marginBottom:18}}>
+            <div style={{fontSize:11,fontWeight:600,color:C.ink4,textTransform:"uppercase",letterSpacing:".12em",marginBottom:8}}>{d.day} · <span style={{color:d.salle?C.blue:C.ink4}}>{d.label}</span></div>
+            <div style={{display:"flex",gap:8,overflowX:"auto",paddingBottom:2,scrollbarWidth:"none"}}>
+              {SESSION_TEMPLATES.map((tp,ti)=>{
+                const sel=tp.label===d.label;
+                return(
+                  <Tap key={ti} onTap={()=>assign(i,tp)} style={{flexShrink:0,padding:"10px 14px",borderRadius:12,background:sel?C.blue:C.s2,border:`1px solid ${sel?C.blue:C.s4}`}}>
+                    <span style={{fontSize:14,fontWeight:600,color:sel?"#000":C.ink2}}>{tp.label}</span>
+                  </Tap>
+                );
+              })}
+            </div>
+          </div>
+        ))}
+      </div>
+      <div style={{padding:`14px 20px calc(14px + env(safe-area-inset-bottom))`,borderTop:`1px solid ${C.s3}`,display:"flex",gap:10}}>
+        <Tap onTap={onReset} style={{flex:1,padding:"15px",borderRadius:14,border:`1px solid ${C.div}`,display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{fontSize:15,fontWeight:600,color:C.ink3}}>Programme par défaut</span></Tap>
+        <Tap onTap={onClose} style={{flex:1,padding:"15px",borderRadius:14,background:C.blue,display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{fontSize:15,fontWeight:600,color:"#000"}}>Terminé</span></Tap>
+      </div>
+    </div>
+  );
+}
+
 function SettingsTab({user,excluded,onToggleExclude,onSignOut,onReset}) {
   const[showLib,setShowLib]=useState(false);
   return(
@@ -1034,6 +1076,7 @@ export default function SomaApp() {
   const[schedule,setSchedule]=useState(PROGRAM);
   const[streak,setStreak]=useState(0);
   const[sessionActive,setSessionActive]=useState(false);
+  const[showSched,setShowSched]=useState(false);
   const[showFeedback,setShowFeedback]=useState(false);
   const[showAI,setShowAI]=useState(false);
   const[showReport,setShowReport]=useState(null);
@@ -1222,7 +1265,7 @@ export default function SomaApp() {
 
   if(!user) return <AuthScreen onAuth={u=>{setUser(u);loadUserData(u.id);}}/>;
   if(!dataReady) return(<div style={{position:"fixed",inset:0,background:C.bg,display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",gap:20,fontFamily:F}}><style>{"@keyframes p{0%,100%{opacity:.3}50%{opacity:1}}"}</style><div style={{fontSize:36,fontWeight:700,color:C.ink,letterSpacing:"-.03em"}}>SŌMA</div><div style={{width:8,height:8,borderRadius:"50%",background:C.blue,animation:"p 1s ease-in-out infinite"}}/></div>);
-  if(showWelcome) return(<WelcomeScreen user={user} todaySession={schedule[todayIdx()]||PROGRAM[todayIdx()]} streak={streak} onStart={()=>{setShowWelcome(false);setDayIdx(todayIdx());setSessionActive(true);clock.start();}} onSkip={()=>setShowWelcome(false)}/>);
+  if(showWelcome) return(<WelcomeScreen user={user} todaySession={schedule[todayIdx()]||PROGRAM[todayIdx()]} streak={streak} onStart={()=>{setShowWelcome(false);setDayIdx(todayIdx());setSessionActive(true);}} onSkip={()=>setShowWelcome(false)}/>);
 
   const day=schedule[dayIdx]||PROGRAM[dayIdx];
   const sDate=programDate(dayIdx);
@@ -1256,7 +1299,7 @@ export default function SomaApp() {
           <div style={{fontSize:10,fontWeight:600,color:C.ink4,letterSpacing:".16em",textTransform:"uppercase"}}>S24 · {user?.user_metadata?.name||"Athlète"}</div>
         </div>
         <div style={{display:"flex",alignItems:"center",gap:12}}>
-          {sessionActive&&<span style={{fontSize:15,fontWeight:700,color:C.red}}>{fmtDur(clock.sec)}</span>}
+          {sessionActive&&(clock.running||clock.sec>0)&&<span style={{fontSize:15,fontWeight:700,color:C.red}}>{fmtDur(clock.sec)}</span>}
           {streak>0&&<span style={{fontSize:13,fontWeight:600,color:C.orange,padding:"4px 12px",borderRadius:980,background:C.orDim}}>{streak}j</span>}
           {sbReady&&<div style={{width:6,height:6,borderRadius:"50%",background:C.green}}/>}
         </div>
@@ -1280,6 +1323,10 @@ export default function SomaApp() {
               </Tap>
             );
           })}
+          <Tap onTap={()=>setShowSched(true)} style={{flexShrink:0,minWidth:52,padding:"10px 6px",textAlign:"center",borderRadius:12,background:"transparent",border:`1px dashed ${C.s4}`,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center"}}>
+            <span style={{fontSize:16,color:C.ink4,lineHeight:1}}>\u270e</span>
+            <span style={{fontSize:9,fontWeight:600,color:C.ink4,letterSpacing:".04em",marginTop:3}}>Modifier</span>
+          </Tap>
         </div>
       )}
 
@@ -1310,7 +1357,7 @@ export default function SomaApp() {
                           <span style={{fontSize:17,fontWeight:600,color:C.green}}>Séance terminée ✓</span>
                         </div>
                       ):(
-                        <Tap onTap={()=>{setSessionActive(true);clock.start();}} style={{flex:1,padding:"16px",borderRadius:15,background:C.blue,display:"flex",alignItems:"center",justifyContent:"center"}}>
+                        <Tap onTap={()=>{setSessionActive(true);}} style={{flex:1,padding:"16px",borderRadius:15,background:C.blue,display:"flex",alignItems:"center",justifyContent:"center"}}>
                           <span style={{fontSize:17,fontWeight:600,color:"#000"}}>Démarrer</span>
                         </Tap>
                       )}
@@ -1320,9 +1367,10 @@ export default function SomaApp() {
                     </div>
                   ):(
                     <div style={{display:"flex",gap:10,marginBottom:24}}>
-                      <div style={{flex:1,padding:"15px",borderRadius:15,background:C.redDim,border:`1px solid ${C.red}`,display:"flex",alignItems:"center",justifyContent:"center"}}>
-                        <span style={{fontSize:17,fontWeight:700,color:C.red}}>{fmtDur(clock.sec)}</span>
-                      </div>
+                      <Tap onTap={()=>{if(clock.running){clock.stop();}else if(clock.sec>0){clock.resume();}else{clock.start();}}} style={{flex:1,padding:"15px",borderRadius:15,background:clock.running?C.redDim:C.s2,border:`1px solid ${clock.running?C.red:C.div}`,display:"flex",alignItems:"center",justifyContent:"center",gap:8}}>
+                        <span style={{fontSize:13}}>{clock.running?"⏸":"▶"}</span>
+                        <span style={{fontSize:17,fontWeight:700,color:clock.running?C.red:C.ink2}}>{clock.sec>0||clock.running?fmtDur(clock.sec):"Chrono"}</span>
+                      </Tap>
                       <Tap onTap={()=>{clock.stop();setShowFeedback(true);}} style={{flex:2,padding:"15px",borderRadius:15,background:C.blue,border:"none",display:"flex",alignItems:"center",justifyContent:"center"}}>
                         <span style={{fontSize:17,fontWeight:600,color:"#000"}}>Fin de séance</span>
                       </Tap>
@@ -1373,7 +1421,22 @@ export default function SomaApp() {
           {tab==="history"&&<HistoryTab sessions={sessions} onSelect={setShowReport} accent={accent}/>}
           {tab==="settings"&&<SettingsTab user={user} excluded={excluded} onToggleExclude={toggleExclude}
             onSignOut={async()=>{await supabase.auth.signOut();setUser(null);setLog({});setWeights({});setSessions([]);setExcluded([]);setStreak(0);}}
-            onReset={()=>{const key=`soma_${user?.id||"anon"}`;localStorage.removeItem(key);setLog({});setWeights({});setSessions([]);setExcluded([]);setStreak(0);}}
+            onReset={async()=>{
+              const uid=user?.id;
+              const key=`soma_${uid||"anon"}`;
+              localStorage.removeItem(key);
+              setLog({});setWeights({});setSessions([]);setExcluded([]);setStreak(0);
+              loadingRef.current=null;
+              if(uid){
+                try{
+                  await Promise.all([
+                    supabase.from("sessions").delete().eq("user_id",uid),
+                    supabase.from("personal_bests").delete().eq("user_id",uid),
+                    supabase.from("streaks").delete().eq("user_id",uid),
+                  ]);
+                }catch(e){console.error("reset SB",e);}
+              }
+            }}
           />}
         </TabContent>
       </div>
@@ -1396,6 +1459,10 @@ export default function SomaApp() {
       {showAI&&<AISheet onClose={()=>setShowAI(false)} onResult={o=>{setAiOverride(o);setShowAI(false);}} excluded={excluded}/>}
       {showPicker&&<ExPicker onSelect={newEx=>handleReplaceEx(showPicker,newEx)} onClose={()=>setShowPicker(null)} currentId={showPicker.id} excluded={excluded}/>}
       {showReport&&<SessionReport session={showReport} onClose={()=>setShowReport(null)}/>}
+      {showSched&&<ScheduleEditor schedule={schedule}
+        onChange={ns=>{setSchedule(ns);persist(user?.id,{schedule:ns});}}
+        onReset={()=>{setSchedule(PROGRAM);persist(user?.id,{schedule:PROGRAM});}}
+        onClose={()=>setShowSched(false)}/>}
     </div>
   );
 }
