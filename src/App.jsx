@@ -676,9 +676,10 @@ function ExFullScreen({ex,weight,onWeightChange,log,onLogSet,onStartRest,onClose
   const oneRM=orm(kg,ex.reps);
 
   const [reps,setReps]=useState(()=>{const m=String(ex.reps||"").match(/\d+/);return m?parseInt(m[0]):10;});
+  const [rpe,setRpe]=useState(()=>Number(ex.rpe)||8);
   const handleSet=i=>{
     const newDone=!done[i];
-    onLogSet(`${lk}_s${i}`,{done:newDone,weight:kg,reps,date:todayKey()});
+    onLogSet(`${lk}_s${i}`,{done:newDone,weight:kg,reps,rpe,date:todayKey()});
     if(newDone&&ex.rest>0) onStartRest(ex.rest,ex.n);
   };
 
@@ -724,6 +725,13 @@ function ExFullScreen({ex,weight,onWeightChange,log,onLogSet,onStartRest,onClose
             <Tap onTap={()=>setReps(r=>Math.max(1,r-1))} style={{width:44,height:44,borderRadius:12,background:C.s3,display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{fontSize:24,fontWeight:300,color:C.ink}}>−</span></Tap>
             <span style={{fontSize:30,fontWeight:700,color:C.ink,minWidth:42,textAlign:"center"}}>{reps}</span>
             <Tap onTap={()=>setReps(r=>r+1)} style={{width:44,height:44,borderRadius:12,background:C.s3,display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{fontSize:24,fontWeight:300,color:C.ink}}>+</span></Tap>
+          </div>
+        </div>
+        {/* RPE */}
+        <div style={{background:C.s2,borderRadius:18,padding:"16px 20px",marginBottom:20}}>
+          <div style={{fontSize:11,fontWeight:600,color:C.ink4,textTransform:"uppercase",letterSpacing:".1em",marginBottom:12}}>RPE — effort ressenti</div>
+          <div style={{display:"flex",gap:8}}>
+            {[6,7,8,9,10].map(v=>(<Tap key={v} onTap={()=>setRpe(v)} style={{flex:1,height:46,borderRadius:12,background:rpe===v?C.blue:C.s3,display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{fontSize:16,fontWeight:700,color:rpe===v?"#000":C.ink3}}>{v}</span></Tap>))}
           </div>
         </div>
         {/* Cue */}
@@ -1224,7 +1232,7 @@ function ScheduleEditor({schedule,onChange,onReset,onClose,autoRotate,onToggleAu
   );
 }
 
-function SettingsTab({user,excluded,onToggleExclude,onSignOut,onReset}) {
+function SettingsTab({user,excluded,onToggleExclude,onSignOut,onReset,onOpenLibrary}) {
   const[showLib,setShowLib]=useState(false);
   return(
     <div style={{padding:"20px 20px 100px",maxWidth:600,margin:"0 auto",fontFamily:F}}>
@@ -1245,6 +1253,11 @@ function SettingsTab({user,excluded,onToggleExclude,onSignOut,onReset}) {
           <span style={{fontSize:17,color:C.blue}}>›</span>
         </Tap>
       </div>
+      {/* Bibliotheque */}
+      <Tap onTap={onOpenLibrary} style={{background:C.s1,borderRadius:14,padding:"18px 20px",display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+        <span style={{fontSize:17,color:C.ink}}>Bibliothèque d'exercices</span>
+        <span style={{fontSize:17,color:C.blue}}>›</span>
+      </Tap>
       {/* Exclusions */}
       <div style={{fontSize:12,fontWeight:600,color:C.ink4,textTransform:"uppercase",letterSpacing:".1em",marginBottom:10,marginTop:20}}>
         Exercices exclus {excluded.length>0&&`· ${excluded.length}`}
@@ -1283,7 +1296,7 @@ function SettingsTab({user,excluded,onToggleExclude,onSignOut,onReset}) {
 // ─── TAB TRANSITION — slide between tabs ─────────────────────────────────────
 function TabContent({tab,prevTab,children}) {
   const dir = useMemo(()=>{
-    const order=["seance","biblio","stats","history","settings"];
+    const order=["seance","stats","history","settings"];
     const ci=order.indexOf(tab),pi=order.indexOf(prevTab||tab);
     return ci>pi?1:-1;
   },[tab,prevTab]);
@@ -1295,9 +1308,10 @@ function TabContent({tab,prevTab,children}) {
 }
 
 // \u2500\u2500\u2500 BIBLIOTHEQUE (epic C) \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
-function ExerciseSheet({ex,fav,onToggleFav,onClose}) {
+function ExerciseSheet({ex,fav,onToggleFav,onClose,sessions}) {
   const variants=altPool(ex).slice(0,6);
-  const meta=[["Reps",ex.reps],["Repos",ex.rest?ex.rest+"s":"\u2014"],["RPE",ex.rpe||"\u2014"]];
+  const meta=[["Reps",ex.reps],["Repos",ex.rest?ex.rest+"s":"—"],["RPE",ex.rpe||"—"]];
+  const hist=(sessions||[]).filter(s=>s.weights&&Number(s.weights[ex.id])>0).map(s=>({date:s.date,kg:Number(s.weights[ex.id])})).sort((a,b)=>a.date<b.date?-1:1);
   return(
     <div style={{position:"fixed",inset:0,zIndex:Z.sheet,display:"flex",alignItems:"flex-end",justifyContent:"center",fontFamily:F}}>
       <div onClick={onClose} style={{position:"absolute",inset:0,background:"rgba(0,0,0,.72)",backdropFilter:"blur(8px)"}}/>
@@ -1309,13 +1323,14 @@ function ExerciseSheet({ex,fav,onToggleFav,onClose}) {
               <div style={{fontSize:24,fontWeight:700,color:C.ink,letterSpacing:"-.02em",lineHeight:1.1}}>{ex.n}</div>
               <div style={{display:"flex",gap:8,alignItems:"center",marginTop:8}}><span style={{fontSize:14,color:C.ink3}}>{ex.m}</span><span style={{fontSize:11,fontWeight:600,padding:"2px 9px",borderRadius:980,background:C.s3,color:C.ink4}}>{EQ_LABELS[ex.eq]}</span></div>
             </div>
-            <Tap onTap={()=>onToggleFav(ex.id)} style={{width:44,height:44,borderRadius:12,background:fav?C.blueDim:C.s2,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}><span style={{fontSize:20,color:fav?C.blue:C.ink4}}>{fav?"\u2605":"\u2606"}</span></Tap>
+            <Tap onTap={()=>onToggleFav(ex.id)} style={{width:44,height:44,borderRadius:12,background:fav?C.blueDim:C.s2,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}><span style={{fontSize:20,color:fav?C.blue:C.ink4}}>{fav?"★":"☆"}</span></Tap>
           </div>
         </div>
         <div style={{overflowY:"auto",flex:1,padding:"18px 20px 40px"}}>
           <div style={{display:"flex",gap:10,marginBottom:20}}>
             {meta.map(([l,v])=>(<div key={l} style={{flex:1,background:C.s2,borderRadius:14,padding:"14px",textAlign:"center"}}><div style={{fontSize:11,fontWeight:600,color:C.ink4,textTransform:"uppercase",letterSpacing:".08em",marginBottom:4}}>{l}</div><div style={{fontSize:18,fontWeight:700,color:C.ink}}>{v}</div></div>))}
           </div>
+          {hist.length>=2?(()=>{const W=320,H=120,pad=10;const xs=hist.map((_,i)=>pad+i*(W-2*pad)/(hist.length-1));const mn=Math.min(...hist.map(h=>h.kg)),mx=Math.max(...hist.map(h=>h.kg)),rng=(mx-mn)||1;const ys=hist.map(h=>H-pad-(h.kg-mn)/rng*(H-2*pad));const pts=xs.map((x,i)=>x+","+ys[i]).join(" ");return <div style={{marginBottom:20}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",marginBottom:10}}><div style={{fontSize:11,fontWeight:600,color:C.ink4,textTransform:"uppercase",letterSpacing:".08em"}}>Progression — charge</div><div style={{fontSize:13,fontWeight:700,color:C.blue}}>PR {mx}kg</div></div><svg viewBox={"0 0 "+W+" "+H} style={{width:"100%",height:"auto",display:"block"}}><polyline points={pts} fill="none" stroke={C.blue} strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round"/>{xs.map((x,i)=>(<circle key={i} cx={x} cy={ys[i]} r="3.5" fill={C.blue}/>))}</svg><div style={{display:"flex",justifyContent:"space-between",marginTop:6}}><span style={{fontSize:11,color:C.ink4}}>{hist[0].date.slice(5)}</span><span style={{fontSize:11,color:C.ink4}}>{hist[hist.length-1].date.slice(5)}</span></div></div>;})():(<div style={{background:C.s2,borderRadius:14,padding:"16px",marginBottom:20,fontSize:13,color:C.ink4,lineHeight:1.5}}>Fais cet exercice quelques fois pour voir ta courbe de progression.</div>)}
           {ex.cue&&<div style={{background:C.s2,borderRadius:14,padding:"16px",marginBottom:20}}><div style={{fontSize:11,fontWeight:600,color:C.ink4,textTransform:"uppercase",letterSpacing:".08em",marginBottom:6}}>Technique</div><div style={{fontSize:15,color:C.ink2,lineHeight:1.5}}>{ex.cue}</div></div>}
           {variants.length>0&&<div><div style={{fontSize:11,fontWeight:600,color:C.ink4,textTransform:"uppercase",letterSpacing:".08em",marginBottom:10}}>Variantes</div>{variants.map(v=>(<div key={v.id} style={{padding:"12px 0",borderBottom:`1px solid ${C.s3}`,display:"flex",justifyContent:"space-between",alignItems:"center"}}><span style={{fontSize:15,color:C.ink}}>{v.n}</span><span style={{fontSize:11,fontWeight:600,padding:"1px 8px",borderRadius:980,background:C.s3,color:C.ink4}}>{EQ_LABELS[v.eq]}</span></div>))}</div>}
         </div>
@@ -1325,42 +1340,43 @@ function ExerciseSheet({ex,fav,onToggleFav,onClose}) {
   );
 }
 
-function LibraryTab({favorites,onToggleFav}) {
+function LibraryTab({favorites,onToggleFav,onClose,sessions}) {
   const [search,setSearch]=useState("");
   const [eq,setEq]=useState(null);
   const [mg,setMg]=useState(null);
   const [favOnly,setFavOnly]=useState(false);
   const [sel,setSel]=useState(null);
-  const MG=[["Pecs",["pec"]],["Dos",["dos","dorsal","trap"]],["Epaules",["\u00e9paul","epaul","delt"]],["Bras",["biceps","triceps","avant-bras"]],["Jambes",["quad","ischio","mollet","adduct","jambe"]],["Fessiers",["fessier"]],["Core",["core","oblique","lombaire","abdo","gainage","\u00e9quilibre","equilibre","stab"]],["Full / Cardio",["full","cardio","puissance"]]];
+  const MG=[["Pecs",["pec"]],["Dos",["dos","dorsal","trap"]],["Épaules",["épaul","epaul","delt"]],["Bras",["biceps","triceps","avant-bras"]],["Jambes",["quad","ischio","mollet","adduct","jambe"]],["Fessiers",["fessier"]],["Core",["core","oblique","lombaire","abdo","gainage","équilibre","equilibre","stab"]],["Full / Cardio",["full","cardio","puissance"]]];
   const mgKeys=mg?((MG.find(x=>x[0]===mg)||[])[1]||[]):null;
   const sl=search.toLowerCase();
   const filtered=DB.filter(e=>(!sl||e.n.toLowerCase().includes(sl)||e.m.toLowerCase().includes(sl))&&(!eq||e.eq===eq)&&(!mgKeys||mgKeys.some(k=>e.m.toLowerCase().includes(k)))&&(!favOnly||favorites.includes(e.id)));
   const chip=(active)=>({flexShrink:0,padding:"6px 14px",borderRadius:980,border:`1px solid ${active?C.blue:C.div}`,background:active?C.blueDim:"transparent"});
   return(
-    <div style={{padding:"4px 0 40px"}}>
-      <div style={{fontSize:28,fontWeight:700,color:C.ink,letterSpacing:"-.03em",marginBottom:4}}>Biblioth\u00e8que</div>
-      <div style={{fontSize:14,color:C.ink4,marginBottom:18}}>{DB.length} exercices</div>
+    <div style={{position:"fixed",inset:0,zIndex:Z.fullscreen,background:C.bg,fontFamily:F,overflowY:"auto",padding:`calc(20px + env(safe-area-inset-top)) 20px calc(40px + env(safe-area-inset-bottom))`}}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:18}}>
+        <div><div style={{fontSize:28,fontWeight:700,color:C.ink,letterSpacing:"-.03em"}}>Bibliothèque</div><div style={{fontSize:14,color:C.ink4,marginTop:4}}>{DB.length} exercices</div></div>
+        <Tap onTap={onClose} style={{width:38,height:38,borderRadius:10,background:C.s2,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}><span style={{fontSize:18,color:C.ink3}}>✕</span></Tap>
+      </div>
       <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Rechercher un exercice..." style={{width:"100%",padding:"13px 16px",borderRadius:12,border:`1px solid ${C.div}`,fontFamily:F,fontSize:15,color:C.ink,background:C.s2,outline:"none",boxSizing:"border-box",marginBottom:12}}/>
       <div style={{display:"flex",gap:6,overflowX:"auto",scrollbarWidth:"none",marginBottom:10}}>
-        <Tap onTap={()=>setFavOnly(v=>!v)} style={chip(favOnly)}><span style={{fontSize:12,fontWeight:600,color:favOnly?C.blue:C.ink4}}>\u2605 Favoris</span></Tap>
+        <Tap onTap={()=>setFavOnly(v=>!v)} style={chip(favOnly)}><span style={{fontSize:12,fontWeight:600,color:favOnly?C.blue:C.ink4}}>★ Favoris</span></Tap>
         {Object.entries(EQ_LABELS).map(([k,l])=>(<Tap key={k} onTap={()=>setEq(eq===k?null:k)} style={chip(eq===k)}><span style={{fontSize:12,fontWeight:600,color:eq===k?C.blue:C.ink4}}>{l}</span></Tap>))}
       </div>
       <div style={{display:"flex",gap:6,overflowX:"auto",scrollbarWidth:"none",marginBottom:16}}>
         {MG.map(([l])=>(<Tap key={l} onTap={()=>setMg(mg===l?null:l)} style={chip(mg===l)}><span style={{fontSize:12,fontWeight:600,color:mg===l?C.blue:C.ink4}}>{l}</span></Tap>))}
       </div>
-      {filtered.length===0&&<div style={{textAlign:"center",padding:"40px 0",fontSize:15,color:C.ink4}}>Aucun r\u00e9sultat.</div>}
+      {filtered.length===0&&<div style={{textAlign:"center",padding:"40px 0",fontSize:15,color:C.ink4}}>Aucun résultat.</div>}
       {filtered.map(ex=>(
         <Tap key={ex.id} onTap={()=>setSel(ex)} style={{padding:"14px 0",borderBottom:`1px solid ${C.s3}`,display:"flex",justifyContent:"space-between",alignItems:"center",gap:10}}>
           <div style={{minWidth:0}}><div style={{fontSize:15,fontWeight:600,color:C.ink,marginBottom:4}}>{ex.n}</div><div style={{display:"flex",gap:8,alignItems:"center"}}><span style={{fontSize:13,color:C.ink3}}>{ex.m}</span><span style={{fontSize:11,fontWeight:600,padding:"1px 8px",borderRadius:980,background:C.s3,color:C.ink4}}>{EQ_LABELS[ex.eq]}</span></div></div>
-          {favorites.includes(ex.id)&&<span style={{fontSize:16,color:C.blue,flexShrink:0}}>\u2605</span>}
+          {favorites.includes(ex.id)&&<span style={{fontSize:16,color:C.blue,flexShrink:0}}>★</span>}
         </Tap>
       ))}
-      {sel&&<ExerciseSheet ex={sel} fav={favorites.includes(sel.id)} onToggleFav={onToggleFav} onClose={()=>setSel(null)}/>}
+      {sel&&<ExerciseSheet ex={sel} fav={favorites.includes(sel.id)} onToggleFav={onToggleFav} onClose={()=>setSel(null)} sessions={sessions}/>}
     </div>
   );
 }
 
-// ─── ONBOARDING (epic A) ────────────────────────────────
 const FREQ_DAYS = {3:[0,2,4],4:[0,1,3,4],5:[0,1,2,3,4],6:[0,1,2,3,4,5]};
 const DAY_LBL = ["LUN","MAR","MER","JEU","VEN","SAM","DIM"];
 const generateSchedule = (freq) => {
@@ -1431,6 +1447,7 @@ export default function SomaApp() {
   const[dataReady,setDataReady]=useState(false);
   const[profile,setProfile]=useState(null);
   const[favorites,setFavorites]=useState([]);
+  const[showLibrary,setShowLibrary]=useState(false);
   const[tab,setTab]=useState("seance");
   const[prevTab,setPrevTab]=useState(null);
   const[dayIdx,setDayIdx]=useState(todayIdx());
@@ -1660,7 +1677,7 @@ export default function SomaApp() {
   const isRest=!day?.salle;
   const exos=(aiOverride?.exercises||day?.exercises||[]).filter(e=>!excluded.includes(e.id));
   const absExos=aiOverride?.abs||day?.abs||[];
-  const NAV=[{id:"seance",l:"Séance"},{id:"biblio",l:"Biblio"},{id:"stats",l:"Stats"},{id:"history",l:"Historique"},{id:"settings",l:"Réglages"}];
+  const NAV=[{id:"seance",l:"Séance"},{id:"stats",l:"Stats"},{id:"history",l:"Historique"},{id:"settings",l:"Réglages"}];
 
   return(
     <div style={{background:C.bg,minHeight:"100dvh",color:C.ink,fontFamily:F,overflowX:"hidden"}}>
@@ -1805,10 +1822,9 @@ export default function SomaApp() {
               )}
             </div>
           )}
-          {tab==="biblio"&&<LibraryTab favorites={favorites} onToggleFav={toggleFav}/>}
           {tab==="stats"&&<StatsTab sessions={sessions} weights={weights} accent={accent}/>}
           {tab==="history"&&<HistoryTab sessions={sessions} onSelect={setShowReport} accent={accent}/>}
-          {tab==="settings"&&<SettingsTab user={user} excluded={excluded} onToggleExclude={toggleExclude}
+          {tab==="settings"&&<SettingsTab user={user} excluded={excluded} onToggleExclude={toggleExclude} onOpenLibrary={()=>setShowLibrary(true)}
             onSignOut={async()=>{await supabase.auth.signOut();setUser(null);setLog({});setWeights({});setSessions([]);setExcluded([]);setStreak(0);}}
             onReset={async()=>{
               const uid=user?.id;
@@ -1847,6 +1863,7 @@ export default function SomaApp() {
       {showFeedback&&<FeedbackSheet onClose={()=>setShowFeedback(false)} onSave={handleFeedbackSave}/>}
       {showAI&&<AISheet onClose={()=>setShowAI(false)} onResult={o=>{setAiOverride(o);setShowAI(false);}} excluded={excluded}/>}
       {showPicker&&<ExPicker onSelect={newEx=>handleReplaceEx(showPicker,newEx)} onClose={()=>setShowPicker(null)} currentId={showPicker.id} excluded={excluded}/>}
+      {showLibrary&&<LibraryTab favorites={favorites} onToggleFav={toggleFav} onClose={()=>setShowLibrary(false)} sessions={sessions}/>}
       {showReport&&<SessionReport session={showReport} onClose={()=>setShowReport(null)} onDelete={deleteSession}/>}
       {showSched&&<ScheduleEditor schedule={schedule}
         onChange={ns=>{setSchedule(ns);persist(user?.id,{schedule:ns});}}
