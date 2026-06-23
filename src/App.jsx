@@ -390,8 +390,8 @@ const REST_TPL = {label:"Repos",salle:null,muscle:"Recuperation active",exercise
 const SESSION_TEMPLATES = [...PROGRAM.filter(d=>d.salle).map(d=>({label:d.label,salle:d.salle,muscle:d.muscle,exercises:d.exercises,abs:d.abs,ids:d.ids})), REST_TPL];
 
 // Rotation hebdo - mesocycle hybride (Volume -> Intensite -> Puissance -> Deload)
-const weekNumber = () => { const now=new Date(); const t=Date.UTC(now.getFullYear(),now.getMonth(),now.getDate()); const epoch=Date.UTC(2026,0,5); return Math.max(0,Math.floor((t-epoch)/604800000)); };
-const MESO = [ {k:"Volume",s:1,g:"Series hautes, tempo controle"}, {k:"Intensite",s:0,g:"Charges lourdes, reps basses"}, {k:"Puissance",s:0,g:"Explosif, repos longs"}, {k:"Deload",s:-1,g:"Recuperation, charges legeres"} ];
+const weekNumber = () => { const dt=new Date(); const d=new Date(Date.UTC(dt.getFullYear(),dt.getMonth(),dt.getDate())); const dn=(d.getUTCDay()+6)%7; d.setUTCDate(d.getUTCDate()-dn+3); const ft=new Date(Date.UTC(d.getUTCFullYear(),0,4)); const fn=(ft.getUTCDay()+6)%7; ft.setUTCDate(ft.getUTCDate()-fn+3); return 1+Math.round((d-ft)/604800000); };
+const MESO = [ {k:"Volume",s:1,r:0.9,g:"Series hautes, tempo controle"}, {k:"Intensite",s:0,r:1.2,g:"Charges lourdes, reps basses"}, {k:"Puissance",s:0,r:1.35,g:"Explosif, repos longs"}, {k:"Deload",s:-1,r:0.85,g:"Recuperation, charges legeres"} ];
 const phaseOf = (w) => MESO[((w%4)+4)%4];
 const primaryMuscle = (m) => String(m||"").split("\u00b7")[0].trim().toLowerCase();
 const altPool = (ex) => DB.filter(e=>e.id!==ex.id && e.eq===ex.eq && primaryMuscle(e.m)===primaryMuscle(ex.m));
@@ -402,7 +402,7 @@ const rotateDay = (day,w) => {
     const pool=[ex,...altPool(ex)];
     const pick=pool[(w+i)%pool.length];
     const base=typeof ex.sets==="number"?ex.sets:4;
-    return {...pick,sets:Math.max(2,Math.min(6,base+ph.s))};
+    return {...pick,sets:Math.max(2,Math.min(6,base+ph.s)),rest:Math.round((typeof pick.rest==="number"?pick.rest:60)*(ph.r||1))};
   });
   return {...day,exercises};
 };
@@ -666,99 +666,71 @@ function MiniRest({timer,label,onExpand}) {
 }
 
 // ─── EXERCISE FULL SCREEN ────────────────────────────────────────────────────
-function ExFullScreen({ex,weight,onWeightChange,log,onLogSet,onStartRest,onClose,lastKg,accent,dayIdx}) {
+function ExFullScreen({ex,log,onLogSet,onStartRest,onClose,lastKg,dayIdx,exercises,onNav}) {
   const sets=typeof ex.sets==="number"?ex.sets:4;
   const lk=`d${dayIdx}_${ex.id}`;
-  const done=Array.from({length:sets},(_,i)=>!!log[`${lk}_s${i}`]?.done);
-  const completed=done.filter(Boolean).length;
-  const allDone=sets>0&&completed===sets;
-  const kg=weight??ex.kg??0;
-  const oneRM=orm(kg,ex.reps);
-
-  const [reps,setReps]=useState(()=>{const m=String(ex.reps||"").match(/\d+/);return m?parseInt(m[0]):10;});
+  const defReps=(()=>{const m=String(ex.reps||"").match(/\d+/);return m?parseInt(m[0]):10;})();
   const [rpe,setRpe]=useState(()=>Number(ex.rpe)||8);
-  const handleSet=i=>{
-    const newDone=!done[i];
-    onLogSet(`${lk}_s${i}`,{done:newDone,weight:kg,reps,rpe,date:todayKey()});
-    if(newDone&&ex.rest>0) onStartRest(ex.rest,ex.n);
-  };
-
+  const [rows,setRows]=useState(()=>Array.from({length:sets},(_,i)=>{const e=log[`${lk}_s${i}`];return{done:!!(e&&e.done),weight:(e&&e.weight!=null)?e.weight:(ex.kg||0),reps:(e&&e.reps!=null)?e.reps:defReps};}));
+  const completed=rows.filter(r=>r.done).length;
+  const allDone=sets>0&&completed===sets;
+  const list=exercises||[];
+  const idx=list.findIndex(e=>e.id===ex.id);
+  const total=list.length;
+  const writeLog=(i,r)=>onLogSet(`${lk}_s${i}`,{done:r.done,weight:r.weight,reps:r.reps,rpe,date:todayKey()});
+  const upd=(i,patch)=>setRows(rs=>{const nr=rs.map((r,j)=>j===i?{...r,...patch}:r);if(nr[i].done)writeLog(i,nr[i]);return nr;});
+  const toggle=i=>setRows(rs=>{const nr=rs.map((r,j)=>j===i?{...r,done:!r.done}:r);const r=nr[i];writeLog(i,r);if(r.done&&ex.rest>0)onStartRest(ex.rest,ex.n);return nr;});
+  const restLbl=ex.rest>=60?`${(ex.rest/60).toFixed(ex.rest%60?1:0)}min`:`${ex.rest}s`;
   return(
     <div style={{position:"fixed",inset:0,background:C.bg,zIndex:Z.fullscreen,display:"flex",flexDirection:"column",fontFamily:F,animation:`fadeIn 200ms ${EO} both`,paddingTop:"env(safe-area-inset-top)",paddingBottom:"env(safe-area-inset-bottom)"}}>
       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"16px 20px",borderBottom:`1px solid ${C.s3}`}}>
-        <Tap onTap={onClose} style={{width:40,height:40,borderRadius:10,background:C.s2,display:"flex",alignItems:"center",justifyContent:"center"}}>
-          <span style={{fontSize:13,fontWeight:600,color:C.ink3}}>✕</span>
-        </Tap>
-        <div style={{fontSize:13,fontWeight:600,color:C.ink4,textTransform:"uppercase",letterSpacing:".1em"}}>{completed}/{sets}</div>
-        <div style={{width:40}}/>
+        <Tap onTap={onClose} style={{width:40,height:40,borderRadius:10,background:C.s2,display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{fontSize:13,fontWeight:600,color:C.ink3}}>✕</span></Tap>
+        <div style={{fontSize:13,fontWeight:600,color:C.ink4,textTransform:"uppercase",letterSpacing:".1em"}}>{idx>=0?`Exercice ${idx+1}/${total}`:""}</div>
+        <div style={{fontSize:13,fontWeight:600,color:allDone?C.green:C.ink4}}>{completed}/{sets}</div>
       </div>
       <div style={{flex:1,overflowY:"auto",padding:"24px 20px"}}>
-        <div style={{fontSize:36,fontWeight:700,color:allDone?C.green:C.ink,letterSpacing:"-.02em",lineHeight:1.1,marginBottom:10,transition:`color 300ms ${EO}`}}>{ex.n}</div>
-        <div style={{display:"flex",gap:8,marginBottom:24,flexWrap:"wrap"}}>
-          <span style={{fontSize:14,color:C.ink3}}>{ex.m}</span>
-          <span style={{color:C.s4}}>·</span>
+        <div style={{fontSize:34,fontWeight:700,color:allDone?C.green:C.ink,letterSpacing:"-.02em",lineHeight:1.1,marginBottom:10,transition:`color 300ms ${EO}`}}>{ex.n}</div>
+        <div style={{display:"flex",gap:8,marginBottom:20,flexWrap:"wrap",alignItems:"center"}}>
+          <span style={{fontSize:14,color:C.ink3}}>{ex.m}</span><span style={{color:C.s4}}>·</span>
           <span style={{fontSize:13,fontWeight:600,padding:"2px 10px",borderRadius:980,background:C.s2,color:C.ink4}}>{EQ_LABELS[ex.eq]}</span>
+          {ex.rest>0&&<><span style={{color:C.s4}}>·</span><span style={{fontSize:13,color:C.ink4}}>repos {restLbl}</span></>}
         </div>
-        {lastKg>0&&<div style={{padding:"12px 16px",borderRadius:12,background:C.orDim,marginBottom:20}}>
-          <span style={{fontSize:14,fontWeight:600,color:C.orange}}>Dernière fois : {lastKg}kg · Essaie {lastKg+2.5}kg</span>
-        </div>}
-        {/* Weight */}
-        <div style={{background:C.s2,borderRadius:18,padding:"20px",marginBottom:20}}>
-          <div style={{fontSize:11,fontWeight:600,color:C.ink4,textTransform:"uppercase",letterSpacing:".1em",marginBottom:16}}>Charge</div>
-          <div style={{display:"flex",alignItems:"center",gap:16}}>
-            <Tap onTap={()=>onWeightChange(ex.id,Math.max(0,kg-2.5))} style={{width:56,height:56,borderRadius:14,background:C.s3,display:"flex",alignItems:"center",justifyContent:"center"}}>
-              <span style={{fontSize:28,fontWeight:300,color:C.ink}}>−</span>
-            </Tap>
-            <div style={{flex:1,textAlign:"center"}}>
-              <span style={{fontSize:52,fontWeight:700,color:C.ink,letterSpacing:"-.03em"}}>{kg===0?"BW":`${kg}`}</span>
-              {kg>0&&<span style={{fontSize:24,fontWeight:300,color:C.ink3}}> kg</span>}
+        {lastKg>0&&<div style={{padding:"12px 16px",borderRadius:12,background:C.orDim,marginBottom:20}}><span style={{fontSize:14,fontWeight:600,color:C.orange}}>Dernière fois : {lastKg}kg · vise {lastKg+2.5}kg</span></div>}
+        {ex.cue&&<div style={{padding:"16px",borderRadius:14,background:C.s2,marginBottom:20}}><div style={{fontSize:11,fontWeight:600,color:C.ink4,textTransform:"uppercase",letterSpacing:".1em",marginBottom:8}}>Cue technique</div><div style={{fontSize:15,color:C.ink2,lineHeight:1.6}}>{ex.cue}</div></div>}
+        <div style={{fontSize:11,fontWeight:600,color:C.ink4,textTransform:"uppercase",letterSpacing:".1em",marginBottom:6}}>RPE — effort ressenti</div>
+        <div style={{display:"flex",gap:8,marginBottom:24}}>{[6,7,8,9,10].map(v=>(<Tap key={v} onTap={()=>setRpe(v)} style={{flex:1,height:42,borderRadius:11,background:rpe===v?C.blue:C.s2,display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{fontSize:15,fontWeight:700,color:rpe===v?"#000":C.ink3}}>{v}</span></Tap>))}</div>
+        <div style={{display:"flex",alignItems:"center",marginBottom:6,padding:"0 2px"}}>
+          <span style={{width:30,fontSize:11,fontWeight:600,color:C.ink4,textTransform:"uppercase"}}>Série</span>
+          <span style={{flex:1,textAlign:"center",fontSize:11,fontWeight:600,color:C.ink4,textTransform:"uppercase",letterSpacing:".08em"}}>Charge</span>
+          <span style={{fontSize:11,fontWeight:600,color:C.ink4,textTransform:"uppercase",letterSpacing:".08em",marginRight:8}}>Reps</span>
+          <span style={{width:44}}/>
+        </div>
+        {rows.map((r,i)=>(
+          <div key={i} style={{display:"flex",alignItems:"center",gap:8,padding:"10px 0",borderTop:`1px solid ${C.s3}`}}>
+            <span style={{fontSize:14,fontWeight:700,color:r.done?C.green:C.ink4,width:30,flexShrink:0}}>{i+1}</span>
+            <div style={{display:"flex",alignItems:"center",gap:6,flex:1,justifyContent:"center"}}>
+              <Tap onTap={()=>upd(i,{weight:Math.max(0,Math.round((r.weight-2.5)*10)/10)})} style={{width:36,height:36,borderRadius:9,background:C.s3,display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{fontSize:18,fontWeight:300,color:C.ink}}>−</span></Tap>
+              <span style={{fontSize:16,fontWeight:700,color:C.ink,minWidth:54,textAlign:"center"}}>{r.weight===0?"BW":`${r.weight}kg`}</span>
+              <Tap onTap={()=>upd(i,{weight:Math.round((r.weight+2.5)*10)/10})} style={{width:36,height:36,borderRadius:9,background:C.s3,display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{fontSize:18,fontWeight:300,color:C.ink}}>+</span></Tap>
             </div>
-            <Tap onTap={()=>onWeightChange(ex.id,kg+2.5)} style={{width:56,height:56,borderRadius:14,background:C.s3,display:"flex",alignItems:"center",justifyContent:"center"}}>
-              <span style={{fontSize:28,fontWeight:300,color:C.ink}}>+</span>
-            </Tap>
+            <div style={{display:"flex",alignItems:"center",gap:5}}>
+              <Tap onTap={()=>upd(i,{reps:Math.max(1,r.reps-1)})} style={{width:34,height:34,borderRadius:9,background:C.s3,display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{fontSize:16,fontWeight:300,color:C.ink}}>−</span></Tap>
+              <span style={{fontSize:15,fontWeight:600,color:C.ink2,minWidth:24,textAlign:"center"}}>{r.reps}</span>
+              <Tap onTap={()=>upd(i,{reps:r.reps+1})} style={{width:34,height:34,borderRadius:9,background:C.s3,display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{fontSize:16,fontWeight:300,color:C.ink}}>+</span></Tap>
+            </div>
+            <Tap onTap={()=>toggle(i)} style={{width:44,height:44,borderRadius:12,border:`2px solid ${r.done?C.green:C.div}`,background:r.done?C.greenDim:C.s2,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}><span style={{fontSize:18,fontWeight:700,color:r.done?C.green:C.ink4}}>{r.done?"✓":""}</span></Tap>
           </div>
+        ))}
+        <div style={{display:"flex",gap:10,marginTop:24}}>
+          {idx>0&&<Tap onTap={()=>onNav(-1)} style={{padding:"15px 18px",borderRadius:14,background:C.s2,display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{fontSize:15,fontWeight:600,color:C.ink3}}>← Préc.</span></Tap>}
+          {idx>=0&&idx<total-1
+            ? <Tap onTap={()=>onNav(1)} style={{flex:1,padding:"15px",borderRadius:14,background:allDone?C.blue:C.s2,display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{fontSize:16,fontWeight:600,color:allDone?"#000":C.ink2}}>Exercice suivant →</span></Tap>
+            : <Tap onTap={onClose} style={{flex:1,padding:"15px",borderRadius:14,background:C.blue,display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{fontSize:16,fontWeight:600,color:"#000"}}>Terminer</span></Tap>}
         </div>
-        {/* Reps */}
-        <div style={{background:C.s2,borderRadius:18,padding:"16px 20px",marginBottom:20,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
-          <div style={{fontSize:11,fontWeight:600,color:C.ink4,textTransform:"uppercase",letterSpacing:".1em"}}>Reps effectuées</div>
-          <div style={{display:"flex",alignItems:"center",gap:14}}>
-            <Tap onTap={()=>setReps(r=>Math.max(1,r-1))} style={{width:44,height:44,borderRadius:12,background:C.s3,display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{fontSize:24,fontWeight:300,color:C.ink}}>−</span></Tap>
-            <span style={{fontSize:30,fontWeight:700,color:C.ink,minWidth:42,textAlign:"center"}}>{reps}</span>
-            <Tap onTap={()=>setReps(r=>r+1)} style={{width:44,height:44,borderRadius:12,background:C.s3,display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{fontSize:24,fontWeight:300,color:C.ink}}>+</span></Tap>
-          </div>
-        </div>
-        {/* RPE */}
-        <div style={{background:C.s2,borderRadius:18,padding:"16px 20px",marginBottom:20}}>
-          <div style={{fontSize:11,fontWeight:600,color:C.ink4,textTransform:"uppercase",letterSpacing:".1em",marginBottom:12}}>RPE — effort ressenti</div>
-          <div style={{display:"flex",gap:8}}>
-            {[6,7,8,9,10].map(v=>(<Tap key={v} onTap={()=>setRpe(v)} style={{flex:1,height:46,borderRadius:12,background:rpe===v?C.blue:C.s3,display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{fontSize:16,fontWeight:700,color:rpe===v?"#000":C.ink3}}>{v}</span></Tap>))}
-          </div>
-        </div>
-        {/* Cue */}
-        {ex.cue&&<div style={{padding:"16px",borderRadius:14,background:C.s2,marginBottom:20}}>
-          <div style={{fontSize:11,fontWeight:600,color:C.ink4,textTransform:"uppercase",letterSpacing:".1em",marginBottom:8}}>Cue technique</div>
-          <div style={{fontSize:15,color:C.ink2,lineHeight:1.65}}>{ex.cue}</div>
-        </div>}
-        {/* RPE */}
-        <div style={{fontSize:12,color:C.ink4,marginBottom:12}}>RPE cible : {ex.rpe}/10</div>
-        {/* Set buttons — 64px */}
-        <div style={{fontSize:11,fontWeight:600,color:C.ink4,textTransform:"uppercase",letterSpacing:".1em",marginBottom:14}}>{sets} séries · {ex.reps} reps{ex.rest>0?` · ${ex.rest>=60?`${ex.rest/60}min`:`${ex.rest}s`} repos`:""}</div>
-        <div style={{display:"flex",gap:12,flexWrap:"wrap"}}>
-          {Array.from({length:sets},(_,i)=>(
-            <Tap key={i} onTap={()=>handleSet(i)} style={{width:64,height:64,borderRadius:16,border:`2px solid ${done[i]?C.green:C.div}`,background:done[i]?C.greenDim:C.s2,display:"flex",alignItems:"center",justifyContent:"center",transition:`all 220ms ${EO}`}}>
-              <span style={{fontSize:22,fontWeight:700,color:done[i]?C.green:C.ink4}}>{i+1}</span>
-            </Tap>
-          ))}
-        </div>
-        {ex.rest>0&&<Tap onTap={()=>onStartRest(ex.rest,ex.n)} style={{marginTop:16,padding:"13px 20px",borderRadius:14,border:`1px solid ${C.div}`,background:"transparent",display:"inline-flex",alignItems:"center"}}>
-          <span style={{fontSize:14,fontWeight:600,color:C.ink3}}>Démarrer repos · {ex.rest>=60?`${ex.rest/60}min`:`${ex.rest}s`}</span>
-        </Tap>}
       </div>
     </div>
   );
 }
-
-// ─── EXERCISE ROW ─────────────────────────────────────────────────────────────
 function ExRow({ex,weight,onWeightChange,log,onLogSet,onStartRest,idx,lastKg,onFullScreen,dayIdx}) {
   const sets=typeof ex.sets==="number"?ex.sets:4;
   const lk=`d${dayIdx}_${ex.id}`;
@@ -1288,7 +1260,7 @@ function SettingsTab({user,excluded,onToggleExclude,onSignOut,onReset,onOpenLibr
           <span style={{fontSize:17,color:C.red}}>›</span>
         </Tap>
       </div>
-      <div style={{fontSize:12,color:C.ink4,textAlign:"center",marginTop:28}}>SŌMA · S14 · Auth Supabase · {DB.length} exercices</div>
+      <div style={{fontSize:12,color:C.ink4,textAlign:"center",marginTop:28}}>SŌMA · {"S"+weekNumber()} · Auth Supabase · {DB.length} exercices</div>
     </div>
   );
 }
@@ -1579,12 +1551,12 @@ export default function SomaApp() {
     let totalKg=0,totalSets=0;
     const exercisesData=exos.map(ex=>{
       const s=typeof ex.sets==="number"?ex.sets:4;
-      let completedSets=0,lastWeight=0;
+      let completedSets=0,lastWeight=0,topWeight=0;
       Array.from({length:s},(_,i)=>{
         const e=log[`d${dayIdx}_${ex.id}_s${i}`];
-        if(e?.done){completedSets++;lastWeight=e.weight||0;const r=Number(e.reps)||parseFloat(String(ex.reps||"8").split("–")[0])||8;totalKg+=lastWeight*r;totalSets++;}
+        if(e?.done){completedSets++;lastWeight=e.weight||0;if(lastWeight>topWeight)topWeight=lastWeight;const r=Number(e.reps)||parseFloat(String(ex.reps||"8").split("–")[0])||8;totalKg+=lastWeight*r;totalSets++;}
       });
-      return{id:ex.id,n:ex.n||ex.name,m:ex.m||ex.muscle,weight:lastWeight,completedSets};
+      return{id:ex.id,n:ex.n||ex.name,m:ex.m||ex.muscle,weight:topWeight,completedSets};
     });
     const score=Math.round(Math.min(totalKg/5000*40,40)+Math.min(totalSets/25*30,30)+((fb.global+fb.energy)/10*30));
     // Date = jour du programme (ex: LUN = date du lundi de cette semaine)
@@ -1599,7 +1571,7 @@ export default function SomaApp() {
       score,
       feedback:fb,
       user_id:user?.id,
-      weights:{...weights}
+      weights:{...weights,...Object.fromEntries(exercisesData.filter(e=>e.weight>0).map(e=>[e.id,e.weight]))}
     };
     // 1. localStorage immédiat
     const uid=user?.id;
@@ -1859,7 +1831,7 @@ export default function SomaApp() {
       {/* OVERLAYS — z-index ordering per semantic scale */}
       {showRestFull&&<RestFullScreen timer={rest} label={restLabel} onSkip={()=>{rest.stop();setShowRestFull(false);}} onClose={()=>{rest.reset();setShowRestFull(false);}}/>}
       {!showRestFull&&rest.sec>0&&<MiniRest timer={rest} label={restLabel} onExpand={()=>setShowRestFull(true)}/>}
-      {fullScreenEx&&<ExFullScreen ex={fullScreenEx} weight={weights[fullScreenEx.id]??fullScreenEx.kg??0} onWeightChange={saveWeight} log={log} onLogSet={saveLog} onStartRest={handleStartRest} onClose={()=>setFullScreenEx(null)} lastKg={lastKgPerEx[fullScreenEx.id]||0} accent={accent} dayIdx={dayIdx}/>}
+      {fullScreenEx&&<ExFullScreen ex={fullScreenEx} log={log} onLogSet={saveLog} onStartRest={handleStartRest} onClose={()=>setFullScreenEx(null)} lastKg={lastKgPerEx[fullScreenEx.id]||0} dayIdx={dayIdx} exercises={(viewSchedule[dayIdx]||PROGRAM[dayIdx])?.exercises||[]} onNav={(dir)=>{const list=(viewSchedule[dayIdx]||PROGRAM[dayIdx])?.exercises||[];const i=list.findIndex(e=>e.id===fullScreenEx.id);const ni=i+dir;if(ni>=0&&ni<list.length)setFullScreenEx(list[ni]);}}/>}
       {showFeedback&&<FeedbackSheet onClose={()=>setShowFeedback(false)} onSave={handleFeedbackSave}/>}
       {showAI&&<AISheet onClose={()=>setShowAI(false)} onResult={o=>{setAiOverride(o);setShowAI(false);}} excluded={excluded}/>}
       {showPicker&&<ExPicker onSelect={newEx=>handleReplaceEx(showPicker,newEx)} onClose={()=>setShowPicker(null)} currentId={showPicker.id} excluded={excluded}/>}
