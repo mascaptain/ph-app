@@ -391,6 +391,8 @@ const SESSION_TEMPLATES = [...PROGRAM.filter(d=>d.salle).map(d=>({label:d.label,
 
 // Rotation hebdo - mesocycle hybride (Volume -> Intensite -> Puissance -> Deload)
 const weekNumber = () => { const dt=new Date(); const d=new Date(Date.UTC(dt.getFullYear(),dt.getMonth(),dt.getDate())); const dn=(d.getUTCDay()+6)%7; d.setUTCDate(d.getUTCDate()-dn+3); const ft=new Date(Date.UTC(d.getUTCFullYear(),0,4)); const fn=(ft.getUTCDay()+6)%7; ft.setUTCDate(ft.getUTCDate()-fn+3); return 1+Math.round((d-ft)/604800000); };
+const PHASES12=[{n:"Accumulation",f:"Volume, base"},{n:"Accumulation",f:"Volume"},{n:"Accumulation",f:"Volume +"},{n:"Intensification",f:"Charges +"},{n:"Intensification",f:"Charges ++"},{n:"Intensification",f:"Lourd"},{n:"Réalisation",f:"Explosif"},{n:"Réalisation",f:"Puissance"},{n:"Réalisation",f:"Pic de force"},{n:"Deload",f:"Récupération"},{n:"Test / PR",f:"Validation"},{n:"Test / PR",f:"Nouveaux maxs"}];
+const programWeek=()=>((weekNumber()-1)%12)+1;
 const MESO = [ {k:"Volume",s:1,r:0.9,g:"Series hautes, tempo controle"}, {k:"Intensite",s:0,r:1.2,g:"Charges lourdes, reps basses"}, {k:"Puissance",s:0,r:1.35,g:"Explosif, repos longs"}, {k:"Deload",s:-1,r:0.85,g:"Recuperation, charges legeres"} ];
 const REST_STEPS=[30,45,60,75,90,120,150,180,210,240,300];
 const snapRest=(s)=>{ if(!s||s<=0) return 0; return REST_STEPS.reduce((a,b)=>Math.abs(b-s)<Math.abs(a-s)?b:a); };
@@ -1311,7 +1313,7 @@ function SettingsTab({user,excluded,onToggleExclude,onSignOut,onReset,onOpenLibr
           <span style={{fontSize:17,color:C.red}}>›</span>
         </Tap>
       </div>
-      <div style={{fontSize:12,color:C.ink4,textAlign:"center",marginTop:28}}>SŌMA · {"S"+weekNumber()} · Auth Supabase · {DB.length} exercices</div>
+      <div style={{fontSize:12,color:C.ink4,textAlign:"center",marginTop:28}}>SŌMA · {"S"+weekNumber()} · {DB.length} exercices · build 23.06b</div>
     </div>
   );
 }
@@ -1778,7 +1780,15 @@ export default function SomaApp() {
                     <div style={{fontSize:11,fontWeight:600,color:C.ink4,textTransform:"uppercase",letterSpacing:".14em",marginBottom:8}}>{day.day} · {"S"+wk} · {day.salle==="haut"?"Salle Haute":"Salle Basse"}</div>
                     <div style={{fontSize:34,fontWeight:700,color:C.ink,letterSpacing:"-.02em",lineHeight:1.1,marginBottom:8}}>{aiOverride?.titre||day.label}</div>
                     <div style={{fontSize:17,color:C.ink3}}>{day.muscle}</div>
-                    {autoRotate&&day.salle&&<div style={{marginTop:10,display:"inline-flex",alignItems:"center",gap:8,padding:"5px 12px",borderRadius:980,background:C.s2}}><span style={{fontSize:11,fontWeight:700,color:C.blue,letterSpacing:".05em",textTransform:"uppercase"}}>{phaseOf(wk).k}</span><span style={{fontSize:12,color:C.ink4}}>{phaseOf(wk).g}</span></div>}
+                    {day.salle&&(()=>{const pw=programWeek();const ph12=PHASES12[pw-1];return(
+                      <div style={{marginTop:12,padding:"12px 14px",borderRadius:14,background:C.s2}}>
+                        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+                          <span style={{fontSize:12,fontWeight:700,color:C.blue,textTransform:"uppercase",letterSpacing:".06em"}}>Cycle 12 sem · S{pw}/12</span>
+                          <span style={{fontSize:12,fontWeight:600,color:C.ink3}}>{ph12.n}</span>
+                        </div>
+                        <div style={{height:6,borderRadius:980,background:C.s4,overflow:"hidden"}}><div style={{height:"100%",width:`${pw/12*100}%`,background:C.blue,borderRadius:980}}/></div>
+                        {autoRotate&&<div style={{fontSize:12,color:C.ink4,marginTop:8}}>{ph12.f} · phase {phaseOf(wk).k}</div>}
+                      </div>);})()}
                   </div>
                   {!sessionActive?(
                     <div style={{display:"flex",gap:10,marginBottom:24}}>
