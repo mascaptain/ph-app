@@ -773,6 +773,51 @@ function ExRow({ex,weight,onWeightChange,log,onLogSet,onStartRest,idx,lastKg,onF
     </Tap>
   );
 }
+function WorkoutExercise({ex,log,onLogSet,onStartRest,lastKg,dayIdx,idx,onDetail,onReplace}) {
+  const sets=typeof ex.sets==="number"?ex.sets:4;
+  const lk=`d${dayIdx}_${ex.id}`;
+  const defReps=(()=>{const m=String(ex.reps||"").match(/\d+/);return m?parseInt(m[0]):10;})();
+  const [rows,setRows]=useState(()=>Array.from({length:sets},(_,i)=>{const e=log[`${lk}_s${i}`];return{done:!!(e&&e.done),weight:(e&&e.weight!=null)?String(e.weight):(ex.kg?String(ex.kg):""),reps:(e&&e.reps!=null)?String(e.reps):String(defReps)};}));
+  const completed=rows.filter(r=>r.done).length;
+  const allDone=sets>0&&completed===sets;
+  const write=(i,r)=>onLogSet(`${lk}_s${i}`,{done:r.done,weight:parseFloat(r.weight)||0,reps:parseInt(r.reps)||0,date:todayKey()});
+  const setField=(i,k,v)=>setRows(rs=>{const nr=rs.map((r,j)=>j===i?{...r,[k]:v}:r);if(nr[i].done)write(i,nr[i]);return nr;});
+  const toggle=i=>setRows(rs=>{const nr=rs.map((r,j)=>j===i?{...r,done:!r.done}:r);const r=nr[i];write(i,r);if(r.done&&ex.rest>0)onStartRest(ex.rest,ex.n);return nr;});
+  const restLbl=ex.rest>0?(ex.rest>=60?fmtMSS(ex.rest):`${ex.rest}s`):null;
+  const inp={width:"100%",height:40,borderRadius:10,border:`1px solid ${C.s4}`,background:C.s2,color:C.ink,fontSize:16,fontWeight:600,fontFamily:F,textAlign:"center",outline:"none",boxSizing:"border-box"};
+  return (
+    <div style={{background:C.s1,borderRadius:16,padding:"14px",marginBottom:12,border:`1px solid ${allDone?C.green:C.s3}`,transition:`border-color 250ms ${EO}`,animation:`fadeSlideIn 280ms ${EO} ${idx*35}ms both`}}>
+      <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:12}}>
+        <Tap onTap={()=>onDetail(ex)} style={{flex:1,minWidth:0}}>
+          <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:3}}>
+            <span style={{fontSize:17,fontWeight:600,color:allDone?C.ink4:C.ink,textDecoration:allDone?"line-through":"none"}}>{ex.n}</span>
+            <span style={{width:18,height:18,borderRadius:"50%",background:C.s3,display:"inline-flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:700,color:C.blue,flexShrink:0}}>i</span>
+          </div>
+          <div style={{fontSize:13,color:C.ink4}}>{ex.m}{restLbl?` · repos ${restLbl}`:""}</div>
+        </Tap>
+        <Tap onTap={()=>onReplace(ex)} style={{width:36,height:36,borderRadius:10,background:C.s2,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}><span style={{fontSize:16,color:C.ink3}}>⇄</span></Tap>
+        <div style={{fontSize:13,fontWeight:700,color:allDone?C.green:C.ink4,minWidth:32,textAlign:"right",flexShrink:0}}>{completed}/{sets}</div>
+      </div>
+      <div style={{display:"grid",gridTemplateColumns:"26px 1fr 60px 60px 44px",gap:8,alignItems:"center",marginBottom:6,padding:"0 2px"}}>
+        <span style={{fontSize:10,fontWeight:600,color:C.ink4,textTransform:"uppercase"}}>Sér</span>
+        <span style={{fontSize:10,fontWeight:600,color:C.ink4,textTransform:"uppercase"}}>Objectif</span>
+        <span style={{fontSize:10,fontWeight:600,color:C.ink4,textTransform:"uppercase",textAlign:"center"}}>Kg</span>
+        <span style={{fontSize:10,fontWeight:600,color:C.ink4,textTransform:"uppercase",textAlign:"center"}}>Reps</span>
+        <span/>
+      </div>
+      {rows.map((r,i)=>(
+        <div key={i} style={{display:"grid",gridTemplateColumns:"26px 1fr 60px 60px 44px",gap:8,alignItems:"center",marginBottom:8}}>
+          <span style={{fontSize:15,fontWeight:700,color:r.done?C.green:C.ink3}}>{i+1}</span>
+          <span style={{fontSize:13,color:C.ink4}}>{ex.kg?`${ex.kg}kg`:"PdC"} × {ex.reps}</span>
+          <input inputMode="decimal" value={r.weight} onChange={e=>setField(i,"weight",e.target.value.replace(/[^0-9.]/g,""))} placeholder={ex.kg?String(ex.kg):"0"} style={inp}/>
+          <input inputMode="numeric" value={r.reps} onChange={e=>setField(i,"reps",e.target.value.replace(/[^0-9]/g,""))} placeholder={String(defReps)} style={inp}/>
+          <Tap onTap={()=>toggle(i)} style={{width:44,height:40,borderRadius:10,border:`2px solid ${r.done?C.green:C.div}`,background:r.done?C.greenDim:C.s2,display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{fontSize:18,fontWeight:700,color:r.done?C.green:C.ink4}}>{r.done?"✓":""}</span></Tap>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function ProgressLine({data,color=C.blue,height=48}) {
   if(!data||data.length<2) return <div style={{height,display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{fontSize:13,color:C.ink4}}>Données insuffisantes</span></div>;
   const vals=data.map(d=>d.v),min=Math.min(...vals),max=Math.max(...vals),range=max-min||1;
@@ -1429,6 +1474,7 @@ export default function SomaApp() {
   const[showReport,setShowReport]=useState(null);
   const[showPicker,setShowPicker]=useState(null);
   const[fullScreenEx,setFullScreenEx]=useState(null);
+  const[detailEx,setDetailEx]=useState(null);
   const[showRestFull,setShowRestFull]=useState(false);
   const[restLabel,setRestLabel]=useState("");
   const[sbReady,setSbReady]=useState(false);
@@ -1751,17 +1797,12 @@ export default function SomaApp() {
                     <div style={{fontSize:11,fontWeight:600,color:C.ink4,textTransform:"uppercase",letterSpacing:".1em",marginBottom:6}}>Échauffement · 8 min</div>
                     <div style={{fontSize:14,color:C.ink3,lineHeight:1.75}}>{day.salle==="haut"?"Rotations épaules · Wall slide · Push-up to downdog · Mobilité thoracique":"Corde 3min · Hip circle · Leg swing · KB Swing léger ×10"}</div>
                   </div>
-                  <div style={{borderTop:`1px solid ${C.s3}`}}>
+                  <div>
                     {exos.map((ex,i)=>(
-                      <ExRow key={ex.id} ex={ex} idx={i}
-                        weight={weights[ex.id]??ex.kg??0}
-                        onWeightChange={saveWeight}
-                        log={log}
-                        onLogSet={saveLog}
-                        onStartRest={handleStartRest}
-                        lastKg={lastKgPerEx[ex.id]||0}
-                        onFullScreen={ex=>setFullScreenEx(ex)}
-                        dayIdx={dayIdx}
+                      <WorkoutExercise key={ex.id} ex={ex} idx={i}
+                        log={log} onLogSet={saveLog} onStartRest={handleStartRest}
+                        lastKg={lastKgPerEx[ex.id]||0} dayIdx={dayIdx}
+                        onDetail={e=>setDetailEx(e)} onReplace={e=>setShowPicker(e)}
                       />
                     ))}
                   </div>
@@ -1822,7 +1863,7 @@ export default function SomaApp() {
       {/* OVERLAYS — z-index ordering per semantic scale */}
       {showRestFull&&<RestFullScreen timer={rest} label={restLabel} onSkip={()=>{rest.stop();setShowRestFull(false);}} onClose={()=>{rest.reset();setShowRestFull(false);}}/>}
       {!showRestFull&&rest.sec>0&&<MiniRest timer={rest} label={restLabel} onExpand={()=>setShowRestFull(true)}/>}
-      {fullScreenEx&&<ExFullScreen ex={fullScreenEx} log={log} onLogSet={saveLog} onStartRest={handleStartRest} onClose={()=>setFullScreenEx(null)} lastKg={lastKgPerEx[fullScreenEx.id]||0} dayIdx={dayIdx} exercises={(viewSchedule[dayIdx]||PROGRAM[dayIdx])?.exercises||[]} onNav={(dir)=>{const list=(viewSchedule[dayIdx]||PROGRAM[dayIdx])?.exercises||[];const i=list.findIndex(e=>e.id===fullScreenEx.id);const ni=i+dir;if(ni>=0&&ni<list.length)setFullScreenEx(list[ni]);}}/>}
+      {detailEx&&<ExerciseSheet ex={detailEx} fav={favorites.includes(detailEx.id)} onToggleFav={toggleFav} onClose={()=>setDetailEx(null)} sessions={sessions}/>}
       {showFeedback&&<FeedbackSheet onClose={()=>setShowFeedback(false)} onSave={handleFeedbackSave}/>}
       {showAI&&<AISheet onClose={()=>setShowAI(false)} onResult={o=>{setAiOverride(o);setShowAI(false);}} excluded={excluded}/>}
       {showPicker&&<ExPicker onSelect={newEx=>handleReplaceEx(showPicker,newEx)} onClose={()=>setShowPicker(null)} currentId={showPicker.id} excluded={excluded}/>}
