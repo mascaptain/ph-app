@@ -788,7 +788,7 @@ function ExRow({ex,weight,onWeightChange,log,onLogSet,onStartRest,idx,lastKg,onF
     </Tap>
   );
 }
-function WorkoutExercise({ex,log,onLogSet,onStartRest,lastKg,dayIdx,idx,onDetail,onReplace}) {
+function WorkoutExercise({ex,log,onLogSet,onStartRest,lastKg,dayIdx,idx,onDetail,onReplace,linked,isLast,onToggleLink}) {
   const sets=typeof ex.sets==="number"?ex.sets:4;
   const lk=`d${dayIdx}_${ex.id}`;
   const defReps=(()=>{const m=String(ex.reps||"").match(/\d+/);return m?parseInt(m[0]):10;})();
@@ -797,7 +797,7 @@ function WorkoutExercise({ex,log,onLogSet,onStartRest,lastKg,dayIdx,idx,onDetail
   const allDone=sets>0&&completed===sets;
   const write=(i,r)=>onLogSet(`${lk}_s${i}`,{done:r.done,weight:parseFloat(r.weight)||0,reps:parseInt(r.reps)||0,date:todayKey()});
   const setField=(i,k,v)=>setRows(rs=>{const nr=rs.map((r,j)=>j===i?{...r,[k]:v}:r);if(nr[i].done)write(i,nr[i]);return nr;});
-  const toggle=i=>setRows(rs=>{const nr=rs.map((r,j)=>j===i?{...r,done:!r.done}:r);const r=nr[i];write(i,r);if(r.done&&ex.rest>0)onStartRest(ex.rest,ex.n);return nr;});
+  const toggle=i=>setRows(rs=>{const nr=rs.map((r,j)=>j===i?{...r,done:!r.done}:r);const r=nr[i];write(i,r);if(r.done&&ex.rest>0&&!linked)onStartRest(ex.rest,ex.n);return nr;});
   const restLbl=ex.rest>0?(ex.rest>=60?fmtMSS(ex.rest):`${ex.rest}s`):null;
   const inp={width:"100%",height:40,borderRadius:10,border:`1px solid ${C.s4}`,background:C.s2,color:C.ink,fontSize:16,fontWeight:600,fontFamily:F,textAlign:"center",outline:"none",boxSizing:"border-box"};
   return (
@@ -808,8 +808,9 @@ function WorkoutExercise({ex,log,onLogSet,onStartRest,lastKg,dayIdx,idx,onDetail
             <span style={{fontSize:17,fontWeight:600,color:allDone?C.ink4:C.ink,textDecoration:allDone?"line-through":"none"}}>{ex.n}</span>
             <span style={{width:18,height:18,borderRadius:"50%",background:C.s3,display:"inline-flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:700,color:C.blue,flexShrink:0}}>i</span>
           </div>
-          <div style={{fontSize:13,color:C.ink4}}>{ex.m}{restLbl?` · repos ${restLbl}`:""}</div>
+          <div style={{fontSize:13,color:linked?C.blue:C.ink4}}>{linked?"⛓ Superset · enchaîné au suivant (sans repos)":`${ex.m}${restLbl?` · repos ${restLbl}`:""}`}</div>
         </Tap>
+        {!isLast&&<Tap onTap={onToggleLink} style={{width:36,height:36,borderRadius:10,background:linked?C.blueDim:C.s2,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}><span style={{fontSize:15,color:linked?C.blue:C.ink3}}>⛓</span></Tap>}
         <Tap onTap={()=>onReplace(ex)} style={{width:36,height:36,borderRadius:10,background:C.s2,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}><span style={{fontSize:16,color:C.ink3}}>⇄</span></Tap>
         <div style={{fontSize:13,fontWeight:700,color:allDone?C.green:C.ink4,minWidth:32,textAlign:"right",flexShrink:0}}>{completed}/{sets}</div>
       </div>
@@ -1326,7 +1327,7 @@ function SettingsTab({user,excluded,onToggleExclude,onSignOut,onReset,onOpenLibr
           <span style={{fontSize:17,color:C.red}}>›</span>
         </Tap>
       </div>
-      <div style={{fontSize:12,color:C.ink4,textAlign:"center",marginTop:28}}>SŌMA · {"S"+weekNumber()} · {DB.length} exercices · build 23.06b</div>
+      <div style={{fontSize:12,color:C.ink4,textAlign:"center",marginTop:28}}>SŌMA · {"S"+weekNumber()} · {DB.length} exercices · build 23.06c</div>
     </div>
   );
 }
@@ -1485,6 +1486,8 @@ export default function SomaApp() {
   const[dataReady,setDataReady]=useState(false);
   const[profile,setProfile]=useState(null);
   const[favorites,setFavorites]=useState([]);
+  const[supersets,setSupersets]=useState([]);
+  const toggleLink=(exId)=>{const key=dayIdx+"_"+exId;setSupersets(prev=>{const next=prev.includes(key)?prev.filter(x=>x!==key):[...prev,key];persist(user?.id,{supersets:next});return next;});};
   const[showLibrary,setShowLibrary]=useState(false);
   const[tab,setTab]=useState("seance");
   const[prevTab,setPrevTab]=useState(null);
@@ -1540,6 +1543,7 @@ export default function SomaApp() {
     if(typeof local.autoRotate==="boolean") setAutoRotate(local.autoRotate);
     if(local.profile) setProfile(local.profile);
     if(local.favorites) setFavorites(local.favorites);
+    if(local.supersets) setSupersets(local.supersets);
     // Then sync from Supabase
     try{
       const[{data:sess},{data:pbs},{data:strData},{data:prof}]=await Promise.all([
@@ -1842,6 +1846,7 @@ export default function SomaApp() {
                         log={log} onLogSet={saveLog} onStartRest={handleStartRest}
                         lastKg={lastKgPerEx[ex.id]||0} dayIdx={dayIdx}
                         onDetail={e=>setDetailEx(e)} onReplace={e=>setShowPicker(e)}
+                        linked={supersets.includes(dayIdx+"_"+ex.id)&&i<exos.length-1} isLast={i===exos.length-1} onToggleLink={()=>toggleLink(ex.id)}
                       />
                     ))}
                   </div>
