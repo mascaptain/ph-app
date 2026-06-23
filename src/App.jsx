@@ -1099,6 +1099,101 @@ function WeekSummary({sessions,accent}) {
 }
 
 // ─── STATS TAB ───────────────────────────────────────────────────────────────
+function IntervalTimer({onClose}) {
+  const [mode,setMode]=useState("amrap");
+  const [amrapMin,setAmrapMin]=useState(12);
+  const [emomMin,setEmomMin]=useState(10);
+  const [emomReps,setEmomReps]=useState(10);
+  const [running,setRunning]=useState(false);
+  const [elapsed,setElapsed]=useState(0);
+  const [rounds,setRounds]=useState(0);
+  const ref=useRef(null);
+  const lastMinRef=useRef(0);
+  const total=mode==="amrap"?amrapMin*60:emomMin*60;
+  useEffect(()=>()=>clearInterval(ref.current),[]);
+  const start=()=>{if(running||total<=0)return;setRunning(true);lastMinRef.current=Math.floor(elapsed/60);const md=mode,tt=total;ref.current=setInterval(()=>{setElapsed(p=>{const n=p+1;if(md==="emom"){const cm=Math.floor(n/60);if(cm!==lastMinRef.current&&n<tt){lastMinRef.current=cm;beep();}}if(n>=tt){clearInterval(ref.current);setRunning(false);beep();return tt;}return n;});},1000);};
+  const pause=()=>{clearInterval(ref.current);setRunning(false);};
+  const reset=()=>{clearInterval(ref.current);setRunning(false);setElapsed(0);setRounds(0);lastMinRef.current=0;};
+  const remaining=Math.max(0,total-elapsed);
+  const done=total>0&&elapsed>=total;
+  const curMin=Math.min(emomMin,Math.floor(elapsed/60)+1);
+  const secInMin=done?0:(60-(elapsed%60));
+  const Step=({label,val,setVal,min,max,unit})=>(
+    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",background:C.s2,borderRadius:14,padding:"12px 16px",marginBottom:10}}>
+      <span style={{fontSize:15,color:C.ink2}}>{label}</span>
+      <div style={{display:"flex",alignItems:"center",gap:12}}>
+        <Tap onTap={()=>!running&&setVal(Math.max(min,val-1))} style={{width:38,height:38,borderRadius:10,background:C.s3,display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{fontSize:20,color:C.ink}}>−</span></Tap>
+        <span style={{fontSize:20,fontWeight:700,color:C.ink,minWidth:58,textAlign:"center"}}>{val}{unit}</span>
+        <Tap onTap={()=>!running&&setVal(Math.min(max,val+1))} style={{width:38,height:38,borderRadius:10,background:C.s3,display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{fontSize:20,color:C.ink}}>+</span></Tap>
+      </div>
+    </div>
+  );
+  return (
+    <div style={{position:"fixed",inset:0,background:C.bg,zIndex:Z.fullscreen,display:"flex",flexDirection:"column",fontFamily:F,paddingTop:"env(safe-area-inset-top)",paddingBottom:"env(safe-area-inset-bottom)"}}>
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"16px 20px"}}>
+        <div style={{fontSize:20,fontWeight:700,color:C.ink}}>Intervalles</div>
+        <Tap onTap={onClose} style={{width:40,height:40,borderRadius:10,background:C.s2,display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{fontSize:14,color:C.ink3}}>✕</span></Tap>
+      </div>
+      <div style={{display:"flex",gap:8,padding:"0 20px 16px"}}>
+        {[["amrap","AMRAP"],["emom","EMOM"]].map(([m,l])=>(<Tap key={m} onTap={()=>!running&&setMode(m)} style={{flex:1,padding:"12px",borderRadius:12,background:mode===m?C.blue:C.s2,display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{fontSize:15,fontWeight:700,color:mode===m?"#000":C.ink3}}>{l}</span></Tap>))}
+      </div>
+      <div style={{flex:1,overflowY:"auto",padding:"0 20px",display:"flex",flexDirection:"column"}}>
+        <div style={{fontSize:13,color:C.ink4,lineHeight:1.5,marginBottom:16}}>{mode==="amrap"?"As Many Rounds As Possible : un max de tours avant la fin du temps. Compte tes tours avec le bouton.":"Every Minute On the Minute : à chaque début de minute (bip), fais tes reps, repose-toi le reste de la minute."}</div>
+        {mode==="amrap"
+          ? <Step label="Durée" val={amrapMin} setVal={setAmrapMin} min={1} max={60} unit=" min"/>
+          : <><Step label="Durée" val={emomMin} setVal={setEmomMin} min={1} max={60} unit=" min"/><Step label="Reps / minute" val={emomReps} setVal={setEmomReps} min={1} max={50} unit=""/></>}
+        <div style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"24px 0"}}>
+          {mode==="emom"&&running&&<div style={{fontSize:14,fontWeight:600,color:C.blue,marginBottom:8}}>Minute {curMin}/{emomMin} · {emomReps} reps</div>}
+          <div style={{fontSize:72,fontWeight:700,color:done?C.green:C.ink,letterSpacing:"-.03em",lineHeight:1}}>{done?"FINI":(mode==="emom"&&running?fmtMSS(secInMin):fmtMSS(remaining))}</div>
+          {mode==="emom"&&running&&<div style={{fontSize:13,color:C.ink4,marginTop:8}}>Temps total : {fmtMSS(remaining)}</div>}
+          {mode==="amrap"&&<div style={{marginTop:24,display:"flex",flexDirection:"column",alignItems:"center",gap:8}}><div style={{fontSize:48,fontWeight:700,color:C.blue,lineHeight:1}}>{rounds}</div><div style={{fontSize:12,color:C.ink4,textTransform:"uppercase",letterSpacing:".1em"}}>tours</div><Tap onTap={()=>running&&setRounds(r=>r+1)} style={{marginTop:6,padding:"14px 34px",borderRadius:980,background:C.s2,border:`1px solid ${C.div}`,opacity:running?1:0.5}}><span style={{fontSize:16,fontWeight:600,color:C.ink2}}>+1 tour</span></Tap></div>}
+        </div>
+      </div>
+      <div style={{display:"flex",gap:10,padding:"12px 20px"}}>
+        <Tap onTap={reset} style={{padding:"16px 22px",borderRadius:14,background:C.s2,display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{fontSize:15,fontWeight:600,color:C.ink3}}>Reset</span></Tap>
+        <Tap onTap={running?pause:(done?reset:start)} style={{flex:1,padding:"16px",borderRadius:14,background:running?C.redDim:C.blue,border:running?`1px solid ${C.red}`:"none",display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{fontSize:17,fontWeight:700,color:running?C.red:"#000"}}>{running?"Pause":(done?"Recommencer":"Démarrer")}</span></Tap>
+      </div>
+    </div>
+  );
+}
+
+function SkillsOctagon({sessions}) {
+  const axes=useMemo(()=>{
+    const clamp=v=>Math.max(4,Math.min(100,Math.round(v)));
+    if(!sessions||!sessions.length) return null;
+    let maxW=0,totalKg=0,totalSets=0,rpeSum=0,rpeCnt=0;
+    sessions.forEach(s=>{totalKg+=s.totalKg||0;totalSets+=s.totalSets||0;(s.exercises||[]).forEach(e=>{if((e.weight||0)>maxW)maxW=e.weight;});const fb=s.feedback;if(fb&&fb.global){rpeSum+=fb.global;rpeCnt++;}});
+    const force=clamp(maxW/1.5);
+    const volume=clamp(totalKg/30000*100);
+    const endurance=clamp(totalSets/300*100);
+    const seances=clamp(sessions.length/30*100);
+    const regularite=clamp(sessions.slice(-20).length/15*100);
+    const intensite=clamp(rpeCnt?rpeSum/rpeCnt/5*100:0);
+    let prog=50;
+    if(sessions.length>=4){const h=Math.floor(sessions.length/2);const a=sessions.slice(0,h),b=sessions.slice(h);const avgA=(a.reduce((x,s)=>x+(s.totalKg||0),0)/a.length)||1;const avgB=b.reduce((x,s)=>x+(s.totalKg||0),0)/b.length;prog=clamp(50+(avgB-avgA)/avgA*100);}
+    const puissance=clamp((force+intensite)/2);
+    return [["Force",force],["Volume",volume],["Endurance",endurance],["Régularité",regularite],["Intensité",intensite],["Progression",prog],["Séances",seances],["Puissance",puissance]];
+  },[sessions]);
+  if(!axes) return null;
+  const cx=150,cy=150,R=92;
+  const pt=(i,r)=>{const a=(-90+i*45)*Math.PI/180;return [cx+Math.cos(a)*r,cy+Math.sin(a)*r];};
+  const poly=axes.map((ax,i)=>pt(i,ax[1]/100*R).join(",")).join(" ");
+  const grid=[25,50,75,100].map(g=>axes.map((_,i)=>pt(i,g/100*R).join(",")).join(" "));
+  return (
+    <div style={{background:C.s1,borderRadius:16,padding:"20px",marginBottom:16}}>
+      <div style={{fontSize:12,fontWeight:600,color:C.ink4,textTransform:"uppercase",letterSpacing:".1em",marginBottom:4}}>Octogone de compétences</div>
+      <div style={{fontSize:13,color:C.ink4,marginBottom:4}}>Tes 8 qualités, calculées sur ton historique.</div>
+      <svg viewBox="0 0 300 320" style={{width:"100%",height:"auto",display:"block"}}>
+        {grid.map((g,i)=>(<polygon key={"g"+i} points={g} fill="none" stroke={C.s3} strokeWidth="1"/>))}
+        {axes.map((_,i)=>{const[x,y]=pt(i,R);return <line key={"l"+i} x1={cx} y1={cy} x2={x} y2={y} stroke={C.s3} strokeWidth="1"/>;})}
+        <polygon points={poly} fill={C.blue} fillOpacity="0.25" stroke={C.blue} strokeWidth="2"/>
+        {axes.map((ax,i)=>{const[x,y]=pt(i,ax[1]/100*R);return <circle key={"c"+i} cx={x} cy={y} r="3" fill={C.blue}/>;})}
+        {axes.map((ax,i)=>{const[x,y]=pt(i,R+16);return <text key={"t"+i} x={x} y={y} fill={C.ink3} fontSize="11" fontWeight="600" textAnchor="middle" dominantBaseline="middle" fontFamily={F}>{ax[0]}</text>;})}
+      </svg>
+    </div>
+  );
+}
+
 function StatsTab({sessions,weights,accent}) {
   const[selEx,setSelEx]=useState(null);
   const total=sessions.length,totalKg=sessions.reduce((a,s)=>a+(s.totalKg||0),0);
@@ -1116,6 +1211,7 @@ function StatsTab({sessions,weights,accent}) {
   return(
     <div style={{padding:"20px 20px 100px",maxWidth:600,margin:"0 auto",fontFamily:F}}>
       <WeekSummary sessions={sessions} accent={accent}/>
+      <SkillsOctagon sessions={sessions}/>
       {/* Metrics grid */}
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:16}}>
         {[{l:"Séances",v:total},{l:"Volume total",v:totalKg>0?`${(totalKg/1000).toFixed(1)}t`:"—"},{l:"Score moyen",v:avgScore||"—"},{l:"Semaine",v:`${sessions.filter(s=>{const d=new Date();const dow=d.getDay()===0?6:d.getDay()-1;const wd=new Date(d);wd.setDate(d.getDate()-dow);return s.date>=localDateKey(wd);}).length}/5`}].map(({l,v})=>(
@@ -1327,7 +1423,7 @@ function SettingsTab({user,excluded,onToggleExclude,onSignOut,onReset,onOpenLibr
           <span style={{fontSize:17,color:C.red}}>›</span>
         </Tap>
       </div>
-      <div style={{fontSize:12,color:C.ink4,textAlign:"center",marginTop:28}}>SŌMA · {"S"+weekNumber()} · {DB.length} exercices · build 23.06c</div>
+      <div style={{fontSize:12,color:C.ink4,textAlign:"center",marginTop:28}}>SŌMA · {"S"+weekNumber()} · {DB.length} exercices · build 23.06d</div>
     </div>
   );
 }
@@ -1504,6 +1600,7 @@ export default function SomaApp() {
   const[autoRotate,setAutoRotate]=useState(true);
   const[showFeedback,setShowFeedback]=useState(false);
   const[showAI,setShowAI]=useState(false);
+  const[showTimer,setShowTimer]=useState(false);
   const[showReport,setShowReport]=useState(null);
   const[showPicker,setShowPicker]=useState(null);
   const[fullScreenEx,setFullScreenEx]=useState(null);
@@ -1840,6 +1937,7 @@ export default function SomaApp() {
                     <div style={{fontSize:11,fontWeight:600,color:C.ink4,textTransform:"uppercase",letterSpacing:".1em",marginBottom:6}}>Échauffement · 8 min</div>
                     <div style={{fontSize:14,color:C.ink3,lineHeight:1.75}}>{day.salle==="haut"?"Rotations épaules · Wall slide · Push-up to downdog · Mobilité thoracique":"Corde 3min · Hip circle · Leg swing · KB Swing léger ×10"}</div>
                   </div>
+                  {day.salle&&<Tap onTap={()=>setShowTimer(true)} style={{display:"flex",alignItems:"center",justifyContent:"center",gap:8,padding:"13px",borderRadius:14,background:C.s2,marginBottom:16}}><span style={{fontSize:15}}>⏱</span><span style={{fontSize:15,fontWeight:600,color:C.ink2}}>Chrono AMRAP / EMOM</span></Tap>}
                   <div>
                     {exos.map((ex,i)=>(
                       <WorkoutExercise key={ex.id} ex={ex} idx={i}
@@ -1910,6 +2008,7 @@ export default function SomaApp() {
       {detailEx&&<ExerciseSheet ex={detailEx} fav={favorites.includes(detailEx.id)} onToggleFav={toggleFav} onClose={()=>setDetailEx(null)} sessions={sessions}/>}
       {showFeedback&&<FeedbackSheet onClose={()=>setShowFeedback(false)} onSave={handleFeedbackSave}/>}
       {showAI&&<AISheet onClose={()=>setShowAI(false)} onResult={o=>{setAiOverride(o);setShowAI(false);}} excluded={excluded}/>}
+      {showTimer&&<IntervalTimer onClose={()=>setShowTimer(false)}/>}
       {showPicker&&<ExPicker onSelect={newEx=>handleReplaceEx(showPicker,newEx)} onClose={()=>setShowPicker(null)} currentId={showPicker.id} excluded={excluded}/>}
       {showLibrary&&<LibraryTab favorites={favorites} onToggleFav={toggleFav} onClose={()=>setShowLibrary(false)} sessions={sessions}/>}
       {showReport&&<SessionReport session={showReport} onClose={()=>setShowReport(null)} onDelete={deleteSession}/>}
