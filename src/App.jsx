@@ -409,6 +409,17 @@ const rotateDay = (day,w) => {
   return {...day,exercises};
 };
 
+// Adapte les exercices au materiel disponible (epic A) : remplace un exo non realisable par une variante du meme muscle dans le materiel dispo
+const adaptEquip = (day, equip) => {
+  if(!day || !day.salle || !equip || !equip.length) return day;
+  const exercises=(day.exercises||[]).map(ex=>{
+    if(equip.includes(ex.eq)) return ex;
+    const sub=DB.find(e=>e.id!==ex.id && primaryMuscle(e)===primaryMuscle(ex) && equip.includes(e.eq));
+    return sub?{...sub,sets:ex.sets,rest:ex.rest}:ex;
+  });
+  return {...day,exercises};
+};
+
 const SESSION_TYPES = ["KB Full","KB Endurance","KB Force","Push","Pull & Dos","Jambes","Corps entier","Bras","Cardio HIIT"];
 
 // ─── UTILS ───────────────────────────────────────────────────────────────────
@@ -1425,7 +1436,7 @@ export default function SomaApp() {
   const clock=useStopwatch();
   const rest=useCountdown(()=>setShowRestFull(true));
   const wk=weekNumber();
-  const viewSchedule=useMemo(()=>autoRotate?schedule.map(d=>rotateDay(d,wk)):schedule,[schedule,autoRotate,wk]);
+  const viewSchedule=useMemo(()=>{let s=autoRotate?schedule.map(d=>rotateDay(d,wk)):schedule;const eq=profile?.equipment;if(eq&&eq.length)s=s.map(d=>adaptEquip(d,eq));return s;},[schedule,autoRotate,wk,profile]);
 
   // ── Auth listener ──
   useEffect(()=>{
