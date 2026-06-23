@@ -925,8 +925,10 @@ function FeedbackSheet({onClose,onSave}) {
   const[intensity,setIntensity]=useState(3);
   const[energy,setEnergy]=useState(3);
   const[notes,setNotes]=useState("");
+  const[photo,setPhoto]=useState(null);
   const IL=["","Très léger","Léger","Modéré","Intense","Maximum"];
   const EL=["","Épuisé","Fatigué","Normal","Énergisé","Au top"];
+  const onPhoto=(e)=>{const f=e.target.files&&e.target.files[0];if(!f)return;const rd=new FileReader();rd.onload=()=>{const im=new Image();im.onload=()=>{const mx=420;const sc=Math.min(1,mx/Math.max(im.width,im.height));const cw=Math.round(im.width*sc),ch=Math.round(im.height*sc);const cv=document.createElement("canvas");cv.width=cw;cv.height=ch;cv.getContext("2d").drawImage(im,0,0,cw,ch);setPhoto(cv.toDataURL("image/jpeg",0.7));};im.src=rd.result;};rd.readAsDataURL(f);};
   const bs={fontFamily:F,fontSize:17,fontWeight:600,padding:"15px",borderRadius:14,border:"none",cursor:"pointer",WebkitTapHighlightColor:"transparent",touchAction:"manipulation",width:"100%"};
   return(
     <div style={{position:"fixed",inset:0,zIndex:9999,display:"flex",alignItems:"flex-end",justifyContent:"center",fontFamily:F}}>
@@ -950,11 +952,17 @@ function FeedbackSheet({onClose,onSave}) {
             </div>
           </div>
         ))}
+        <div style={{marginBottom:20}}>
+          <div style={{fontSize:13,fontWeight:600,color:C.ink4,textTransform:"uppercase",letterSpacing:".06em",marginBottom:10}}>Photo du jour (optionnel)</div>
+          {photo
+            ? <div style={{position:"relative",display:"inline-block"}}><img src={photo} alt="" style={{width:96,height:128,objectFit:"cover",borderRadius:12,display:"block"}}/><button onClick={()=>setPhoto(null)} style={{position:"absolute",top:-8,right:-8,width:26,height:26,borderRadius:"50%",background:C.s4,color:C.ink,border:"none",fontSize:15,cursor:"pointer",lineHeight:1}}>×</button></div>
+            : <label style={{display:"inline-flex",alignItems:"center",justifyContent:"center",width:96,height:128,borderRadius:12,border:`1.5px dashed ${C.div}`,background:C.s2,cursor:"pointer"}}><span style={{fontSize:30,color:C.ink4,fontWeight:300}}>+</span><input type="file" accept="image/*" onChange={onPhoto} style={{display:"none"}}/></label>}
+        </div>
         <textarea value={notes} onChange={e=>setNotes(e.target.value)} placeholder="Notes libres..."
           style={{width:"100%",minHeight:60,padding:"12px 16px",borderRadius:12,border:`1px solid ${C.div}`,fontFamily:F,fontSize:15,color:C.ink,background:C.s2,resize:"none",outline:"none",marginBottom:20,boxSizing:"border-box"}}/>
         <div style={{display:"flex",gap:10}}>
           <button onClick={onClose} style={{...bs,flex:1,background:C.s2,color:C.ink3}}>Annuler</button>
-          <button onClick={()=>onSave({global:intensity,energy,notes})} style={{...bs,flex:2,background:C.blue,color:"#000"}}>Enregistrer</button>
+          <button onClick={()=>onSave({global:intensity,energy,notes,photo})} style={{...bs,flex:2,background:C.blue,color:"#000"}}>Enregistrer</button>
         </div>
       </div>
     </div>
@@ -965,6 +973,7 @@ function FeedbackSheet({onClose,onSave}) {
 function SessionReport({session,onClose,onDelete}) {
   if(!session) return null;
   const{totalKg=0,totalSets=0,duration=0,exercises=[],date="",dayLabel="",score=0,feedback}=session;
+  const photo=(()=>{try{return JSON.parse(localStorage.getItem("soma_photos")||"{}")[date]||null;}catch(_e){return null;}})();
   const animScore=useCountUp(score,1200);
   const animKg=useCountUp(Math.round(totalKg/1000*10)/10*10,1400);
   const animSets=useCountUp(totalSets,1000);
@@ -994,6 +1003,12 @@ function SessionReport({session,onClose,onDelete}) {
             </div>
           ))}
         </div>
+        {photo&&(
+          <div style={{padding:"20px 24px 0"}}>
+            <div style={{fontSize:12,fontWeight:600,color:C.ink4,textTransform:"uppercase",letterSpacing:".1em",marginBottom:12}}>Photo</div>
+            <img src={photo} alt="" style={{width:150,borderRadius:14,display:"block"}}/>
+          </div>
+        )}
         {exercises.filter(e=>e.completedSets>0).length>0&&(
           <div style={{padding:"20px 24px"}}>
             <div style={{fontSize:12,fontWeight:600,color:C.ink4,textTransform:"uppercase",letterSpacing:".1em",marginBottom:16}}>Exercices</div>
@@ -1584,6 +1599,7 @@ export default function SomaApp() {
   const handleFeedbackSave=(fb)=>{
     const day=viewSchedule[dayIdx]||PROGRAM[dayIdx];
     const sDate=programDate(dayIdx);
+    if(fb&&fb.photo){try{const pm=JSON.parse(localStorage.getItem("soma_photos")||"{}");pm[sDate]=fb.photo;localStorage.setItem("soma_photos",JSON.stringify(pm));}catch(_e){} delete fb.photo;}
     const exos=aiOverride?.exercises||day.exercises||[];
     let totalKg=0,totalSets=0;
     const exercisesData=exos.map(ex=>{
