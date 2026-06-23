@@ -1364,6 +1364,27 @@ function HistoryTab({sessions,onSelect,accent}) {
   return(
     <div style={{padding:"20px 20px 100px",maxWidth:600,margin:"0 auto",fontFamily:F}}>
       <WeekSummary sessions={sessions} accent={accent}/>
+      {(()=>{
+        let photos={};try{photos=JSON.parse(localStorage.getItem("soma_photos")||"{}");}catch(_e){}
+        const entries=sessions.filter(s=>photos[s.date]).map(s=>({s,src:photos[s.date]})).slice(-12).reverse();
+        if(!entries.length) return null;
+        return (
+          <div style={{background:C.s1,borderRadius:20,padding:"20px",marginBottom:20}}>
+            <div style={{fontSize:14,fontWeight:600,color:C.ink,marginBottom:4}}>Photos de progression</div>
+            <div style={{fontSize:12,color:C.ink4,marginBottom:14}}>{entries.length} photo{entries.length>1?"s":""} de séance</div>
+            <div style={{display:"flex",gap:10,overflowX:"auto",paddingBottom:4}}>
+              {entries.map(({s,src})=>(
+                <Tap key={s.date} onTap={()=>onSelect(s)} style={{flexShrink:0}}>
+                  <div style={{width:96,height:128,borderRadius:14,overflow:"hidden",background:C.s2,position:"relative"}}>
+                    <img src={src} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/>
+                    <div style={{position:"absolute",left:0,right:0,bottom:0,padding:"4px 8px",background:"linear-gradient(transparent,rgba(0,0,0,.75))",fontSize:11,fontWeight:600,color:"#fff"}}>{s.date.slice(5)}</div>
+                  </div>
+                </Tap>
+              ))}
+            </div>
+          </div>
+        );
+      })()}
       <div style={{background:C.s1,borderRadius:20,padding:"20px",marginBottom:20}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:18}}>
           <Tap onTap={()=>setView(new Date(y,m-1,1))} style={{width:36,height:36,borderRadius:8,background:C.s2,display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{fontSize:16,color:C.ink3}}>‹</span></Tap>
@@ -1458,8 +1479,10 @@ function ScheduleEditor({schedule,onChange,onReset,onClose,autoRotate,onToggleAu
   );
 }
 
-function SettingsTab({user,excluded,onToggleExclude,onSignOut,onReset,onOpenLibrary}) {
+function SettingsTab({user,excluded,onToggleExclude,onSignOut,onReset,onOpenLibrary,profile,schedule,onUpdateConfig}) {
   const[showLib,setShowLib]=useState(false);
+  const[w,setW]=useState(profile?.weight_kg!=null?String(profile.weight_kg):"");
+  const trainDays=(schedule||[]).map((d,i)=>(d&&d.salle)?i:-1).filter(i=>i>=0);
   return(
     <div style={{padding:"20px 20px 100px",maxWidth:600,margin:"0 auto",fontFamily:F}}>
       {/* Profile card */}
@@ -1472,6 +1495,28 @@ function SettingsTab({user,excluded,onToggleExclude,onSignOut,onReset,onOpenLibr
           <div style={{fontSize:14,color:C.ink3,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{user?.email||""}</div>
         </div>
       </div>
+      {/* Mon programme */}
+      {onUpdateConfig&&<div style={{background:C.s1,borderRadius:16,padding:"20px",marginBottom:12}}>
+        <div style={{fontSize:14,fontWeight:600,color:C.ink,marginBottom:16}}>Mon programme</div>
+        <div style={{fontSize:12,fontWeight:600,color:C.ink4,textTransform:"uppercase",letterSpacing:".08em",marginBottom:8}}>Objectif</div>
+        <div style={{display:"flex",flexWrap:"wrap",gap:8,marginBottom:18}}>
+          {[["force","Force"],["endurance","Endurance"],["hybride","Hybride"],["seche","Perte de gras"]].map(([k,l])=>(
+            <Tap key={k} onTap={()=>onUpdateConfig({goal:k})} style={{padding:"9px 16px",borderRadius:980,border:`1.5px solid ${profile?.goal===k?C.blue:C.div}`,background:profile?.goal===k?C.blueDim:"transparent"}}><span style={{fontSize:13,fontWeight:600,color:profile?.goal===k?C.blue:C.ink3}}>{l}</span></Tap>
+          ))}
+        </div>
+        <div style={{fontSize:12,fontWeight:600,color:C.ink4,textTransform:"uppercase",letterSpacing:".08em",marginBottom:8}}>Jours de séance</div>
+        <div style={{display:"flex",gap:6,marginBottom:18}}>
+          {["LUN","MAR","MER","JEU","VEN","SAM","DIM"].map((lbl,i)=>{
+            const on=trainDays.includes(i);
+            return <Tap key={i} onTap={()=>{const nd=on?trainDays.filter(x=>x!==i):[...trainDays,i];if(nd.length)onUpdateConfig({days:nd});}} style={{flex:1,padding:"10px 0",borderRadius:10,background:on?C.blue:C.s2,display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{fontSize:11,fontWeight:700,color:on?"#000":C.ink3}}>{lbl}</span></Tap>;
+          })}
+        </div>
+        <div style={{fontSize:12,fontWeight:600,color:C.ink4,textTransform:"uppercase",letterSpacing:".08em",marginBottom:8}}>Poids de corps</div>
+        <div style={{display:"flex",alignItems:"center",gap:10}}>
+          <input inputMode="decimal" value={w} onChange={e=>setW(e.target.value.replace(/[^0-9.]/g,""))} onBlur={()=>onUpdateConfig({weight_kg:w?Number(w):null})} placeholder="kg" style={{width:120,height:46,borderRadius:12,border:`1px solid ${C.s4}`,background:C.s2,color:C.ink,fontSize:17,fontWeight:600,fontFamily:F,textAlign:"center",outline:"none",boxSizing:"border-box"}}/>
+          <span style={{fontSize:15,color:C.ink4}}>kg</span>
+        </div>
+      </div>}
       {/* Compte */}
       <div style={{background:C.s1,borderRadius:16,overflow:"hidden",marginBottom:12}}>
         <Tap onTap={onSignOut} style={{padding:"18px 20px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
@@ -1514,7 +1559,7 @@ function SettingsTab({user,excluded,onToggleExclude,onSignOut,onReset,onOpenLibr
           <span style={{fontSize:17,color:C.red}}>›</span>
         </Tap>
       </div>
-      <div style={{fontSize:12,color:C.ink4,textAlign:"center",marginTop:28}}>SŌMA · {"S"+weekNumber()} · {DB.length} exercices · build 23.06e</div>
+      <div style={{fontSize:12,color:C.ink4,textAlign:"center",marginTop:28}}>SŌMA · {"S"+weekNumber()} · {DB.length} exercices · build 23.06f</div>
     </div>
   );
 }
@@ -1607,6 +1652,16 @@ const FREQ_DAYS = {3:[0,2,4],4:[0,1,3,4],5:[0,1,2,3,4],6:[0,1,2,3,4,5]};
 const DAY_LBL = ["LUN","MAR","MER","JEU","VEN","SAM","DIM"];
 const generateSchedule = (freq) => {
   const trainIdx = FREQ_DAYS[freq] || FREQ_DAYS[4];
+  const train = PROGRAM.filter(d=>d.salle);
+  let ti=0;
+  return DAY_LBL.map((lbl,i)=>{
+    if(trainIdx.includes(i)){ const tpl=train[ti%train.length]; ti++; return {label:tpl.label,salle:tpl.salle,muscle:tpl.muscle,exercises:tpl.exercises,abs:tpl.abs,ids:tpl.ids,day:lbl}; }
+    return {...REST_TPL,day:lbl};
+  });
+};
+
+const generateScheduleDays = (dayIdxArr) => {
+  const trainIdx = (dayIdxArr&&dayIdxArr.length)?[...dayIdxArr].sort((a,b)=>a-b):FREQ_DAYS[4];
   const train = PROGRAM.filter(d=>d.salle);
   let ti=0;
   return DAY_LBL.map((lbl,i)=>{
@@ -1791,6 +1846,16 @@ export default function SomaApp() {
   },[user,persist]);
 
   const toggleFav=useCallback(id=>{setFavorites(prev=>{const next=prev.includes(id)?prev.filter(x=>x!==id):[...prev,id];persist(user?.id,{favorites:next});return next;});},[persist]);
+  const updateConfig=useCallback((updates)=>{
+    setProfile(prev=>{
+      const next={...(prev||{}),...updates};
+      if(updates.days){ next.frequency=updates.days.length; const sched=generateScheduleDays(updates.days); setSchedule(sched); persist(user?.id,{schedule:sched}); }
+      else if(updates.frequency){ const days=FREQ_DAYS[updates.frequency]||FREQ_DAYS[4]; const sched=generateScheduleDays(days); setSchedule(sched); persist(user?.id,{schedule:sched}); }
+      persist(user?.id,{profile:next});
+      try{ supabase.from("profiles").upsert({id:user?.id,goal:next.goal,level:next.level,equipment:next.equipment,frequency:next.frequency,weight_kg:next.weight_kg,updated_at:new Date().toISOString()},{onConflict:"id"}); }catch(_e){}
+      return next;
+    });
+  },[persist,user]);
 
   const switchTab=useCallback(id=>{setPrevTab(tab);setTab(id);},[tab]);
 
@@ -2063,7 +2128,7 @@ export default function SomaApp() {
           )}
           {tab==="stats"&&<StatsTab sessions={sessions} weights={weights} accent={accent}/>}
           {tab==="history"&&<HistoryTab sessions={sessions} onSelect={setShowReport} accent={accent}/>}
-          {tab==="settings"&&<SettingsTab user={user} excluded={excluded} onToggleExclude={toggleExclude} onOpenLibrary={()=>setShowLibrary(true)}
+          {tab==="settings"&&<SettingsTab user={user} excluded={excluded} onToggleExclude={toggleExclude} onOpenLibrary={()=>setShowLibrary(true)} profile={profile} schedule={schedule} onUpdateConfig={updateConfig}
             onSignOut={async()=>{await supabase.auth.signOut();setUser(null);setLog({});setWeights({});setSessions([]);setExcluded([]);setStreak(0);}}
             onReset={async()=>{
               const uid=user?.id;
