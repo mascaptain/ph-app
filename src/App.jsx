@@ -392,6 +392,8 @@ const SESSION_TEMPLATES = [...PROGRAM.filter(d=>d.salle).map(d=>({label:d.label,
 // Rotation hebdo - mesocycle hybride (Volume -> Intensite -> Puissance -> Deload)
 const weekNumber = () => { const dt=new Date(); const d=new Date(Date.UTC(dt.getFullYear(),dt.getMonth(),dt.getDate())); const dn=(d.getUTCDay()+6)%7; d.setUTCDate(d.getUTCDate()-dn+3); const ft=new Date(Date.UTC(d.getUTCFullYear(),0,4)); const fn=(ft.getUTCDay()+6)%7; ft.setUTCDate(ft.getUTCDate()-fn+3); return 1+Math.round((d-ft)/604800000); };
 const MESO = [ {k:"Volume",s:1,r:0.9,g:"Series hautes, tempo controle"}, {k:"Intensite",s:0,r:1.2,g:"Charges lourdes, reps basses"}, {k:"Puissance",s:0,r:1.35,g:"Explosif, repos longs"}, {k:"Deload",s:-1,r:0.85,g:"Recuperation, charges legeres"} ];
+const REST_STEPS=[30,45,60,75,90,120,150,180,210,240,300];
+const snapRest=(s)=>{ if(!s||s<=0) return 0; return REST_STEPS.reduce((a,b)=>Math.abs(b-s)<Math.abs(a-s)?b:a); };
 const phaseOf = (w) => MESO[((w%4)+4)%4];
 const primaryMuscle = (m) => String(m||"").split("\u00b7")[0].trim().toLowerCase();
 const altPool = (ex) => DB.filter(e=>e.id!==ex.id && e.eq===ex.eq && primaryMuscle(e.m)===primaryMuscle(ex.m));
@@ -402,7 +404,7 @@ const rotateDay = (day,w) => {
     const pool=[ex,...altPool(ex)];
     const pick=pool[(w+i)%pool.length];
     const base=typeof ex.sets==="number"?ex.sets:4;
-    return {...pick,sets:Math.max(2,Math.min(6,base+ph.s)),rest:Math.round((typeof pick.rest==="number"?pick.rest:60)*(ph.r||1))};
+    return {...pick,sets:Math.max(2,Math.min(6,base+ph.s)),rest:snapRest((typeof pick.rest==="number"?pick.rest:60)*(ph.r||1))};
   });
   return {...day,exercises};
 };
@@ -680,7 +682,7 @@ function ExFullScreen({ex,log,onLogSet,onStartRest,onClose,lastKg,dayIdx,exercis
   const writeLog=(i,r)=>onLogSet(`${lk}_s${i}`,{done:r.done,weight:r.weight,reps:r.reps,rpe,date:todayKey()});
   const upd=(i,patch)=>setRows(rs=>{const nr=rs.map((r,j)=>j===i?{...r,...patch}:r);if(nr[i].done)writeLog(i,nr[i]);return nr;});
   const toggle=i=>setRows(rs=>{const nr=rs.map((r,j)=>j===i?{...r,done:!r.done}:r);const r=nr[i];writeLog(i,r);if(r.done&&ex.rest>0)onStartRest(ex.rest,ex.n);return nr;});
-  const restLbl=ex.rest>=60?`${(ex.rest/60).toFixed(ex.rest%60?1:0)}min`:`${ex.rest}s`;
+  const restLbl=ex.rest>=60?fmtMSS(ex.rest):`${ex.rest}s`;
   return(
     <div style={{position:"fixed",inset:0,background:C.bg,zIndex:Z.fullscreen,display:"flex",flexDirection:"column",fontFamily:F,animation:`fadeIn 200ms ${EO} both`,paddingTop:"env(safe-area-inset-top)",paddingBottom:"env(safe-area-inset-bottom)"}}>
       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"16px 20px",borderBottom:`1px solid ${C.s3}`}}>
@@ -734,54 +736,32 @@ function ExFullScreen({ex,log,onLogSet,onStartRest,onClose,lastKg,dayIdx,exercis
 function ExRow({ex,weight,onWeightChange,log,onLogSet,onStartRest,idx,lastKg,onFullScreen,dayIdx}) {
   const sets=typeof ex.sets==="number"?ex.sets:4;
   const lk=`d${dayIdx}_${ex.id}`;
-  const done=Array.from({length:sets},(_,i)=>!!log[`${lk}_s${i}`]?.done);
-  const completed=done.filter(Boolean).length;
+  const completed=Array.from({length:sets},(_,i)=>!!(log[`${lk}_s${i}`]&&log[`${lk}_s${i}`].done)).filter(Boolean).length;
   const allDone=sets>0&&completed===sets;
   const kg=weight??ex.kg??0;
-  const oneRM=orm(kg,ex.reps);
-
-  const handleSet=i=>{
-    onLogSet(`${lk}_s${i}`,{done:!done[i],weight:kg,date:todayKey()});
-    if(!done[i]&&ex.rest>0) onStartRest(ex.rest,ex.n);
-  };
-
+  const restLbl=ex.rest>0?(ex.rest>=60?fmtMSS(ex.rest):`${ex.rest}s`):null;
   return(
-    <div style={{borderBottom:`1px solid ${C.s3}`,animation:`fadeSlideIn 280ms ${EO} ${idx*35}ms both`}}>
-      <Tap onTap={()=>onFullScreen(ex)} style={{padding:"16px 0 10px",display:"flex",alignItems:"center",gap:14}}>
-        <div style={{width:44,height:44,borderRadius:"50%",flexShrink:0,border:`2px solid ${allDone?C.green:C.div}`,background:allDone?C.greenDim:"transparent",display:"flex",alignItems:"center",justifyContent:"center",transition:`all 250ms ${EO}`}}>
-          <span style={{fontSize:13,fontWeight:700,color:allDone?C.green:C.ink4}}>{completed}/{sets}</span>
-        </div>
-        <div style={{flex:1,minWidth:0}}>
-          <div style={{display:"flex",gap:8,marginBottom:3,alignItems:"center",flexWrap:"wrap"}}>
-            <span style={{fontSize:17,fontWeight:600,color:allDone?C.ink4:C.ink,textDecoration:allDone?"line-through":"none",transition:`color 250ms ${EO}`}}>{ex.n}</span>
-            <span style={{fontSize:11,fontWeight:600,padding:"2px 8px",borderRadius:980,background:C.s3,color:C.ink4}}>{EQ_LABELS[ex.eq]}</span>
-          </div>
-          <div style={{display:"flex",gap:8,flexWrap:"wrap",alignItems:"center"}}>
-            <span style={{fontSize:14,color:C.ink3}}>{sets}×{ex.reps}</span>
-            <span style={{color:C.s4}}>·</span>
-            <span style={{fontSize:14,color:C.ink3}}>{ex.m}</span>
-            {lastKg>0&&<span style={{fontSize:12,fontWeight:600,color:C.orange}}>↑{lastKg}kg</span>}
-          </div>
-        </div>
-        {ex.rest>0&&<span style={{fontSize:12,fontWeight:600,padding:"4px 10px",borderRadius:980,background:C.s3,color:C.ink4,flexShrink:0}}>{ex.rest>=60?`${ex.rest/60}′`:`${ex.rest}″`}</span>}
-        <span style={{color:C.ink5,fontSize:12,flexShrink:0}}>▶</span>
-      </Tap>
-      {/* Set buttons — 56px in list */}
-      <div style={{paddingBottom:14,display:"flex",gap:8,flexWrap:"wrap"}}>
-        {Array.from({length:sets},(_,i)=>(
-          <Tap key={i} onTap={()=>handleSet(i)} style={{width:56,height:56,borderRadius:14,border:`1.5px solid ${done[i]?C.green:C.div}`,background:done[i]?C.greenDim:C.s2,display:"flex",alignItems:"center",justifyContent:"center",transition:`all 200ms ${EO}`}}>
-            <span style={{fontSize:17,fontWeight:700,color:done[i]?C.green:C.ink4}}>{i+1}</span>
-          </Tap>
-        ))}
-        {ex.rest>0&&<Tap onTap={()=>onStartRest(ex.rest,ex.n)} style={{height:56,padding:"0 14px",borderRadius:14,border:`1.5px solid ${C.div}`,background:"transparent",display:"flex",alignItems:"center"}}>
-          <span style={{fontSize:13,fontWeight:600,color:C.ink4}}>Repos</span>
-        </Tap>}
+    <Tap onTap={()=>onFullScreen(ex)} style={{borderBottom:`1px solid ${C.s3}`,padding:"16px 0",display:"flex",alignItems:"center",gap:14,animation:`fadeSlideIn 280ms ${EO} ${idx*35}ms both`}}>
+      <div style={{width:46,height:46,borderRadius:"50%",flexShrink:0,border:`2px solid ${allDone?C.green:C.div}`,background:allDone?C.greenDim:"transparent",display:"flex",alignItems:"center",justifyContent:"center",transition:`all 250ms ${EO}`}}>
+        <span style={{fontSize:13,fontWeight:700,color:allDone?C.green:C.ink4}}>{completed}/{sets}</span>
       </div>
-    </div>
+      <div style={{flex:1,minWidth:0}}>
+        <div style={{display:"flex",gap:8,marginBottom:4,alignItems:"center",flexWrap:"wrap"}}>
+          <span style={{fontSize:17,fontWeight:600,color:allDone?C.ink4:C.ink,textDecoration:allDone?"line-through":"none",transition:`color 250ms ${EO}`}}>{ex.n}</span>
+          <span style={{fontSize:11,fontWeight:600,padding:"2px 8px",borderRadius:980,background:C.s3,color:C.ink4}}>{EQ_LABELS[ex.eq]}</span>
+        </div>
+        <div style={{display:"flex",gap:8,flexWrap:"wrap",alignItems:"center"}}>
+          <span style={{fontSize:14,fontWeight:600,color:C.ink2}}>{sets} × {ex.reps}</span>
+          <span style={{color:C.s4}}>·</span>
+          <span style={{fontSize:14,color:C.ink3}}>{kg===0?"Poids du corps":`${kg}kg`}</span>
+          {restLbl&&<><span style={{color:C.s4}}>·</span><span style={{fontSize:13,color:C.ink4}}>repos {restLbl}</span></>}
+          {lastKg>0&&<span style={{fontSize:12,fontWeight:600,color:C.orange}}>↑{lastKg}kg</span>}
+        </div>
+      </div>
+      <span style={{color:C.ink4,fontSize:14,flexShrink:0}}>▶</span>
+    </Tap>
   );
 }
-
-// ─── PROGRESSION CHART (mini line graph) ─────────────────────────────────────
 function ProgressLine({data,color=C.blue,height=48}) {
   if(!data||data.length<2) return <div style={{height,display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{fontSize:13,color:C.ink4}}>Données insuffisantes</span></div>;
   const vals=data.map(d=>d.v),min=Math.min(...vals),max=Math.max(...vals),range=max-min||1;
