@@ -788,6 +788,97 @@ function ExRow({ex,weight,onWeightChange,log,onLogSet,onStartRest,idx,lastKg,onF
     </Tap>
   );
 }
+const setPlanFor=(ex)=>{
+  const n=Math.max(1,typeof ex.sets==="number"?ex.sets:4);
+  const W=ex.kg||0;
+  return Array.from({length:n},(_,i)=>{
+    const frac=n>1?(0.7+0.3*i/(n-1)):1;
+    const w=W>0?Math.round(W*frac/2.5)*2.5:0;
+    return {w,reps:ex.reps};
+  });
+};
+const repsNum=(r)=>{const m=String(r||"").match(/\d+/);return m?parseInt(m[0]):0;};
+
+function ExerciseRowCollapsed({ex,dayIdx,log,idx,onOpen,onReplace}) {
+  const plan=setPlanFor(ex);const n=plan.length;
+  const completed=plan.filter((_,i)=>log[`d${dayIdx}_${ex.id}_s${i}`]&&log[`d${dayIdx}_${ex.id}_s${i}`].done).length;
+  const allDone=completed===n;
+  const w0=plan[0].w,wn=plan[n-1].w;
+  const wlabel=w0>0?(w0===wn?`${w0} kg`:`${w0}→${wn} kg`):"PdC";
+  const restLbl=ex.rest>0?(ex.rest>=60?fmtMSS(ex.rest):`${ex.rest}s`):null;
+  return (
+    <div style={{display:"flex",alignItems:"center",gap:12,background:C.s1,borderRadius:14,padding:"12px 14px",marginBottom:10,border:`1px solid ${allDone?C.green:C.s3}`,animation:`fadeSlideIn 280ms ${EO} ${idx*35}ms both`}}>
+      <Tap onTap={onOpen} style={{flex:1,minWidth:0,display:"flex",alignItems:"center",gap:12}}>
+        <div style={{width:44,height:44,borderRadius:12,background:allDone?C.greenDim:C.s2,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+          <span style={{fontSize:allDone?18:14,fontWeight:700,color:allDone?C.green:C.ink3}}>{allDone?"✓":`${completed}/${n}`}</span>
+        </div>
+        <div style={{flex:1,minWidth:0}}>
+          <div style={{fontSize:16,fontWeight:600,color:allDone?C.ink4:C.ink,textDecoration:allDone?"line-through":"none",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{ex.n}</div>
+          <div style={{fontSize:13,color:C.ink4,marginTop:2}}>{n} × {ex.reps} · {wlabel}{restLbl?` · ${restLbl}`:""}</div>
+        </div>
+      </Tap>
+      <Tap onTap={()=>onReplace(ex)} style={{width:34,height:34,borderRadius:9,background:C.s2,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}><span style={{fontSize:15,color:C.ink3}}>⇄</span></Tap>
+      <span style={{fontSize:22,color:C.ink4,flexShrink:0,lineHeight:1}}>›</span>
+    </div>
+  );
+}
+
+function ExerciseFocus({ex,dayIdx,log,onLogSet,onClose,onNext,hasNext,idx,count,onDetail}) {
+  const plan=setPlanFor(ex);const n=plan.length;
+  const lk=`d${dayIdx}_${ex.id}`;
+  const [done,setDone]=useState(()=>plan.map((_,i)=>!!(log[`${lk}_s${i}`]&&log[`${lk}_s${i}`].done)));
+  const [resting,setResting]=useState(0);
+  const restRef=useRef(null);
+  useEffect(()=>()=>clearInterval(restRef.current),[]);
+  const startRest=(s)=>{clearInterval(restRef.current);setResting(s);restRef.current=setInterval(()=>{setResting(pp=>{if(pp<=1){clearInterval(restRef.current);beep();return 0;}return pp-1;});},1000);};
+  const skipRest=()=>{clearInterval(restRef.current);setResting(0);};
+  const cur=done.findIndex(d=>!d);
+  const allDone=cur===-1;
+  const validate=()=>{
+    if(allDone||resting>0) return;
+    const i=cur;
+    onLogSet(`${lk}_s${i}`,{done:true,weight:plan[i].w,reps:repsNum(ex.reps),date:todayKey()});
+    setDone(d=>d.map((v,j)=>j===i?true:v));
+    if(i<n-1&&ex.rest>0) startRest(ex.rest);
+  };
+  const primary=resting>0?{label:`Passer le repos · ${fmtMSS(resting)}`,act:skipRest,bg:C.s2,fg:C.ink}
+    :allDone?(hasNext?{label:"Exercice suivant →",act:onNext,bg:C.blue,fg:"#000"}:{label:"Terminer",act:onClose,bg:C.green,fg:"#000"})
+    :{label:`Valider la série ${cur+1}`,act:validate,bg:C.blue,fg:"#000"};
+  return (
+    <div style={{position:"fixed",inset:0,background:C.bg,zIndex:Z.fullscreen,display:"flex",flexDirection:"column",fontFamily:F,paddingTop:"env(safe-area-inset-top)",paddingBottom:"env(safe-area-inset-bottom)"}}>
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"16px 20px"}}>
+        <Tap onTap={onClose} style={{width:40,height:40,borderRadius:10,background:C.s2,display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{fontSize:20,color:C.ink3}}>‹</span></Tap>
+        <span style={{fontSize:13,fontWeight:600,color:C.ink4,textTransform:"uppercase",letterSpacing:".1em"}}>Exercice {idx+1}/{count}</span>
+        <Tap onTap={()=>onDetail&&onDetail(ex)} style={{width:40,height:40,borderRadius:10,background:C.s2,display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{fontSize:15,fontWeight:700,color:C.blue}}>i</span></Tap>
+      </div>
+      <div style={{padding:"0 24px 8px"}}>
+        <div style={{fontSize:30,fontWeight:700,color:C.ink,letterSpacing:"-.02em",lineHeight:1.1}}>{ex.n}</div>
+        <div style={{fontSize:14,color:C.ink4,marginTop:6}}>{ex.m}{ex.cue?` · ${ex.cue}`:""}</div>
+      </div>
+      <div style={{flex:1,overflowY:"auto",padding:"12px 20px"}}>
+        {plan.map((s,i)=>{
+          const d=done[i];const isCur=i===cur&&resting===0;
+          return (
+            <div key={i} style={{display:"flex",alignItems:"center",gap:14,padding:"16px 18px",borderRadius:16,marginBottom:10,background:isCur?C.blueDim:C.s1,border:`1px solid ${d?C.green:isCur?C.blue:C.s3}`,transition:`all 200ms ${EO}`}}>
+              <div style={{width:36,height:36,borderRadius:"50%",background:d?C.green:isCur?C.blue:C.s2,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}><span style={{fontSize:15,fontWeight:700,color:d||isCur?"#000":C.ink3}}>{d?"✓":i+1}</span></div>
+              <div style={{flex:1}}><span style={{fontSize:22,fontWeight:700,color:d?C.ink4:C.ink}}>{s.w>0?`${s.w} kg`:"Poids du corps"}</span><span style={{fontSize:16,color:C.ink3,marginLeft:10}}>× {s.reps}</span></div>
+            </div>
+          );
+        })}
+        {resting>0&&(
+          <div style={{textAlign:"center",padding:"24px 0 8px"}}>
+            <div style={{fontSize:12,fontWeight:600,color:C.ink4,textTransform:"uppercase",letterSpacing:".1em",marginBottom:8}}>Repos</div>
+            <div style={{fontSize:64,fontWeight:700,color:C.blue,letterSpacing:"-.03em",lineHeight:1}}>{fmtMSS(resting)}</div>
+          </div>
+        )}
+      </div>
+      <div style={{padding:"12px 20px"}}>
+        <Tap onTap={primary.act} style={{padding:"18px",borderRadius:16,background:primary.bg,display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{fontSize:17,fontWeight:700,color:primary.fg}}>{primary.label}</span></Tap>
+      </div>
+    </div>
+  );
+}
+
 function WorkoutExercise({ex,log,onLogSet,onStartRest,lastKg,dayIdx,idx,onDetail,onReplace,linked,isLast,onToggleLink}) {
   const sets=typeof ex.sets==="number"?ex.sets:4;
   const lk=`d${dayIdx}_${ex.id}`;
@@ -1423,7 +1514,7 @@ function SettingsTab({user,excluded,onToggleExclude,onSignOut,onReset,onOpenLibr
           <span style={{fontSize:17,color:C.red}}>›</span>
         </Tap>
       </div>
-      <div style={{fontSize:12,color:C.ink4,textAlign:"center",marginTop:28}}>SŌMA · {"S"+weekNumber()} · {DB.length} exercices · build 23.06d</div>
+      <div style={{fontSize:12,color:C.ink4,textAlign:"center",marginTop:28}}>SŌMA · {"S"+weekNumber()} · {DB.length} exercices · build 23.06e</div>
     </div>
   );
 }
@@ -1605,6 +1696,7 @@ export default function SomaApp() {
   const[showPicker,setShowPicker]=useState(null);
   const[fullScreenEx,setFullScreenEx]=useState(null);
   const[detailEx,setDetailEx]=useState(null);
+  const[focusIdx,setFocusIdx]=useState(null);
   const[showRestFull,setShowRestFull]=useState(false);
   const[restLabel,setRestLabel]=useState("");
   const[sbReady,setSbReady]=useState(false);
@@ -1709,7 +1801,7 @@ export default function SomaApp() {
     const src=aiOverride?.exercises||day.exercises||[];
     const newExos=src.map(ex=>ex.id===replaced.id?{...newEx,sets:ex.sets}:ex);
     setAiOverride(prev=>({...(prev||{titre:day.label,abs:day.abs}),exercises:newExos}));
-    setShowPicker(null);setFullScreenEx(null);
+    setShowPicker(null);setFullScreenEx(null);setFocusIdx(null);
   };
 
   const handleFeedbackSave=(fb)=>{
@@ -1940,14 +2032,15 @@ export default function SomaApp() {
                   {day.salle&&<Tap onTap={()=>setShowTimer(true)} style={{display:"flex",alignItems:"center",justifyContent:"center",gap:8,padding:"13px",borderRadius:14,background:C.s2,marginBottom:16}}><span style={{fontSize:15}}>⏱</span><span style={{fontSize:15,fontWeight:600,color:C.ink2}}>Chrono AMRAP / EMOM</span></Tap>}
                   <div>
                     {exos.map((ex,i)=>(
-                      <WorkoutExercise key={ex.id} ex={ex} idx={i}
-                        log={log} onLogSet={saveLog} onStartRest={handleStartRest}
-                        lastKg={lastKgPerEx[ex.id]||0} dayIdx={dayIdx}
-                        onDetail={e=>setDetailEx(e)} onReplace={e=>setShowPicker(e)}
-                        linked={supersets.includes(dayIdx+"_"+ex.id)&&i<exos.length-1} isLast={i===exos.length-1} onToggleLink={()=>toggleLink(ex.id)}
-                      />
+                      <ExerciseRowCollapsed key={ex.id} ex={ex} idx={i} dayIdx={dayIdx} log={log}
+                        onOpen={()=>setFocusIdx(i)} onReplace={e=>setShowPicker(e)}/>
                     ))}
                   </div>
+                  {focusIdx!=null&&exos[focusIdx]&&(
+                    <ExerciseFocus key={exos[focusIdx].id} ex={exos[focusIdx]} idx={focusIdx} count={exos.length} dayIdx={dayIdx}
+                      log={log} onLogSet={saveLog} onDetail={e=>setDetailEx(e)}
+                      onClose={()=>setFocusIdx(null)} hasNext={focusIdx<exos.length-1} onNext={()=>setFocusIdx(focusIdx+1)}/>
+                  )}
                   {absExos.length>0&&(
                     <div style={{marginTop:24,paddingTop:20,borderTop:`1px solid ${C.s3}`}}>
                       <div style={{fontSize:11,fontWeight:600,color:C.ink4,textTransform:"uppercase",letterSpacing:".1em",marginBottom:16}}>Abdominaux</div>
