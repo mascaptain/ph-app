@@ -1645,6 +1645,7 @@ function SettingsTab({user,excluded,onToggleExclude,onSignOut,onReset,onOpenLibr
   const[w,setW]=useState(profile?.weight_kg!=null?String(profile.weight_kg):"");
   const[h,setH]=useState(profile?.height_cm!=null?String(profile.height_cm):"");
   const[ag,setAg]=useState(profile?.age!=null?String(profile.age):"");
+  const[saved,setSaved]=useState(false);
   const trainDays=(schedule||[]).map((d,i)=>(d&&d.salle)?i:-1).filter(i=>i>=0);
   return(
     <div style={{padding:"20px 20px 100px",maxWidth:600,margin:"0 auto",fontFamily:F}}>
@@ -1686,7 +1687,7 @@ function SettingsTab({user,excluded,onToggleExclude,onSignOut,onReset,onOpenLibr
         </div>
         <div style={{fontSize:12,fontWeight:600,color:C.ink4,textTransform:"uppercase",letterSpacing:".08em",margin:"18px 0 8px"}}>Sexe</div>
         <div style={{display:"flex",gap:8}}>
-          {[["homme","Homme"],["femme","Femme"],["autre","Autre"]].map(([k,l])=>(
+          {[["homme","Homme"],["femme","Femme"]].map(([k,l])=>(
             <Tap key={k} onTap={()=>onUpdateConfig({sex:k})} style={{flex:1,padding:"10px",borderRadius:10,background:profile?.sex===k?C.blue:C.s2,display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{fontSize:13,fontWeight:700,color:profile?.sex===k?"#000":C.ink3}}>{l}</span></Tap>
           ))}
         </div>
@@ -1695,6 +1696,7 @@ function SettingsTab({user,excluded,onToggleExclude,onSignOut,onReset,onOpenLibr
           <input inputMode="numeric" value={ag} onChange={e=>setAg(e.target.value.replace(/[^0-9]/g,""))} onBlur={()=>onUpdateConfig({age:ag?Number(ag):null})} placeholder="ans" style={{width:120,height:46,borderRadius:12,border:`1px solid ${C.s4}`,background:C.s2,color:C.ink,fontSize:17,fontWeight:600,fontFamily:F,textAlign:"center",outline:"none",boxSizing:"border-box"}}/>
           <span style={{fontSize:15,color:C.ink4}}>ans</span>
         </div>
+        <Tap onTap={()=>{onUpdateConfig({weight_kg:w?Number(w):null,height_cm:h?Number(h):null,age:ag?Number(ag):null});setSaved(true);setTimeout(()=>setSaved(false),1600);}} style={{marginTop:18,height:48,borderRadius:12,background:saved?C.blue:C.ink,display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{fontSize:14,fontWeight:700,color:saved?"#000":"#fff",letterSpacing:".02em"}}>{saved?"Enregistré ✓":"Enregistrer"}</span></Tap>
         <div style={{marginTop:20,paddingTop:18,borderTop:`1px solid ${C.s3}`}}>
           <div style={{fontSize:12,fontWeight:600,color:C.ink4,textTransform:"uppercase",letterSpacing:".08em",marginBottom:8}}>Programme</div>
           {profile?.program_start?(
@@ -1747,7 +1749,7 @@ function SettingsTab({user,excluded,onToggleExclude,onSignOut,onReset,onOpenLibr
           <span style={{fontSize:17,color:C.red}}>›</span>
         </Tap>
       </div>
-      <div style={{fontSize:12,color:C.ink4,textAlign:"center",marginTop:28}}>SŌMA · {"S"+weekNumber()} · {DB.length} exercices · build 23.07d</div>
+      <div style={{fontSize:12,color:C.ink4,textAlign:"center",marginTop:28}}>SŌMA · {"S"+weekNumber()} · {DB.length} exercices · build 23.08a</div>
     </div>
   );
 }
