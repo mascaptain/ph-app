@@ -397,6 +397,34 @@ const MESO = [ {k:"Volume",s:1,r:0.9,g:"Series hautes, tempo controle"}, {k:"Int
 const REST_STEPS=[30,45,60,75,90,120,150,180,210,240,300];
 const snapRest=(s)=>{ if(!s||s<=0) return 0; return REST_STEPS.reduce((a,b)=>Math.abs(b-s)<Math.abs(a-s)?b:a); };
 const phaseOf = (w) => MESO[((w%4)+4)%4];
+const PROG_WEEKS=12;
+const progWeekRaw=(start)=>{ if(!start) return null; const ms=Date.now()-new Date(start+"T00:00:00").getTime(); return Math.floor(ms/604800000)+1; };
+const progWeekOf=(start)=>{ const raw=progWeekRaw(start); if(raw==null) return programWeek(); return Math.min(PROG_WEEKS,Math.max(1,raw)); };
+const progEndDate=(start)=>{ if(!start) return null; const d=new Date(start+"T00:00:00"); d.setDate(d.getDate()+PROG_WEEKS*7-1); return d; };
+const fmtDateShort=(d)=>{ if(!d) return ""; const dd=(typeof d==="string")?new Date(d+"T00:00:00"):d; try{return dd.toLocaleDateString("fr-FR",{day:"2-digit",month:"short"});}catch(_e){return "";} };
+const LEVEL_LOAD={debutant:0.78,intermediaire:1.0,avance:1.18};
+const SEX_LOAD={homme:1.0,femme:0.62,autre:0.85};
+const ENG_REF_BW=75;
+const engineScale=(profile)=>{ const bw=Number(profile&&profile.weight_kg)||ENG_REF_BW; const lvl=LEVEL_LOAD[profile&&profile.level]||1.0; const sx=SEX_LOAD[profile&&profile.sex]||0.9; const bwf=Math.max(0.7,Math.min(1.3,bw/ENG_REF_BW)); return lvl*sx*bwf; };
+const personalizeDay=(day,profile,week)=>{
+  if(!day||!day.salle) return day;
+  const scale=engineScale(profile);
+  const ph=phaseOf(week);
+  const intensity=ph.k==="Intensite"?1.06:ph.k==="Deload"?0.85:1.0;
+  const setAdj=ph.s||0;
+  const lvlSets=(profile&&profile.level==="debutant")?-1:(profile&&profile.level==="avance")?1:0;
+  const rms=(profile&&profile.rms)||{};
+  const exercises=(day.exercises||[]).map(ex=>{
+    let kg=ex.kg;
+    const rm=rms[ex.id];
+    if(rm>0){ kg=Math.max(2.5,Math.round(rm*intensity/2.5)*2.5); }
+    else if(typeof ex.kg==="number"&&ex.kg>0&&ex.eq!=="bw"){ kg=Math.max(2.5,Math.round(ex.kg*scale*intensity/2.5)*2.5); }
+    let sets=ex.sets;
+    if(typeof ex.sets==="number"){ sets=Math.max(2,Math.min(6,ex.sets+setAdj+lvlSets)); }
+    return {...ex,kg,sets};
+  });
+  return {...day,exercises};
+};
 const primaryMuscle = (m) => String(m||"").split("\u00b7")[0].trim().toLowerCase();
 const altPool = (ex) => DB.filter(e=>e.id!==ex.id && e.eq===ex.eq && primaryMuscle(e.m)===primaryMuscle(ex.m));
 const rotateDay = (day,w) => {
@@ -1611,6 +1639,8 @@ function ScheduleEditor({schedule,onChange,onReset,onClose,autoRotate,onToggleAu
 function SettingsTab({user,excluded,onToggleExclude,onSignOut,onReset,onOpenLibrary,profile,schedule,onUpdateConfig}) {
   const[showLib,setShowLib]=useState(false);
   const[w,setW]=useState(profile?.weight_kg!=null?String(profile.weight_kg):"");
+  const[h,setH]=useState(profile?.height_cm!=null?String(profile.height_cm):"");
+  const[ag,setAg]=useState(profile?.age!=null?String(profile.age):"");
   const trainDays=(schedule||[]).map((d,i)=>(d&&d.salle)?i:-1).filter(i=>i>=0);
   return(
     <div style={{padding:"20px 20px 100px",maxWidth:600,margin:"0 auto",fontFamily:F}}>
@@ -1644,6 +1674,31 @@ function SettingsTab({user,excluded,onToggleExclude,onSignOut,onReset,onOpenLibr
         <div style={{display:"flex",alignItems:"center",gap:10}}>
           <input inputMode="decimal" value={w} onChange={e=>setW(e.target.value.replace(/[^0-9.]/g,""))} onBlur={()=>onUpdateConfig({weight_kg:w?Number(w):null})} placeholder="kg" style={{width:120,height:46,borderRadius:12,border:`1px solid ${C.s4}`,background:C.s2,color:C.ink,fontSize:17,fontWeight:600,fontFamily:F,textAlign:"center",outline:"none",boxSizing:"border-box"}}/>
           <span style={{fontSize:15,color:C.ink4}}>kg</span>
+        </div>
+        <div style={{fontSize:12,fontWeight:600,color:C.ink4,textTransform:"uppercase",letterSpacing:".08em",margin:"18px 0 8px"}}>Taille</div>
+        <div style={{display:"flex",alignItems:"center",gap:10}}>
+          <input inputMode="numeric" value={h} onChange={e=>setH(e.target.value.replace(/[^0-9]/g,""))} onBlur={()=>onUpdateConfig({height_cm:h?Number(h):null})} placeholder="cm" style={{width:120,height:46,borderRadius:12,border:`1px solid ${C.s4}`,background:C.s2,color:C.ink,fontSize:17,fontWeight:600,fontFamily:F,textAlign:"center",outline:"none",boxSizing:"border-box"}}/>
+          <span style={{fontSize:15,color:C.ink4}}>cm</span>
+        </div>
+        <div style={{fontSize:12,fontWeight:600,color:C.ink4,textTransform:"uppercase",letterSpacing:".08em",margin:"18px 0 8px"}}>Sexe</div>
+        <div style={{display:"flex",gap:8}}>
+          {[["homme","Homme"],["femme","Femme"],["autre","Autre"]].map(([k,l])=>(
+            <Tap key={k} onTap={()=>onUpdateConfig({sex:k})} style={{flex:1,padding:"10px",borderRadius:10,background:profile?.sex===k?C.blue:C.s2,display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{fontSize:13,fontWeight:700,color:profile?.sex===k?"#000":C.ink3}}>{l}</span></Tap>
+          ))}
+        </div>
+        <div style={{fontSize:12,fontWeight:600,color:C.ink4,textTransform:"uppercase",letterSpacing:".08em",margin:"18px 0 8px"}}>Âge</div>
+        <div style={{display:"flex",alignItems:"center",gap:10}}>
+          <input inputMode="numeric" value={ag} onChange={e=>setAg(e.target.value.replace(/[^0-9]/g,""))} onBlur={()=>onUpdateConfig({age:ag?Number(ag):null})} placeholder="ans" style={{width:120,height:46,borderRadius:12,border:`1px solid ${C.s4}`,background:C.s2,color:C.ink,fontSize:17,fontWeight:600,fontFamily:F,textAlign:"center",outline:"none",boxSizing:"border-box"}}/>
+          <span style={{fontSize:15,color:C.ink4}}>ans</span>
+        </div>
+        <div style={{marginTop:20,paddingTop:18,borderTop:`1px solid ${C.s3}`}}>
+          <div style={{fontSize:12,fontWeight:600,color:C.ink4,textTransform:"uppercase",letterSpacing:".08em",marginBottom:8}}>Programme</div>
+          {profile?.program_start?(
+            <div style={{fontSize:14,color:C.ink2,marginBottom:12}}>Semaine {progWeekOf(profile.program_start)}/12 · {fmtDateShort(profile.program_start)} → {fmtDateShort(progEndDate(profile.program_start))}</div>
+          ):(
+            <div style={{fontSize:14,color:C.ink4,marginBottom:12}}>Aucun programme démarré.</div>
+          )}
+          <Tap onTap={()=>onUpdateConfig({program_start:todayKey()})} style={{padding:"13px",borderRadius:12,background:C.s2,border:`1px solid ${C.div}`,display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{fontSize:14,fontWeight:600,color:C.blue}}>{profile?.program_start?"Recommencer un programme (12 sem)":"Démarrer un programme (12 sem)"}</span></Tap>
         </div>
       </div>}
       {/* Compte */}
@@ -1688,7 +1743,7 @@ function SettingsTab({user,excluded,onToggleExclude,onSignOut,onReset,onOpenLibr
           <span style={{fontSize:17,color:C.red}}>›</span>
         </Tap>
       </div>
-      <div style={{fontSize:12,color:C.ink4,textAlign:"center",marginTop:28}}>SŌMA · {"S"+weekNumber()} · {DB.length} exercices · build 23.07a</div>
+      <div style={{fontSize:12,color:C.ink4,textAlign:"center",marginTop:28}}>SŌMA · {"S"+weekNumber()} · {DB.length} exercices · build 23.07b</div>
     </div>
   );
 }
@@ -1891,7 +1946,7 @@ export default function SomaApp() {
   const clock=useStopwatch();
   const rest=useCountdown(()=>setShowRestFull(true));
   const wk=weekNumber();
-  const viewSchedule=useMemo(()=>{let s=autoRotate?schedule.map(d=>rotateDay(d,wk)):schedule;const eq=profile?.equipment;if(eq&&eq.length)s=s.map(d=>adaptEquip(d,eq));const g=profile?.goal;if(g&&g!=="hybride")s=s.map(d=>adaptGoal(d,g));return s;},[schedule,autoRotate,wk,profile]);
+  const viewSchedule=useMemo(()=>{let s=autoRotate?schedule.map(d=>rotateDay(d,wk)):schedule;const eq=profile?.equipment;if(eq&&eq.length)s=s.map(d=>adaptEquip(d,eq));const g=profile?.goal;if(g&&g!=="hybride")s=s.map(d=>adaptGoal(d,g));s=s.map(d=>personalizeDay(d,profile,progWeekOf(profile?.program_start)));return s;},[schedule,autoRotate,wk,profile]);
 
   // ── Auth listener ──
   useEffect(()=>{
@@ -1984,7 +2039,7 @@ export default function SomaApp() {
       if(updates.days){ next.frequency=updates.days.length; const sched=generateScheduleDays(updates.days); setSchedule(sched); persist(user?.id,{schedule:sched}); }
       else if(updates.frequency){ const days=FREQ_DAYS[updates.frequency]||FREQ_DAYS[4]; const sched=generateScheduleDays(days); setSchedule(sched); persist(user?.id,{schedule:sched}); }
       persist(user?.id,{profile:next});
-      try{ supabase.from("profiles").upsert({id:user?.id,goal:next.goal,level:next.level,equipment:next.equipment,frequency:next.frequency,weight_kg:next.weight_kg,updated_at:new Date().toISOString()},{onConflict:"id"}); }catch(_e){}
+      try{ supabase.from("profiles").upsert({id:user?.id,goal:next.goal,level:next.level,equipment:next.equipment,frequency:next.frequency,weight_kg:next.weight_kg,sex:next.sex,height_cm:next.height_cm,age:next.age,program_start:next.program_start,rms:next.rms,updated_at:new Date().toISOString()},{onConflict:"id"}); }catch(_e){}
       return next;
     });
   },[persist,user]);
@@ -2094,7 +2149,7 @@ export default function SomaApp() {
     const uid=user.id;
     const sched=generateSchedule(data.frequency);
     setSchedule(sched);
-    const prof={id:uid,name:user?.user_metadata?.name||null,goal:data.goal,level:data.level,equipment:data.equipment,frequency:data.frequency,weight_kg:data.weight_kg,updated_at:new Date().toISOString()};
+    const prof={id:uid,name:user?.user_metadata?.name||null,goal:data.goal,level:data.level,equipment:data.equipment,frequency:data.frequency,weight_kg:data.weight_kg,program_start:todayKey(),updated_at:new Date().toISOString()};
     setProfile(prof);
     persist(uid,{schedule:sched,profile:prof});
     try{await supabase.from("profiles").upsert(prof,{onConflict:"id"});}catch(e){console.error("profile",e);}
@@ -2183,14 +2238,15 @@ export default function SomaApp() {
                     <div style={{fontSize:11,fontWeight:600,color:C.ink4,textTransform:"uppercase",letterSpacing:".14em",marginBottom:8}}>{day.day} · {"S"+wk} · {day.salle==="haut"?"Salle Haute":"Salle Basse"}</div>
                     <div style={{fontSize:34,fontWeight:700,color:C.ink,letterSpacing:"-.02em",lineHeight:1.1,marginBottom:8}}>{aiOverride?.titre||day.label}</div>
                     <div style={{fontSize:17,color:C.ink3}}>{day.muscle}</div>
-                    {day.salle&&(()=>{const pw=programWeek();const ph12=PHASES12[pw-1];return(
+                    {day.salle&&(()=>{const pw=progWeekOf(profile?.program_start);const ph12=PHASES12[pw-1];const pend=progEndDate(profile?.program_start);return(
                       <div style={{marginTop:12,padding:"12px 14px",borderRadius:14,background:C.s2}}>
                         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
                           <span style={{fontSize:12,fontWeight:700,color:C.blue,textTransform:"uppercase",letterSpacing:".06em"}}>Cycle 12 sem · S{pw}/12</span>
                           <span style={{fontSize:12,fontWeight:600,color:C.ink3}}>{ph12.n}</span>
                         </div>
                         <div style={{height:6,borderRadius:980,background:C.s4,overflow:"hidden"}}><div style={{height:"100%",width:`${pw/12*100}%`,background:C.blue,borderRadius:980}}/></div>
-                        {autoRotate&&<div style={{fontSize:12,color:C.ink4,marginTop:8}}>{ph12.f} · phase {phaseOf(wk).k}</div>}
+                        {profile?.program_start&&<div style={{fontSize:11,color:C.ink4,marginTop:8}}>Programme : {fmtDateShort(profile.program_start)} → {fmtDateShort(pend)}</div>}
+                        {autoRotate&&<div style={{fontSize:12,color:C.ink4,marginTop:6}}>{ph12.f} · phase {phaseOf(pw).k}</div>}
                       </div>);})()}
                   </div>
                   {!sessionActive?(
