@@ -788,6 +788,16 @@ function ExRow({ex,weight,onWeightChange,log,onLogSet,onStartRest,idx,lastKg,onF
     </Tap>
   );
 }
+const groupBlocks=(exos)=>{
+  const blocks=[];
+  (exos||[]).forEach((ex,idx)=>{
+    const m=ex.m||"Divers";
+    const last=blocks[blocks.length-1];
+    if(last&&last.muscle===m) last.items.push({ex,idx});
+    else blocks.push({muscle:m,items:[{ex,idx}]});
+  });
+  return blocks;
+};
 const setPlanFor=(ex)=>{
   const n=Math.max(1,typeof ex.sets==="number"?ex.sets:4);
   const W=ex.kg||0;
@@ -1616,7 +1626,7 @@ function SettingsTab({user,excluded,onToggleExclude,onSignOut,onReset,onOpenLibr
           <span style={{fontSize:17,color:C.red}}>›</span>
         </Tap>
       </div>
-      <div style={{fontSize:12,color:C.ink4,textAlign:"center",marginTop:28}}>SŌMA · {"S"+weekNumber()} · {DB.length} exercices · build 23.06g</div>
+      <div style={{fontSize:12,color:C.ink4,textAlign:"center",marginTop:28}}>SŌMA · {"S"+weekNumber()} · {DB.length} exercices · build 23.06h</div>
     </div>
   );
 }
@@ -2162,9 +2172,19 @@ export default function SomaApp() {
                     {sessionMode!=="classique"&&<Tap onTap={()=>setShowCircuit(true)} style={{display:"flex",alignItems:"center",justifyContent:"center",gap:8,padding:"14px",borderRadius:12,background:C.blueDim,border:`1px solid ${C.blue}`}}><span style={{fontSize:15}}>⏱</span><span style={{fontSize:15,fontWeight:700,color:C.blue}}>Démarrer le circuit {sessionMode==="amrap"?"AMRAP":"EMOM"}</span></Tap>}
                   </div>}
                   <div>
-                    {exos.map((ex,i)=>(
-                      <ExerciseRowCollapsed key={ex.id} ex={ex} idx={i} dayIdx={dayIdx} log={log}
-                        onOpen={()=>sessionMode==="classique"?setFocusIdx(i):setShowCircuit(true)} onReplace={e=>setShowPicker(e)}/>
+                    {groupBlocks(exos).map((blk,bi)=>(
+                      <div key={bi} style={{marginBottom:16}}>
+                        <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10,paddingLeft:2}}>
+                          <span style={{fontSize:11,fontWeight:700,color:C.blue,textTransform:"uppercase",letterSpacing:".1em"}}>Bloc {bi+1}</span>
+                          <span style={{fontSize:11,fontWeight:600,color:C.ink4,textTransform:"uppercase",letterSpacing:".08em"}}>· {blk.muscle} · {blk.items.length} exo{blk.items.length>1?"s":""}</span>
+                        </div>
+                        <div style={{paddingLeft:12,borderLeft:`2px solid ${C.s3}`}}>
+                          {blk.items.map(({ex,idx})=>(
+                            <ExerciseRowCollapsed key={ex.id} ex={ex} idx={idx} dayIdx={dayIdx} log={log}
+                              onOpen={()=>sessionMode==="classique"?setFocusIdx(idx):setShowCircuit(true)} onReplace={e=>setShowPicker(e)}/>
+                          ))}
+                        </div>
+                      </div>
                     ))}
                   </div>
                   {focusIdx!=null&&exos[focusIdx]&&(
