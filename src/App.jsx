@@ -1420,7 +1420,65 @@ function StatsTab({sessions,weights,accent}) {
 }
 
 // ─── HISTORY TAB ─────────────────────────────────────────────────────────────
-function HistoryTab({sessions,onSelect,accent}) {
+function PhotoProgress({onClose}) {
+  const [photos,setPhotos]=useState(()=>{try{return JSON.parse(localStorage.getItem("soma_photos")||"{}");}catch(_e){return {};}});
+  const [date,setDate]=useState(todayKey());
+  const save=(map)=>{try{localStorage.setItem("soma_photos",JSON.stringify(map));}catch(_e){} setPhotos({...map});};
+  const onPhoto=(e)=>{const f=e.target.files&&e.target.files[0];if(!f)return;const rd=new FileReader();rd.onload=()=>{const im=new Image();im.onload=()=>{const mx=520;const sc=Math.min(1,mx/Math.max(im.width,im.height));const cw=Math.round(im.width*sc),ch=Math.round(im.height*sc);const cv=document.createElement("canvas");cv.width=cw;cv.height=ch;cv.getContext("2d").drawImage(im,0,0,cw,ch);const next={...photos,[date]:cv.toDataURL("image/jpeg",0.72)};save(next);};im.src=rd.result;};rd.readAsDataURL(f);e.target.value="";};
+  const del=(d)=>{const next={...photos};delete next[d];save(next);};
+  const keys=Object.keys(photos).sort();
+  const first=keys[0],last=keys[keys.length-1];
+  const gap=(first&&last&&first!==last)?Math.round((new Date(last)-new Date(first))/86400000):0;
+  return (
+    <div style={{position:"fixed",inset:0,background:C.bg,zIndex:Z.fullscreen,display:"flex",flexDirection:"column",fontFamily:F,paddingTop:"env(safe-area-inset-top)",paddingBottom:"env(safe-area-inset-bottom)"}}>
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"16px 20px"}}>
+        <div style={{fontSize:20,fontWeight:700,color:C.ink}}>Progression photo</div>
+        <Tap onTap={onClose} style={{width:40,height:40,borderRadius:10,background:C.s2,display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{fontSize:14,color:C.ink3}}>✕</span></Tap>
+      </div>
+      <div style={{flex:1,overflowY:"auto",padding:"0 20px 24px"}}>
+        <div style={{background:C.s1,borderRadius:16,padding:"18px",marginBottom:16}}>
+          <div style={{fontSize:14,fontWeight:600,color:C.ink,marginBottom:14}}>Ajouter une photo</div>
+          <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:14}}>
+            <span style={{fontSize:13,color:C.ink3,width:46}}>Date</span>
+            <input type="date" value={date} max={todayKey()} onChange={e=>setDate(e.target.value)} style={{flex:1,height:44,borderRadius:10,border:`1px solid ${C.s4}`,background:C.s2,color:C.ink,fontSize:15,fontFamily:F,padding:"0 12px",outline:"none",boxSizing:"border-box"}}/>
+          </div>
+          <label style={{display:"flex",alignItems:"center",justifyContent:"center",gap:8,height:48,borderRadius:12,background:C.blue,cursor:"pointer"}}><span style={{fontSize:15,fontWeight:700,color:"#000"}}>Choisir une photo</span><input type="file" accept="image/*" onChange={onPhoto} style={{display:"none"}}/></label>
+          <div style={{fontSize:11,color:C.ink4,marginTop:10,lineHeight:1.5}}>La photo est enregistrée sur cet appareil. Tu peux en ajouter une après coup pour n'importe quelle date.</div>
+        </div>
+        {keys.length>=2&&(
+          <div style={{background:C.s1,borderRadius:16,padding:"18px",marginBottom:16}}>
+            <div style={{fontSize:14,fontWeight:600,color:C.ink,marginBottom:4}}>Avant / Après</div>
+            <div style={{fontSize:12,color:C.ink4,marginBottom:14}}>{gap} jours d'écart</div>
+            <div style={{display:"flex",gap:10}}>
+              {[["Avant",first],["Après",last]].map(([lbl,d])=>(
+                <div key={d} style={{flex:1}}>
+                  <div style={{borderRadius:12,overflow:"hidden",background:C.s2,aspectRatio:"3/4"}}><img src={photos[d]} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/></div>
+                  <div style={{fontSize:11,fontWeight:600,color:C.ink3,marginTop:6,textAlign:"center"}}>{lbl} · {d.slice(5)}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+        <div style={{fontSize:12,fontWeight:600,color:C.ink4,textTransform:"uppercase",letterSpacing:".08em",marginBottom:12}}>Toutes les photos</div>
+        {keys.length===0?(
+          <div style={{textAlign:"center",color:C.ink4,fontSize:14,padding:"30px 0"}}>Aucune photo pour l'instant.</div>
+        ):(
+          <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:8}}>
+            {[...keys].reverse().map(d=>(
+              <div key={d} style={{position:"relative",borderRadius:12,overflow:"hidden",background:C.s2,aspectRatio:"3/4"}}>
+                <img src={photos[d]} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/>
+                <div style={{position:"absolute",left:0,right:0,bottom:0,padding:"4px 6px",background:"linear-gradient(transparent,rgba(0,0,0,.75))",fontSize:10,fontWeight:600,color:"#fff"}}>{d.slice(5)}</div>
+                <Tap onTap={()=>del(d)} style={{position:"absolute",top:4,right:4,width:24,height:24,borderRadius:"50%",background:"rgba(0,0,0,.55)",display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{fontSize:12,color:"#fff"}}>✕</span></Tap>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function HistoryTab({sessions,onSelect,accent,onOpenPhotos}) {
   const[view,setView]=useState(new Date());
   const y=view.getFullYear(),m=view.getMonth();
   const first=new Date(y,m,1).getDay(),days=new Date(y,m+1,0).getDate();
@@ -1433,23 +1491,27 @@ function HistoryTab({sessions,onSelect,accent}) {
       <WeekSummary sessions={sessions} accent={accent}/>
       {(()=>{
         let photos={};try{photos=JSON.parse(localStorage.getItem("soma_photos")||"{}");}catch(_e){}
-        const entries=sessions.filter(s=>photos[s.date]).map(s=>({s,src:photos[s.date]})).slice(-12).reverse();
-        if(!entries.length) return null;
+        const dates=Object.keys(photos).sort().reverse();
         return (
-          <div style={{background:C.s1,borderRadius:20,padding:"20px",marginBottom:20}}>
-            <div style={{fontSize:14,fontWeight:600,color:C.ink,marginBottom:4}}>Photos de progression</div>
-            <div style={{fontSize:12,color:C.ink4,marginBottom:14}}>{entries.length} photo{entries.length>1?"s":""} de séance</div>
-            <div style={{display:"flex",gap:10,overflowX:"auto",paddingBottom:4}}>
-              {entries.map(({s,src})=>(
-                <Tap key={s.date} onTap={()=>onSelect(s)} style={{flexShrink:0}}>
-                  <div style={{width:96,height:128,borderRadius:14,overflow:"hidden",background:C.s2,position:"relative"}}>
-                    <img src={src} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/>
-                    <div style={{position:"absolute",left:0,right:0,bottom:0,padding:"4px 8px",background:"linear-gradient(transparent,rgba(0,0,0,.75))",fontSize:11,fontWeight:600,color:"#fff"}}>{s.date.slice(5)}</div>
+          <Tap onTap={onOpenPhotos} style={{display:"block"}}>
+            <div style={{background:C.s1,borderRadius:20,padding:"20px",marginBottom:20}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:dates.length?14:0}}>
+                <div>
+                  <div style={{fontSize:14,fontWeight:600,color:C.ink}}>Progression photo</div>
+                  <div style={{fontSize:12,color:C.ink4,marginTop:2}}>{dates.length?`${dates.length} photo${dates.length>1?"s":""} · voir l'évolution`:"Ajoute ta première photo"}</div>
+                </div>
+                <span style={{fontSize:13,fontWeight:600,color:C.blue}}>{dates.length?"Gérer ›":"+ Ajouter"}</span>
+              </div>
+              {dates.length>0&&<div style={{display:"flex",gap:10,overflowX:"auto",paddingBottom:4}}>
+                {dates.slice(0,12).map(d=>(
+                  <div key={d} style={{flexShrink:0,width:84,height:112,borderRadius:14,overflow:"hidden",background:C.s2,position:"relative"}}>
+                    <img src={photos[d]} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/>
+                    <div style={{position:"absolute",left:0,right:0,bottom:0,padding:"4px 8px",background:"linear-gradient(transparent,rgba(0,0,0,.75))",fontSize:11,fontWeight:600,color:"#fff"}}>{d.slice(5)}</div>
                   </div>
-                </Tap>
-              ))}
+                ))}
+              </div>}
             </div>
-          </div>
+          </Tap>
         );
       })()}
       <div style={{background:C.s1,borderRadius:20,padding:"20px",marginBottom:20}}>
@@ -1626,7 +1688,7 @@ function SettingsTab({user,excluded,onToggleExclude,onSignOut,onReset,onOpenLibr
           <span style={{fontSize:17,color:C.red}}>›</span>
         </Tap>
       </div>
-      <div style={{fontSize:12,color:C.ink4,textAlign:"center",marginTop:28}}>SŌMA · {"S"+weekNumber()} · {DB.length} exercices · build 23.06h</div>
+      <div style={{fontSize:12,color:C.ink4,textAlign:"center",marginTop:28}}>SŌMA · {"S"+weekNumber()} · {DB.length} exercices · build 23.07a</div>
     </div>
   );
 }
@@ -1813,6 +1875,7 @@ export default function SomaApp() {
   const[autoRotate,setAutoRotate]=useState(true);
   const[showFeedback,setShowFeedback]=useState(false);
   const[showAI,setShowAI]=useState(false);
+  const[showPhotos,setShowPhotos]=useState(false);
   const[showTimer,setShowTimer]=useState(false);
   const[showReport,setShowReport]=useState(null);
   const[showPicker,setShowPicker]=useState(null);
@@ -2216,7 +2279,7 @@ export default function SomaApp() {
             </div>
           )}
           {tab==="stats"&&<StatsTab sessions={sessions} weights={weights} accent={accent}/>}
-          {tab==="history"&&<HistoryTab sessions={sessions} onSelect={setShowReport} accent={accent}/>}
+          {tab==="history"&&<HistoryTab sessions={sessions} onSelect={setShowReport} accent={accent} onOpenPhotos={()=>setShowPhotos(true)}/>}
           {tab==="settings"&&<SettingsTab user={user} excluded={excluded} onToggleExclude={toggleExclude} onOpenLibrary={()=>setShowLibrary(true)} profile={profile} schedule={schedule} onUpdateConfig={updateConfig}
             onSignOut={async()=>{await supabase.auth.signOut();setUser(null);setLog({});setWeights({});setSessions([]);setExcluded([]);setStreak(0);}}
             onReset={async()=>{
@@ -2255,6 +2318,7 @@ export default function SomaApp() {
       {detailEx&&<ExerciseSheet ex={detailEx} fav={favorites.includes(detailEx.id)} onToggleFav={toggleFav} onClose={()=>setDetailEx(null)} sessions={sessions}/>}
       {showFeedback&&<FeedbackSheet onClose={()=>setShowFeedback(false)} onSave={handleFeedbackSave}/>}
       {showAI&&<AISheet onClose={()=>setShowAI(false)} onResult={o=>{setAiOverride(o);setShowAI(false);}} excluded={excluded}/>}
+      {showPhotos&&<PhotoProgress onClose={()=>setShowPhotos(false)}/>}
       {showTimer&&<IntervalTimer onClose={()=>setShowTimer(false)}/>}
       {showPicker&&<ExPicker onSelect={newEx=>handleReplaceEx(showPicker,newEx)} onClose={()=>setShowPicker(null)} currentId={showPicker.id} excluded={excluded}/>}
       {showLibrary&&<LibraryTab favorites={favorites} onToggleFav={toggleFav} onClose={()=>setShowLibrary(false)} sessions={sessions}/>}
