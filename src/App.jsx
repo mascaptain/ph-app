@@ -950,7 +950,7 @@ function ExerciseFocus({ex,dayIdx,log,onLogSet,onClose,onNext,hasNext,idx,count,
         <div style={{fontSize:30,fontWeight:700,color:C.ink,letterSpacing:"-.02em",lineHeight:1.1}}>{ex.n}</div>
         <div style={{fontSize:14,color:C.ink4,marginTop:6}}>{ex.m}{ex.cue?` · ${ex.cue}`:""}</div>
       </div>
-      <div style={{flex:1,overflowY:"auto",padding:"12px 20px"}}>
+      <div style={{flex:1,overflowY:"auto",padding:"12px 20px",WebkitOverflowScrolling:"touch"}}>
         {plan.map((s,i)=>{
           const d=done[i];const isCur=i===cur&&resting===0;
           return (
@@ -966,9 +966,7 @@ function ExerciseFocus({ex,dayIdx,log,onLogSet,onClose,onNext,hasNext,idx,count,
             <div style={{fontSize:64,fontWeight:700,color:C.blue,letterSpacing:"-.03em",lineHeight:1}}>{fmtMSS(resting)}</div>
           </div>
         )}
-      </div>
-      <div style={{padding:"12px 20px"}}>
-        <Tap onTap={primary.act} style={{padding:"18px",borderRadius:16,background:primary.bg,display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{fontSize:17,fontWeight:700,color:primary.fg}}>{primary.label}</span></Tap>
+        <Tap onTap={primary.act} style={{marginTop:14,padding:"18px",borderRadius:16,background:primary.bg,display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{fontSize:17,fontWeight:700,color:primary.fg}}>{primary.label}</span></Tap>
       </div>
     </div>
   );
@@ -1743,7 +1741,7 @@ function SettingsTab({user,excluded,onToggleExclude,onSignOut,onReset,onOpenLibr
           <span style={{fontSize:17,color:C.red}}>›</span>
         </Tap>
       </div>
-      <div style={{fontSize:12,color:C.ink4,textAlign:"center",marginTop:28}}>SŌMA · {"S"+weekNumber()} · {DB.length} exercices · build 23.07b</div>
+      <div style={{fontSize:12,color:C.ink4,textAlign:"center",marginTop:28}}>SŌMA · {"S"+weekNumber()} · {DB.length} exercices · build 23.07c</div>
     </div>
   );
 }
