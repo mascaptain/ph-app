@@ -6,31 +6,31 @@ import { supabase } from "./supabase.js";
 // OKLCH-inspired palette. One accent. No border-left hacks. No nested cards.
 // Letter-spacing floor: -0.03em on display. Body: 17px/1.47.
 const C = {
-  bg:      "#000000",
-  s1:      "#0A0A0A",
-  s2:      "#111111",
-  s3:      "#1C1C1E",
-  s4:      "#2C2C2E",
-  div:     "#38383A",
-  ink:     "#FFFFFF",
-  ink2:    "rgba(255,255,255,.86)",
-  ink3:    "rgba(255,255,255,.60)",
-  ink4:    "rgba(255,255,255,.36)",
-  ink5:    "rgba(255,255,255,.18)",
-  blue:    "#2997FF",
-  blueDim: "rgba(41,151,255,.16)",
-  green:   "#30D158",
-  greenDim:"rgba(48,209,88,.14)",
-  red:     "#FF453A",
-  redDim:  "rgba(255,69,58,.14)",
-  orange:  "#FF9F0A",
-  orDim:   "rgba(255,159,10,.14)",
-  lime:    "#A3E635",   // brand — ONE use
-  purple:  "#BF5AF2",
-  purDim:  "rgba(191,90,242,.14)",
+  bg:      "#FFFFFF",
+  s1:      "#F2F2F3",
+  s2:      "#EAEAEB",
+  s3:      "#DBDADD",
+  s4:      "#C9C8CC",
+  div:     "#DBDADD",
+  ink:     "#000000",
+  ink2:    "rgba(0,0,0,.82)",
+  ink3:    "rgba(0,0,0,.56)",
+  ink4:    "rgba(0,0,0,.40)",
+  ink5:    "rgba(0,0,0,.16)",
+  blue:    "#75FB90",
+  blueDim: "rgba(117,251,144,.22)",
+  green:   "#75FB90",
+  greenDim:"rgba(117,251,144,.18)",
+  red:     "#000000",
+  redDim:  "rgba(0,0,0,.07)",
+  orange:  "#000000",
+  orDim:   "rgba(0,0,0,.06)",
+  lime:    "#75FB90",
+  purple:  "#AAA9AB",
+  purDim:  "rgba(170,169,171,.16)",
 };
 
-const F = "system-ui,-apple-system,'SF Pro Display',sans-serif";
+const F = "'Urbanist',system-ui,sans-serif";
 
 // Emil: custom curves only — never ease/ease-in/linear for UI
 const EO  = "cubic-bezier(0.23,1,0.32,1)";      // strong ease-out
@@ -414,6 +414,9 @@ const personalizeDay=(day,profile,week)=>{
   const setAdj=ph.s||0;
   const lvlSets=(profile&&profile.level==="debutant")?-1:(profile&&profile.level==="avance")?1:0;
   const rms=(profile&&profile.rms)||{};
+  const goal=profile&&profile.goal;
+  const gf=goal==="force"?1.25:goal==="endurance"?0.6:goal==="seche"?0.75:1.0;
+  const restPF=ph.k==="Intensite"?1.1:ph.k==="Deload"?0.85:1.0;
   const exercises=(day.exercises||[]).map(ex=>{
     let kg=ex.kg;
     const rm=rms[ex.id];
@@ -421,7 +424,10 @@ const personalizeDay=(day,profile,week)=>{
     else if(typeof ex.kg==="number"&&ex.kg>0&&ex.eq!=="bw"){ kg=Math.max(2.5,Math.round(ex.kg*scale*intensity/2.5)*2.5); }
     let sets=ex.sets;
     if(typeof ex.sets==="number"){ sets=Math.max(2,Math.min(6,ex.sets+setAdj+lvlSets)); }
-    return {...ex,kg,sets};
+    const rn=repsNum(ex.reps);
+    let base; if(ex.eq==="bw"){ base=(rn>0&&rn<=8)?75:45; } else if(rn>0&&rn<=5){ base=180; } else if(rn<=8){ base=150; } else if(rn<=10){ base=120; } else if(rn<=12){ base=90; } else if(rn<=15){ base=75; } else { base=45; }
+    const rest=snapRest(base*gf*restPF);
+    return {...ex,kg,sets,rest};
   });
   return {...day,exercises};
 };
@@ -963,7 +969,7 @@ function ExerciseFocus({ex,dayIdx,log,onLogSet,onClose,onNext,hasNext,idx,count,
         {resting>0&&(
           <div style={{textAlign:"center",padding:"24px 0 8px"}}>
             <div style={{fontSize:12,fontWeight:600,color:C.ink4,textTransform:"uppercase",letterSpacing:".1em",marginBottom:8}}>Repos</div>
-            <div style={{fontSize:64,fontWeight:700,color:C.blue,letterSpacing:"-.03em",lineHeight:1}}>{fmtMSS(resting)}</div>
+            <div style={{fontSize:64,fontWeight:700,color:C.ink,letterSpacing:"-.03em",lineHeight:1}}>{fmtMSS(resting)}</div>
           </div>
         )}
         <Tap onTap={primary.act} style={{marginTop:14,padding:"18px",borderRadius:16,background:primary.bg,display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{fontSize:17,fontWeight:700,color:primary.fg}}>{primary.label}</span></Tap>
@@ -1741,7 +1747,7 @@ function SettingsTab({user,excluded,onToggleExclude,onSignOut,onReset,onOpenLibr
           <span style={{fontSize:17,color:C.red}}>›</span>
         </Tap>
       </div>
-      <div style={{fontSize:12,color:C.ink4,textAlign:"center",marginTop:28}}>SŌMA · {"S"+weekNumber()} · {DB.length} exercices · build 23.07c</div>
+      <div style={{fontSize:12,color:C.ink4,textAlign:"center",marginTop:28}}>SŌMA · {"S"+weekNumber()} · {DB.length} exercices · build 23.07d</div>
     </div>
   );
 }
@@ -2292,8 +2298,8 @@ export default function SomaApp() {
                     {groupBlocks(exos).map((blk,bi)=>(
                       <div key={bi} style={{marginBottom:16}}>
                         <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10,paddingLeft:2}}>
-                          <span style={{fontSize:11,fontWeight:700,color:C.blue,textTransform:"uppercase",letterSpacing:".1em"}}>Bloc {bi+1}</span>
-                          <span style={{fontSize:11,fontWeight:600,color:C.ink4,textTransform:"uppercase",letterSpacing:".08em"}}>· {blk.muscle} · {blk.items.length} exo{blk.items.length>1?"s":""}</span>
+                          <span style={{fontSize:11,fontWeight:700,color:C.ink3,textTransform:"uppercase",letterSpacing:".1em"}}>{blk.muscle}</span>
+                          <span style={{fontSize:11,fontWeight:600,color:C.ink4}}>{blk.items.length} exo{blk.items.length>1?"s":""}</span>
                         </div>
                         <div style={{paddingLeft:12,borderLeft:`2px solid ${C.s3}`}}>
                           {blk.items.map(({ex,idx})=>(
