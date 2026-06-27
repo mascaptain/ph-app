@@ -431,6 +431,18 @@ const personalizeDay=(day,profile,week)=>{
   });
   return {...day,exercises};
 };
+const MODE_WEEK_PLANS={force:["classique","classique","classique","classique+circuit","classique"],seche:["classique+circuit","amrap","classique+circuit","emom","classique+circuit"],hybride:["classique","emom","classique+circuit","amrap","classique"],endurance:["amrap","classique+circuit","emom","amrap","classique+circuit"]};
+const baseGoal=(g)=>g==="force"?"force":g==="endurance"?"endurance":g==="seche"?"seche":"hybride";
+const assignMode=(day,idx,profile,week)=>{ if(!day||!day.salle) return day; const plan=MODE_WEEK_PLANS[baseGoal(profile&&profile.goal)]||MODE_WEEK_PLANS.hybride; let tag=plan[idx%plan.length]; const ph=phaseOf(week); if(ph.k==="Deload") tag=tag.indexOf("circuit")>=0?"classique+circuit":"classique"; const circuit=tag.indexOf("circuit")>=0; const recommendedMode=tag.indexOf("amrap")>=0?"amrap":tag.indexOf("emom")>=0?"emom":"classique"; return {...day,recommendedMode,circuit}; };
+const circuitFriendly=(ex)=> ex.eq!=="barbell" || repsNum(ex.reps)>=8;
+const lightKg=(kg,f)=> (typeof kg==="number"&&kg>0)?Math.max(2.5,Math.round(kg*f/2.5)*2.5):kg;
+const AMRAP_LOAD=0.6, EMOM_LOAD=0.7;
+const amrapReps=(ex)=>{ const r=repsNum(ex.reps); if(ex.eq==="bw") return Math.max(8,Math.min(20,r||12)); return Math.max(8,Math.min(15,r||10)); };
+const emomReps=(ex)=>{ const r=repsNum(ex.reps); if(ex.eq==="bw") return Math.max(8,Math.min(16,r||12)); return Math.max(6,Math.min(12,r||8)); };
+const buildAmrap=(day,profile,week)=>{ if(!day||!day.salle) return day; const pool=(day.exercises||[]).filter(circuitFriendly); const src=pool.length>=3?pool:(day.exercises||[]); const exos=src.slice(0,5).map(ex=>({...ex,kg:lightKg(ex.kg,AMRAP_LOAD),reps:String(amrapReps(ex)),repsPerRound:amrapReps(ex),modeTag:"AMRAP"})); const lvl=profile&&profile.level; const ph=phaseOf(week); let cap=lvl==="debutant"?10:lvl==="avance"?18:14; if(ph.k==="Deload")cap=Math.max(8,cap-4); if(ph.k==="Intensite")cap+=2; return {...day,mode:"amrap",timeCapMin:cap,exercises:exos}; };
+const buildEmom=(day,profile,week)=>{ if(!day||!day.salle) return day; const pool=(day.exercises||[]).filter(circuitFriendly); const src=pool.length>=2?pool:(day.exercises||[]); const exos=src.slice(0,4).map(ex=>({...ex,kg:lightKg(ex.kg,EMOM_LOAD),reps:String(emomReps(ex)),repsPerMinute:emomReps(ex),modeTag:"EMOM"})); const lvl=profile&&profile.level; const ph=phaseOf(week); let rounds=lvl==="debutant"?3:lvl==="avance"?5:4; if(ph.k==="Deload")rounds=Math.max(2,rounds-1); const minutes=Math.max(exos.length,exos.length*rounds); return {...day,mode:"emom",emomMinutes:minutes,exercises:exos}; };
+const buildCircuits=(day,profile)=>{ const exos=day.exercises||[]; if(exos.length<3) return day; const goal=baseGoal(profile&&profile.goal); const gs=(goal==="seche"||goal==="endurance")?3:2; const out=exos.map(e=>({...e})); let cid=0; for(let i=1;i<out.length;i+=gs){ const slice=out.slice(i,i+gs); if(slice.length<2) break; cid++; const gt=slice.length>=3?"circuit":"superset"; slice.forEach((e,k)=>{ e.circuitId=cid; e.circuitPos=k+1; e.circuitSize=slice.length; e.groupType=gt; }); } return {...day,exercises:out}; };
+const applyMode=(day,mode,profile,week)=>{ if(!day||!day.salle) return day; if(mode==="amrap") return buildAmrap(day,profile,week); if(mode==="emom") return buildEmom(day,profile,week); return day.circuit?buildCircuits(day,profile):day; };
 const primaryMuscle = (m) => String(m||"").split("\u00b7")[0].trim().toLowerCase();
 const altPool = (ex) => DB.filter(e=>e.id!==ex.id && e.eq===ex.eq && primaryMuscle(e.m)===primaryMuscle(ex.m));
 const rotateDay = (day,w) => {
@@ -825,10 +837,10 @@ function ExRow({ex,weight,onWeightChange,log,onLogSet,onStartRest,idx,lastKg,onF
 const groupBlocks=(exos)=>{
   const blocks=[];
   (exos||[]).forEach((ex,idx)=>{
-    const m=ex.m||"Divers";
+    const key=ex.circuitId?("c"+ex.circuitId):("m:"+(ex.m||"Divers"));
     const last=blocks[blocks.length-1];
-    if(last&&last.muscle===m) last.items.push({ex,idx});
-    else blocks.push({muscle:m,items:[{ex,idx}]});
+    if(last&&last.key===key) last.items.push({ex,idx});
+    else blocks.push({key,muscle:ex.m||"Divers",groupType:ex.groupType||null,items:[{ex,idx}]});
   });
   return blocks;
 };
@@ -843,9 +855,9 @@ const setPlanFor=(ex)=>{
 };
 const repsNum=(r)=>{const m=String(r||"").match(/\d+/);return m?parseInt(m[0]):0;};
 
-function CircuitPlayer({mode,exos,onClose}) {
-  const [amrapMin,setAmrapMin]=useState(12);
-  const [emomMin,setEmomMin]=useState(Math.max(exos.length,8));
+function CircuitPlayer({mode,exos,onClose,defMin}) {
+  const [amrapMin,setAmrapMin]=useState(defMin||12);
+  const [emomMin,setEmomMin]=useState(defMin||Math.max(exos.length,8));
   const [running,setRunning]=useState(false);
   const [elapsed,setElapsed]=useState(0);
   const [rounds,setRounds]=useState(0);
@@ -1750,7 +1762,7 @@ function SettingsTab({user,excluded,onToggleExclude,onSignOut,onReset,onOpenLibr
           <span style={{fontSize:17,color:C.red}}>›</span>
         </Tap>
       </div>
-      <div style={{fontSize:12,color:C.ink4,textAlign:"center",marginTop:28}}>SŌMA · {"S"+weekNumber()} · {DB.length} exercices · build 23.08b</div>
+      <div style={{fontSize:12,color:C.ink4,textAlign:"center",marginTop:28}}>SŌMA · {"S"+weekNumber()} · {DB.length} exercices · build 23.09a</div>
     </div>
   );
 }
@@ -1953,7 +1965,9 @@ export default function SomaApp() {
   const clock=useStopwatch();
   const rest=useCountdown(()=>setShowRestFull(true));
   const wk=weekNumber();
-  const viewSchedule=useMemo(()=>{let s=autoRotate?schedule.map(d=>rotateDay(d,wk)):schedule;const eq=profile?.equipment;if(eq&&eq.length)s=s.map(d=>adaptEquip(d,eq));const g=profile?.goal;if(g&&g!=="hybride")s=s.map(d=>adaptGoal(d,g));s=s.map(d=>personalizeDay(d,profile,progWeekOf(profile?.program_start)));return s;},[schedule,autoRotate,wk,profile]);
+  const viewSchedule=useMemo(()=>{let s=autoRotate?schedule.map(d=>rotateDay(d,wk)):schedule;const eq=profile?.equipment;if(eq&&eq.length)s=s.map(d=>adaptEquip(d,eq));const g=profile?.goal;if(g&&g!=="hybride")s=s.map(d=>adaptGoal(d,g));s=s.map(d=>personalizeDay(d,profile,progWeekOf(profile?.program_start)));s=s.map((d,i)=>assignMode(d,i,profile,progWeekOf(profile?.program_start)));return s;},[schedule,autoRotate,wk,profile]);
+  const recMode=(viewSchedule[dayIdx]||PROGRAM[dayIdx])?.recommendedMode;
+  useEffect(()=>{ if(recMode) setSessionMode(recMode); },[dayIdx,recMode]);
 
   // ── Auth listener ──
   useEffect(()=>{
@@ -2161,7 +2175,8 @@ export default function SomaApp() {
   }}/>;
   if(showWelcome) return(<WelcomeScreen user={user} todaySession={viewSchedule[todayIdx()]||PROGRAM[todayIdx()]} streak={streak} onStart={()=>{setShowWelcome(false);setDayIdx(todayIdx());}} onSkip={()=>setShowWelcome(false)}/>);
 
-  const day=viewSchedule[dayIdx]||PROGRAM[dayIdx];
+  const day0=viewSchedule[dayIdx]||PROGRAM[dayIdx];
+  const day=applyMode(day0,sessionMode,profile,progWeekOf(profile?.program_start));
   const sDate=programDate(dayIdx);
   const isDayDone=sessions.some(s=>s.date===sDate&&s.day===day?.day);
   const isRest=!day?.salle;
@@ -2300,7 +2315,7 @@ export default function SomaApp() {
                       <div key={bi} style={{marginBottom:16}}>
                         <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10,paddingLeft:2}}>
                           <span style={{fontSize:11,fontWeight:700,color:C.ink3,textTransform:"uppercase",letterSpacing:".1em"}}>{blk.muscle}</span>
-                          <span style={{fontSize:11,fontWeight:600,color:C.ink4}}>{blk.items.length} exo{blk.items.length>1?"s":""}</span>
+                          <span style={{fontSize:11,fontWeight:600,color:C.ink4}}>{blk.items.length} exo{blk.items.length>1?"s":""}</span>{blk.groupType&&<span style={{fontSize:10,fontWeight:700,color:"#000",background:C.blue,padding:"1px 7px",borderRadius:6,textTransform:"uppercase",letterSpacing:".08em"}}>{blk.groupType==="circuit"?"Circuit":"Superset"}</span>}
                         </div>
                         <div style={{paddingLeft:12,borderLeft:`2px solid ${C.s3}`}}>
                           {blk.items.map(({ex,idx})=>(
@@ -2317,7 +2332,7 @@ export default function SomaApp() {
                       onClose={()=>setFocusIdx(null)} hasNext={focusIdx<exos.length-1} onNext={()=>setFocusIdx(focusIdx+1)}/>
                   )}
                   {showCircuit&&sessionMode!=="classique"&&exos.length>0&&(
-                    <CircuitPlayer mode={sessionMode} exos={exos} onClose={()=>setShowCircuit(false)}/>
+                    <CircuitPlayer mode={sessionMode} exos={exos} defMin={sessionMode==="amrap"?(day.timeCapMin||12):(day.emomMinutes||Math.max(exos.length,8))} onClose={()=>setShowCircuit(false)}/>
                   )}
                   {absExos.length>0&&(
                     <div style={{marginTop:24,paddingTop:20,borderTop:`1px solid ${C.s3}`}}>
