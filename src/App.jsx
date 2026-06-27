@@ -859,9 +859,38 @@ const setPlanFor=(ex)=>{
 };
 const repsNum=(r)=>{const m=String(r||"").match(/\d+/);return m?parseInt(m[0]):0;};
 
-function CircuitPlayer({mode,exos,onClose,defMin}) {
-  const [amrapMin,setAmrapMin]=useState(defMin||12);
-  const [emomMin,setEmomMin]=useState(defMin||Math.max(exos.length,8));
+function SessionSettingsSheet({day,curMode,onClose,onApply}) {
+  const[mode,setMode]=useState(curMode||"classique");
+  const[injury,setInjury]=useState([]);
+  const[equipMode,setEquipMode]=useState("all");
+  const[equip,setEquip]=useState([]);
+  const ZONES=[["epaule","Épaule"],["genou","Genou"],["dos","Dos"],["poignet","Poignet"],["hanche","Hanche"]];
+  const EQS=[["kb","Kettlebell"],["db","Haltères"],["bar","Barre"],["mc","Machine"],["cd","Cardio"],["bw","Poids du corps"]];
+  const tog=(arr,set,v)=>set(arr.indexOf(v)>=0?arr.filter(x=>x!==v):[...arr,v]);
+  const Chip=({on,label,onTap})=>(<Tap onTap={onTap} style={{padding:"10px 14px",borderRadius:11,background:on?C.blue:C.s2,border:`1px solid ${on?C.blue:C.div}`}}><span style={{fontSize:14,fontWeight:600,color:on?"#000":C.ink2}}>{label}</span></Tap>);
+  const apply=()=>{ const cons={injury}; if(equipMode==="bw") cons.bw=true; else if(equipMode==="pick"&&equip.length) cons.equipment=equip; onApply({mode,cons}); };
+  return (<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.4)",zIndex:Z.fullscreen,display:"flex",alignItems:"flex-end",fontFamily:F}} onClick={onClose}>
+    <div onClick={e=>e.stopPropagation()} style={{width:"100%",maxHeight:"88vh",overflowY:"auto",background:C.bg,borderTopLeftRadius:22,borderTopRightRadius:22,padding:"20px 20px calc(20px + env(safe-area-inset-bottom))"}}>
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:18}}><span style={{fontSize:18,fontWeight:700,color:C.ink}}>Réglages de la séance</span><Tap onTap={onClose} style={{width:36,height:36,borderRadius:10,background:C.s2,display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{fontSize:14,color:C.ink3}}>✕</span></Tap></div>
+      <div style={{fontSize:12,color:C.ink4,marginBottom:18}}>Ces réglages ne s'appliquent qu'à cette séance, pas au reste du programme.</div>
+      <div style={{fontSize:12,fontWeight:700,color:C.ink4,textTransform:"uppercase",letterSpacing:".08em",marginBottom:10}}>Format</div>
+      <div style={{display:"flex",gap:8,marginBottom:22}}>{[["classique","Classique"],["amrap","AMRAP"],["emom","EMOM"]].map(([m,l])=><div key={m} style={{flex:1}}><Chip on={mode===m} label={l} onTap={()=>setMode(m)}/></div>)}</div>
+      <div style={{fontSize:12,fontWeight:700,color:C.ink4,textTransform:"uppercase",letterSpacing:".08em",marginBottom:10}}>Blessure — zone à éviter</div>
+      <div style={{display:"flex",flexWrap:"wrap",gap:8,marginBottom:22}}>{ZONES.map(([k,l])=><Chip key={k} on={injury.indexOf(k)>=0} label={l} onTap={()=>tog(injury,setInjury,k)}/>)}</div>
+      <div style={{fontSize:12,fontWeight:700,color:C.ink4,textTransform:"uppercase",letterSpacing:".08em",marginBottom:10}}>Équipement</div>
+      <div style={{display:"flex",gap:8,marginBottom:12}}>{[["all","Tout"],["bw","Poids du corps"],["pick","Choisir"]].map(([k,l])=><Chip key={k} on={equipMode===k} label={l} onTap={()=>setEquipMode(k)}/>)}</div>
+      {equipMode==="pick"&&<div style={{display:"flex",flexWrap:"wrap",gap:8,marginBottom:12}}>{EQS.map(([k,l])=><Chip key={k} on={equip.indexOf(k)>=0} label={l} onTap={()=>tog(equip,setEquip,k)}/>)}</div>}
+      <Tap onTap={apply} style={{marginTop:14,height:52,borderRadius:14,background:C.ink,display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{fontSize:15,fontWeight:700,color:"#fff"}}>Appliquer à cette séance</span></Tap>
+    </div>
+  </div>);
+}
+function CircuitPlayer({mode,exos,onClose,defMin,blocks,onAllDone}) {
+  const BLK=(blocks&&blocks.length)?blocks:[{label:mode==="amrap"?"AMRAP":"EMOM",kind:mode,exercises:exos||[],durationMin:defMin||(mode==="amrap"?12:Math.max((exos||[]).length,8))}];
+  const [bi,setBi]=useState(0);
+  const cur=BLK[Math.min(bi,BLK.length-1)];
+  mode=cur.kind||mode; exos=cur.exercises||[];
+  const [amrapMin,setAmrapMin]=useState(cur.durationMin||defMin||12);
+  const [emomMin,setEmomMin]=useState(cur.durationMin||defMin||Math.max(exos.length,8));
   const [running,setRunning]=useState(false);
   const [elapsed,setElapsed]=useState(0);
   const [rounds,setRounds]=useState(0);
@@ -869,6 +898,7 @@ function CircuitPlayer({mode,exos,onClose,defMin}) {
   const minutes=mode==="amrap"?amrapMin:emomMin;
   const total=minutes*60;
   useEffect(()=>()=>clearInterval(ref.current),[]);
+  useEffect(()=>{ clearInterval(ref.current); setRunning(false); setElapsed(0); setRounds(0); lastMin.current=0; const dm=cur.durationMin||12; setAmrapMin(dm); setEmomMin(dm); },[bi]);
   const start=()=>{ if(running||total<=0)return; setRunning(true); lastMin.current=Math.floor(elapsed/60); const tt=total,md=mode; ref.current=setInterval(()=>{ setElapsed(pp=>{ const n=pp+1; if(md==="emom"){const cm=Math.floor(n/60); if(cm!==lastMin.current&&n<tt){lastMin.current=cm;beep();}} if(n>=tt){clearInterval(ref.current);setRunning(false);beep();return tt;} return n;}); },1000); };
   const pause=()=>{clearInterval(ref.current);setRunning(false);};
   const reset=()=>{clearInterval(ref.current);setRunning(false);setElapsed(0);setRounds(0);lastMin.current=0;};
@@ -878,13 +908,15 @@ function CircuitPlayer({mode,exos,onClose,defMin}) {
   const secInMin=done?0:60-(elapsed%60);
   const emomEx=exos.length?exos[(curMin-1)%exos.length]:null;
   const setMin=mode==="amrap"?setAmrapMin:setEmomMin;
+  const lastBlock=bi>=BLK.length-1;
+  const nextBlock=()=>{ if(lastBlock){ onAllDone&&onAllDone(); onClose&&onClose(); } else { setBi(b=>b+1); } };
   const primary=running?{label:"Pause",act:pause,bg:C.redDim,fg:C.red,bd:C.red}
-    :done?{label:"Recommencer",act:reset,bg:C.s2,fg:C.ink,bd:C.s4}
-    :{label:"Démarrer",act:start,bg:C.blue,fg:"#000",bd:C.blue};
+    :done?{label:lastBlock?"Terminer la séance":"Bloc suivant →",act:nextBlock,bg:C.blue,fg:"#000",bd:C.blue}
+    :{label:"Démarrer le bloc",act:start,bg:C.blue,fg:"#000",bd:C.blue};
   return (
     <div style={{position:"fixed",inset:0,background:C.bg,zIndex:Z.fullscreen,display:"flex",flexDirection:"column",fontFamily:F,paddingTop:"env(safe-area-inset-top)",paddingBottom:"env(safe-area-inset-bottom)"}}>
       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"16px 20px"}}>
-        <div><div style={{fontSize:20,fontWeight:700,color:C.ink}}>Circuit {mode==="amrap"?"AMRAP":"EMOM"}</div><div style={{fontSize:12,color:C.ink4,marginTop:2}}>{exos.length} exercices</div></div>
+        <div><div style={{fontSize:20,fontWeight:700,color:C.ink}}>{cur.label||(mode==="amrap"?"AMRAP":"EMOM")}</div><div style={{fontSize:12,color:C.ink4,marginTop:2}}>Bloc {bi+1}/{BLK.length} · {exos.length} exercices</div></div>
         <Tap onTap={onClose} style={{width:40,height:40,borderRadius:10,background:C.s2,display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{fontSize:14,color:C.ink3}}>✕</span></Tap>
       </div>
       <div style={{flex:1,overflowY:"auto",padding:"0 20px",display:"flex",flexDirection:"column"}}>
@@ -1766,7 +1798,7 @@ function SettingsTab({user,excluded,onToggleExclude,onSignOut,onReset,onOpenLibr
           <span style={{fontSize:17,color:C.red}}>›</span>
         </Tap>
       </div>
-      <div style={{fontSize:12,color:C.ink4,textAlign:"center",marginTop:28}}>SŌMA · {"S"+weekNumber()} · {DB.length} exercices · build 23.12a</div>
+      <div style={{fontSize:12,color:C.ink4,textAlign:"center",marginTop:28}}>SŌMA · {"S"+weekNumber()} · {DB.length} exercices · build 23.13a</div>
     </div>
   );
 }
@@ -1960,8 +1992,10 @@ export default function SomaApp() {
   const[fullScreenEx,setFullScreenEx]=useState(null);
   const[detailEx,setDetailEx]=useState(null);
   const[focusIdx,setFocusIdx]=useState(null);
-  const[sessionMode,setSessionMode]=useState("classique");
   const[showCircuit,setShowCircuit]=useState(false);
+  const[showSettings,setShowSettings]=useState(false);
+  const[dayCons,setDayCons]=useState(null);
+  const[modeOverride,setModeOverride]=useState(null);
   const[showRestFull,setShowRestFull]=useState(false);
   const[restLabel,setRestLabel]=useState("");
   const[sbReady,setSbReady]=useState(false);
@@ -1970,8 +2004,7 @@ export default function SomaApp() {
   const rest=useCountdown(()=>setShowRestFull(true));
   const wk=weekNumber();
   const viewSchedule=useMemo(()=>{let s=autoRotate?schedule.map(d=>rotateDay(d,wk)):schedule;const eq=profile?.equipment;if(eq&&eq.length)s=s.map(d=>adaptEquip(d,eq));const g=profile?.goal;if(g&&g!=="hybride")s=s.map(d=>adaptGoal(d,g));s=s.map(d=>personalizeDay(d,profile,progWeekOf(profile?.program_start)));const _mp=weeklyModePlan(s,profile,progWeekOf(profile?.program_start));s=s.map((d,i)=>(d&&d.salle)?{...d,recommendedMode:(_mp[i]&&_mp[i].mode)||"classique",circuit:(_mp[i]&&_mp[i].circuit)||false}:d);return s;},[schedule,autoRotate,wk,profile]);
-  const recMode=(viewSchedule[dayIdx]||PROGRAM[dayIdx])?.recommendedMode;
-  useEffect(()=>{ if(recMode) setSessionMode(recMode); },[dayIdx,recMode]);
+
 
   // ── Auth listener ──
   useEffect(()=>{
@@ -2180,13 +2213,15 @@ export default function SomaApp() {
   if(showWelcome) return(<WelcomeScreen user={user} todaySession={viewSchedule[todayIdx()]||PROGRAM[todayIdx()]} streak={streak} onStart={()=>{setShowWelcome(false);setDayIdx(todayIdx());}} onSkip={()=>setShowWelcome(false)}/>);
 
   const day0=viewSchedule[dayIdx]||PROGRAM[dayIdx];
-  const day=applyMode(day0,sessionMode,profile,progWeekOf(profile?.program_start),dayIdx);
+  const effMode=modeOverride||day0?.recommendedMode||"classique";
+  const sessionMode=effMode;
+  const day=applyMode(day0,effMode,profile,progWeekOf(profile?.program_start),dayIdx,dayCons);
   const sDate=programDate(dayIdx);
   const isDayDone=sessions.some(s=>s.date===sDate&&s.day===day?.day);
   const isRest=!day?.salle;
   const exos=(aiOverride?.exercises||day?.exercises||[]).filter(e=>!excluded.includes(e.id));
   const absExos=aiOverride?.abs||day?.abs||[];
-  const NAV=[{id:"seance",l:"Séance"},{id:"stats",l:"Stats"},{id:"history",l:"Historique"},{id:"settings",l:"Réglages"}];
+  const NAV=[{id:"seance",l:"Séances"},{id:"stats",l:"Stats"},{id:"history",l:"Historique"},{id:"settings",l:"Profil"}];
 
   return(
     <div style={{background:C.bg,minHeight:"100dvh",color:C.ink,fontFamily:F,overflowX:"hidden"}}>
@@ -2227,7 +2262,7 @@ export default function SomaApp() {
             const pct=exList.length?done/exList.length:0;
             const isSel=i===dayIdx,isToday=i===todayIdx();
             return(
-              <Tap key={i} onTap={()=>{setDayIdx(i);setAiOverride(null);}} style={{flexShrink:0,minWidth:52,padding:"10px 6px",textAlign:"center",borderRadius:12,background:isSel?C.s2:"transparent",border:`1px solid ${isSel?C.s4:"transparent"}`,transition:`all 200ms ${EO}`}}>
+              <Tap key={i} onTap={()=>{setDayIdx(i);setAiOverride(null);setDayCons(null);setModeOverride(null);}} style={{flexShrink:0,minWidth:52,padding:"10px 6px",textAlign:"center",borderRadius:12,background:isSel?C.s2:"transparent",border:`1px solid ${isSel?C.s4:"transparent"}`,transition:`all 200ms ${EO}`}}>
                 <div style={{fontSize:10,fontWeight:600,color:isSel?C.ink2:C.ink4,letterSpacing:".06em",marginBottom:4}}>{d.day}</div>
                 {isToday&&<div style={{width:6,height:6,borderRadius:"50%",background:C.lime,margin:"0 auto 4px"}}/>}
                 {d.salle&&pct>0&&<div style={{width:"70%",height:2,background:C.s4,borderRadius:1,margin:"0 auto"}}>
@@ -2252,7 +2287,7 @@ export default function SomaApp() {
                 <div style={{textAlign:"center",padding:"80px 20px"}}>
                   <div style={{fontSize:36,fontWeight:700,color:C.ink4,letterSpacing:"-.02em",marginBottom:14}}>Récupération</div>
                   <div style={{fontSize:17,color:C.ink4,lineHeight:1.65,maxWidth:300,margin:"0 auto 28px"}}>{dayIdx===3?"Récupération active. Tes fibres consolident.":"Reset total. Synthèse protéique prioritaire."}</div>
-                  <Tap onTap={()=>setShowAI(true)} style={{display:"inline-flex",padding:"13px 24px",borderRadius:980,border:`1px solid ${C.div}`,background:"transparent"}}>
+                  <Tap onTap={()=>setShowSettings(true)} style={{display:"inline-flex",padding:"13px 24px",borderRadius:980,border:`1px solid ${C.div}`,background:"transparent"}}>
                     <span style={{fontSize:15,fontWeight:600,color:C.ink3}}>Générer une séance légère</span>
                   </Tap>
                 </div>
@@ -2284,8 +2319,8 @@ export default function SomaApp() {
                           <span style={{fontSize:17,fontWeight:600,color:"#000"}}>Démarrer</span>
                         </Tap>
                       )}
-                      <Tap onTap={()=>setShowAI(true)} style={{padding:"16px 20px",borderRadius:15,border:`1px solid ${C.div}`,display:"flex",alignItems:"center",justifyContent:"center"}}>
-                        <span style={{fontSize:14,fontWeight:600,color:C.ink3}}>IA</span>
+                      <Tap onTap={()=>setShowSettings(true)} style={{padding:"16px 20px",borderRadius:15,border:`1px solid ${C.div}`,display:"flex",alignItems:"center",justifyContent:"center"}}>
+                        <span style={{fontSize:14,fontWeight:600,color:C.ink3}}>Réglages</span>
                       </Tap>
                     </div>
                   ):(
@@ -2297,8 +2332,8 @@ export default function SomaApp() {
                       <Tap onTap={()=>{clock.stop();setShowFeedback(true);}} style={{flex:2,padding:"15px",borderRadius:15,background:C.blue,border:"none",display:"flex",alignItems:"center",justifyContent:"center"}}>
                         <span style={{fontSize:17,fontWeight:600,color:"#000"}}>Fin de séance</span>
                       </Tap>
-                      <Tap onTap={()=>setShowAI(true)} style={{padding:"15px 16px",borderRadius:15,border:`1px solid ${C.div}`,display:"flex",alignItems:"center",justifyContent:"center"}}>
-                        <span style={{fontSize:13,fontWeight:600,color:C.ink3}}>IA</span>
+                      <Tap onTap={()=>setShowSettings(true)} style={{padding:"15px 16px",borderRadius:15,border:`1px solid ${C.div}`,display:"flex",alignItems:"center",justifyContent:"center"}}>
+                        <span style={{fontSize:13,fontWeight:600,color:C.ink3}}>Réglages</span>
                       </Tap>
                     </div>
                   )}
@@ -2333,7 +2368,7 @@ export default function SomaApp() {
                       onClose={()=>setFocusIdx(null)} hasNext={focusIdx<exos.length-1} onNext={()=>setFocusIdx(focusIdx+1)}/>
                   )}
                   {showCircuit&&sessionMode!=="classique"&&exos.length>0&&(
-                    <CircuitPlayer mode={sessionMode} exos={exos} defMin={sessionMode==="amrap"?(day.timeCapMin||12):(day.emomMinutes||Math.max(exos.length,8))} onClose={()=>setShowCircuit(false)}/>
+                    <CircuitPlayer mode={sessionMode} exos={exos} blocks={day.blocks} defMin={sessionMode==="amrap"?(day.timeCapMin||12):(day.emomMinutes||Math.max(exos.length,8))} onClose={()=>setShowCircuit(false)} onAllDone={()=>{}}/>
                   )}
                   {absExos.length>0&&(
                     <div style={{marginTop:24,paddingTop:20,borderTop:`1px solid ${C.s3}`}}>
@@ -2394,6 +2429,7 @@ export default function SomaApp() {
       {!showRestFull&&rest.sec>0&&<MiniRest timer={rest} label={restLabel} onExpand={()=>setShowRestFull(true)}/>}
       {detailEx&&<ExerciseSheet ex={detailEx} fav={favorites.includes(detailEx.id)} onToggleFav={toggleFav} onClose={()=>setDetailEx(null)} sessions={sessions}/>}
       {showFeedback&&<FeedbackSheet onClose={()=>setShowFeedback(false)} onSave={handleFeedbackSave}/>}
+      {showSettings&&<SessionSettingsSheet day={day} curMode={effMode} onClose={()=>setShowSettings(false)} onApply={({mode,cons})=>{setModeOverride(mode);setDayCons(cons);setShowSettings(false);}}/>}
       {showAI&&<AISheet onClose={()=>setShowAI(false)} onResult={o=>{setAiOverride(o);setShowAI(false);}} excluded={excluded}/>}
       {showPhotos&&<PhotoProgress onClose={()=>setShowPhotos(false)}/>}
       {showTimer&&<IntervalTimer onClose={()=>setShowTimer(false)}/>}
