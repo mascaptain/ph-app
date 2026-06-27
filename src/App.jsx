@@ -1646,6 +1646,7 @@ function SettingsTab({user,excluded,onToggleExclude,onSignOut,onReset,onOpenLibr
   const[h,setH]=useState(profile?.height_cm!=null?String(profile.height_cm):"");
   const[ag,setAg]=useState(profile?.age!=null?String(profile.age):"");
   const[saved,setSaved]=useState(false);
+  const[saveErr,setSaveErr]=useState(false);
   const trainDays=(schedule||[]).map((d,i)=>(d&&d.salle)?i:-1).filter(i=>i>=0);
   return(
     <div style={{padding:"20px 20px 100px",maxWidth:600,margin:"0 auto",fontFamily:F}}>
@@ -1696,7 +1697,7 @@ function SettingsTab({user,excluded,onToggleExclude,onSignOut,onReset,onOpenLibr
           <input inputMode="numeric" value={ag} onChange={e=>setAg(e.target.value.replace(/[^0-9]/g,""))} onBlur={()=>onUpdateConfig({age:ag?Number(ag):null})} placeholder="ans" style={{width:120,height:46,borderRadius:12,border:`1px solid ${C.s4}`,background:C.s2,color:C.ink,fontSize:17,fontWeight:600,fontFamily:F,textAlign:"center",outline:"none",boxSizing:"border-box"}}/>
           <span style={{fontSize:15,color:C.ink4}}>ans</span>
         </div>
-        <Tap onTap={()=>{onUpdateConfig({weight_kg:w?Number(w):null,height_cm:h?Number(h):null,age:ag?Number(ag):null});setSaved(true);setTimeout(()=>setSaved(false),1600);}} style={{marginTop:18,height:48,borderRadius:12,background:saved?C.blue:C.ink,display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{fontSize:14,fontWeight:700,color:saved?"#000":"#fff",letterSpacing:".02em"}}>{saved?"Enregistré ✓":"Enregistrer"}</span></Tap>
+        <Tap onTap={async()=>{const r=await onUpdateConfig({weight_kg:w?Number(w):null,height_cm:h?Number(h):null,age:ag?Number(ag):null});if(r&&r.error){setSaved(false);setSaveErr(true);setTimeout(()=>setSaveErr(false),2400);}else{setSaveErr(false);setSaved(true);setTimeout(()=>setSaved(false),1600);}}} style={{marginTop:18,height:48,borderRadius:12,background:saveErr?C.s4:(saved?C.blue:C.ink),display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{fontSize:14,fontWeight:700,color:saveErr?C.ink:(saved?"#000":"#fff"),letterSpacing:".02em"}}>{saveErr?"Erreur — réessayer":(saved?"Enregistré ✓":"Enregistrer")}</span></Tap>
         <div style={{marginTop:20,paddingTop:18,borderTop:`1px solid ${C.s3}`}}>
           <div style={{fontSize:12,fontWeight:600,color:C.ink4,textTransform:"uppercase",letterSpacing:".08em",marginBottom:8}}>Programme</div>
           {profile?.program_start?(
@@ -1749,7 +1750,7 @@ function SettingsTab({user,excluded,onToggleExclude,onSignOut,onReset,onOpenLibr
           <span style={{fontSize:17,color:C.red}}>›</span>
         </Tap>
       </div>
-      <div style={{fontSize:12,color:C.ink4,textAlign:"center",marginTop:28}}>SŌMA · {"S"+weekNumber()} · {DB.length} exercices · build 23.08a</div>
+      <div style={{fontSize:12,color:C.ink4,textAlign:"center",marginTop:28}}>SŌMA · {"S"+weekNumber()} · {DB.length} exercices · build 23.08b</div>
     </div>
   );
 }
@@ -2040,15 +2041,13 @@ export default function SomaApp() {
 
   const toggleFav=useCallback(id=>{setFavorites(prev=>{const next=prev.includes(id)?prev.filter(x=>x!==id):[...prev,id];persist(user?.id,{favorites:next});return next;});},[persist]);
   const updateConfig=useCallback((updates)=>{
-    setProfile(prev=>{
-      const next={...(prev||{}),...updates};
-      if(updates.days){ next.frequency=updates.days.length; const sched=generateScheduleDays(updates.days); setSchedule(sched); persist(user?.id,{schedule:sched}); }
-      else if(updates.frequency){ const days=FREQ_DAYS[updates.frequency]||FREQ_DAYS[4]; const sched=generateScheduleDays(days); setSchedule(sched); persist(user?.id,{schedule:sched}); }
-      persist(user?.id,{profile:next});
-      try{ supabase.from("profiles").upsert({id:user?.id,goal:next.goal,level:next.level,equipment:next.equipment,frequency:next.frequency,weight_kg:next.weight_kg,sex:next.sex,height_cm:next.height_cm,age:next.age,program_start:next.program_start,rms:next.rms,updated_at:new Date().toISOString()},{onConflict:"id"}); }catch(_e){}
-      return next;
-    });
-  },[persist,user]);
+    const next={...(profile||{}),...updates};
+    if(updates.days){ next.frequency=updates.days.length; const sched=generateScheduleDays(updates.days); setSchedule(sched); persist(user?.id,{schedule:sched}); }
+    else if(updates.frequency){ const days=FREQ_DAYS[updates.frequency]||FREQ_DAYS[4]; const sched=generateScheduleDays(days); setSchedule(sched); persist(user?.id,{schedule:sched}); }
+    setProfile(next);
+    persist(user?.id,{profile:next});
+    return (async()=>{ try{ const{error}=await supabase.from("profiles").upsert({id:user?.id,goal:next.goal,level:next.level,equipment:next.equipment,frequency:next.frequency,weight_kg:next.weight_kg,sex:next.sex,height_cm:next.height_cm,age:next.age,program_start:next.program_start,rms:next.rms,updated_at:new Date().toISOString()},{onConflict:"id"}); if(error)console.error("profile save",error.message); return {error}; }catch(e){ console.error("profile save",e); return {error:e}; } })();
+  },[persist,user,profile]);
 
   const switchTab=useCallback(id=>{setPrevTab(tab);setTab(id);},[tab]);
 
