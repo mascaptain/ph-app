@@ -859,6 +859,38 @@ const setPlanFor=(ex)=>{
 };
 const repsNum=(r)=>{const m=String(r||"").match(/\d+/);return m?parseInt(m[0]):0;};
 
+function HomeTab({profile,streak,sessions,weights,todaySession,onStartToday,accent}) {
+  const now=new Date();
+  const wk=(()=>{const d=new Date(now);const day=(d.getDay()+6)%7;d.setDate(d.getDate()-day);d.setHours(0,0,0,0);return d;})();
+  const weekSessions=sessions.filter(s=>{const sd=new Date(s.date);return sd>=wk;});
+  const weekVol=weekSessions.reduce((a,s)=>a+(s.total_kg||0),0);
+  const totalSessions=sessions.length;
+  const bw=weights&&weights.length?weights[weights.length-1].kg:(profile&&profile.weight_kg);
+  const hour=now.getHours();
+  const hello=hour<12?"Bonjour":hour<18?"Bon après-midi":"Bonsoir";
+  const name=(profile&&profile.name)?profile.name:"";
+  const isRest=!todaySession||!todaySession.salle;
+  const Stat=({v,l,sub})=>(<div style={{flex:1,background:C.s1,borderRadius:16,padding:"16px 14px"}}><div style={{fontSize:26,fontWeight:800,color:C.ink,lineHeight:1}}>{v}</div><div style={{fontSize:12,color:C.ink3,marginTop:6,fontWeight:600}}>{l}</div>{sub&&<div style={{fontSize:11,color:C.ink4,marginTop:2}}>{sub}</div>}</div>);
+  return (<div style={{padding:"20px 20px 0",maxWidth:600,margin:"0 auto"}}>
+    <div style={{marginBottom:6,fontSize:13,color:C.ink4}}>{hello}{name?(", "+name):""}</div>
+    <div style={{fontSize:26,fontWeight:800,color:C.ink,letterSpacing:"-.02em",marginBottom:20}}>SŌMA</div>
+    <div style={{background:isRest?C.s1:C.ink,borderRadius:20,padding:"20px",marginBottom:16}}>
+      <div style={{fontSize:12,fontWeight:700,letterSpacing:".1em",textTransform:"uppercase",color:isRest?C.ink4:"rgba(255,255,255,.55)",marginBottom:8}}>Aujourd'hui</div>
+      <div style={{fontSize:22,fontWeight:800,color:isRest?C.ink:"#fff",marginBottom:4}}>{todaySession?todaySession.label:"Repos"}</div>
+      <div style={{fontSize:13,color:isRest?C.ink3:"rgba(255,255,255,.7)",marginBottom:isRest?0:16}}>{todaySession?todaySession.muscle:"Récupération"}</div>
+      {!isRest&&<Tap onTap={onStartToday} style={{height:50,borderRadius:14,background:C.blue,display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{fontSize:15,fontWeight:800,color:"#000"}}>Démarrer la séance</span></Tap>}
+    </div>
+    <div style={{display:"flex",gap:10,marginBottom:12}}>
+      <Stat v={streak} l="Série" sub={streak>1?"jours d'affilée":"jour"}/>
+      <Stat v={weekSessions.length} l="Cette semaine" sub="séances"/>
+    </div>
+    <div style={{display:"flex",gap:10,marginBottom:12}}>
+      <Stat v={Math.round(weekVol).toLocaleString("fr-FR")} l="Volume semaine" sub="kg soulevés"/>
+      <Stat v={totalSessions} l="Total" sub="séances faites"/>
+    </div>
+    {bw>0&&<div style={{background:C.s1,borderRadius:16,padding:"14px 16px",display:"flex",alignItems:"center",justifyContent:"space-between"}}><span style={{fontSize:13,color:C.ink3,fontWeight:600}}>Poids de corps</span><span style={{fontSize:17,fontWeight:800,color:C.ink}}>{bw} kg</span></div>}
+  </div>);
+}
 function SessionSettingsSheet({day,curMode,onClose,onApply}) {
   const[mode,setMode]=useState(curMode||"classique");
   const[injury,setInjury]=useState([]);
@@ -1798,7 +1830,7 @@ function SettingsTab({user,excluded,onToggleExclude,onSignOut,onReset,onOpenLibr
           <span style={{fontSize:17,color:C.red}}>›</span>
         </Tap>
       </div>
-      <div style={{fontSize:12,color:C.ink4,textAlign:"center",marginTop:28}}>SŌMA · {"S"+weekNumber()} · {DB.length} exercices · build 23.13a</div>
+      <div style={{fontSize:12,color:C.ink4,textAlign:"center",marginTop:28}}>SŌMA · {"S"+weekNumber()} · {DB.length} exercices · build 23.14a</div>
     </div>
   );
 }
@@ -1970,7 +2002,7 @@ export default function SomaApp() {
   const[supersets,setSupersets]=useState([]);
   const toggleLink=(exId)=>{const key=dayIdx+"_"+exId;setSupersets(prev=>{const next=prev.includes(key)?prev.filter(x=>x!==key):[...prev,key];persist(user?.id,{supersets:next});return next;});};
   const[showLibrary,setShowLibrary]=useState(false);
-  const[tab,setTab]=useState("seance");
+  const[tab,setTab]=useState("home");
   const[prevTab,setPrevTab]=useState(null);
   const[dayIdx,setDayIdx]=useState(todayIdx());
   const[log,setLog]=useState({});
@@ -2100,7 +2132,8 @@ export default function SomaApp() {
     return (async()=>{ try{ const{error}=await supabase.from("profiles").upsert({id:user?.id,goal:next.goal,level:next.level,equipment:next.equipment,frequency:next.frequency,weight_kg:next.weight_kg,sex:next.sex,height_cm:next.height_cm,age:next.age,program_start:next.program_start,rms:next.rms,updated_at:new Date().toISOString()},{onConflict:"id"}); if(error)console.error("profile save",error.message); return {error}; }catch(e){ console.error("profile save",e); return {error:e}; } })();
   },[persist,user,profile]);
 
-  const switchTab=useCallback(id=>{setPrevTab(tab);setTab(id);},[tab]);
+  const switchTab=useCallback(id=>{setPrevTab(tab);setTab(id);try{window.scrollTo(0,0);}catch(_e){}},[tab]);
+  useEffect(()=>{ if(focusIdx!=null){ try{window.scrollTo({top:0,behavior:"auto"});}catch(_e){try{window.scrollTo(0,0);}catch(__e){}} } },[focusIdx]);
 
   const handleStartRest=(s,n)=>{setRestLabel(n);rest.start(s);setShowRestFull(true);};
 
@@ -2221,7 +2254,7 @@ export default function SomaApp() {
   const isRest=!day?.salle;
   const exos=(aiOverride?.exercises||day?.exercises||[]).filter(e=>!excluded.includes(e.id));
   const absExos=aiOverride?.abs||day?.abs||[];
-  const NAV=[{id:"seance",l:"Séances"},{id:"stats",l:"Stats"},{id:"history",l:"Historique"},{id:"settings",l:"Profil"}];
+  const NAV=[{id:"home",l:"Accueil"},{id:"seance",l:"Séances"},{id:"stats",l:"Stats"},{id:"settings",l:"Profil"}];
 
   return(
     <div style={{background:C.bg,minHeight:"100dvh",color:C.ink,fontFamily:F,overflowX:"hidden"}}>
@@ -2281,6 +2314,7 @@ export default function SomaApp() {
       {/* CONTENT */}
       <div style={{paddingBottom:80}}>
         <TabContent tab={tab} prevTab={prevTab}>
+          {tab==="home"&&<HomeTab profile={profile} streak={streak} sessions={sessions} weights={weights} todaySession={viewSchedule[todayIdx()]||PROGRAM[todayIdx()]} accent={accent} onStartToday={()=>{setDayIdx(todayIdx());switchTab("seance");}}/>}
           {tab==="seance"&&(
             <div style={{padding:"16px 20px 0",maxWidth:600,margin:"0 auto"}}>
               {isRest?(
