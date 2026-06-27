@@ -952,7 +952,7 @@ function CircuitPlayer({mode,exos,onClose,defMin,blocks,onAllDone,startBlock}) {
         <div><div style={{fontSize:20,fontWeight:700,color:C.ink}}>{cur.label||(mode==="amrap"?"AMRAP":"EMOM")}</div><div style={{fontSize:12,color:C.ink4,marginTop:2}}>Bloc {bi+1}/{BLK.length} · {exos.length} exercices</div></div>
         <Tap onTap={onClose} style={{width:40,height:40,borderRadius:10,background:C.s2,display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{fontSize:14,color:C.ink3}}>✕</span></Tap>
       </div>
-      <div style={{flex:1,overflowY:"auto",padding:"0 20px",display:"flex",flexDirection:"column"}}>
+      <div style={{flex:1,overflowY:"auto",overscrollBehavior:"contain",padding:"0 20px 24px",display:"flex",flexDirection:"column",justifyContent:running?"center":"flex-start"}}>
         <div style={{fontSize:13,color:C.ink4,lineHeight:1.5,marginBottom:16}}>{mode==="amrap"?"Fais un maximum de tours du circuit avant la fin du temps. Compte chaque tour terminé.":"À chaque début de minute (bip), enchaine l'exercice affiché, puis repose-toi jusqu'à la minute suivante."}</div>
         <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",background:C.s2,borderRadius:14,padding:"12px 16px",marginBottom:16}}>
           <span style={{fontSize:15,color:C.ink2}}>Durée</span>
@@ -1410,7 +1410,7 @@ function IntervalTimer({onClose}) {
       <div style={{display:"flex",gap:8,padding:"0 20px 16px"}}>
         {[["amrap","AMRAP"],["emom","EMOM"]].map(([m,l])=>(<Tap key={m} onTap={()=>!running&&setMode(m)} style={{flex:1,padding:"12px",borderRadius:12,background:mode===m?C.blue:C.s2,display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{fontSize:15,fontWeight:700,color:mode===m?"#000":C.ink3}}>{l}</span></Tap>))}
       </div>
-      <div style={{flex:1,overflowY:"auto",padding:"0 20px",display:"flex",flexDirection:"column"}}>
+      <div style={{flex:1,overflowY:"auto",overscrollBehavior:"contain",padding:"0 20px 24px",display:"flex",flexDirection:"column",justifyContent:running?"center":"flex-start"}}>
         <div style={{fontSize:13,color:C.ink4,lineHeight:1.5,marginBottom:16}}>{mode==="amrap"?"As Many Rounds As Possible : un max de tours avant la fin du temps. Compte tes tours avec le bouton.":"Every Minute On the Minute : à chaque début de minute (bip), fais tes reps, repose-toi le reste de la minute."}</div>
         {mode==="amrap"
           ? <Step label="Durée" val={amrapMin} setVal={setAmrapMin} min={1} max={60} unit=" min"/>
@@ -1467,14 +1467,45 @@ function SkillsOctagon({sessions}) {
   );
 }
 
+function LoadChart({data,color=C.blue}){
+  if(!data||data.length===0) return <div style={{height:90,display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{fontSize:13,color:C.ink4}}>Pas encore de données pour cet exercice.</span></div>;
+  const vals=data.map(d=>d.v);const max=Math.max(...vals);const min=Math.min(...vals);
+  if(data.length===1){
+    const v=vals[0];const scaleMax=Math.max(v*1.5,v+10);const frac=Math.min(1,Math.max(0,v/scaleMax));const ang=Math.PI*(1-frac);const cx=110,cy=92,r=80;const nx=cx+r*Math.cos(ang),ny=cy-r*Math.sin(ang);
+    return(<div style={{display:"flex",flexDirection:"column",alignItems:"center"}}>
+      <svg viewBox="0 0 220 110" style={{width:"100%",maxWidth:240}}>
+        <path d="M30 92 A80 80 0 0 1 190 92" fill="none" stroke={C.s3} strokeWidth="12" strokeLinecap="round"/>
+        <path d={`M30 92 A80 80 0 0 1 ${nx} ${ny}`} fill="none" stroke={color} strokeWidth="12" strokeLinecap="round"/>
+        <circle cx={nx} cy={ny} r="7" fill={color}/>
+      </svg>
+      <div style={{fontSize:24,fontWeight:700,color:C.ink,marginTop:-6}}>{v}kg</div>
+      <div style={{fontSize:12,color:C.ink4}}>1 séance enregistrée</div>
+    </div>);
+  }
+  const H=90;const range=(max-min)||1;
+  return(<div>
+    <div style={{display:"flex",alignItems:"flex-end",gap:6,height:H}}>
+      {data.map((d,i)=>{const h=14+((d.v-min)/range)*(H-26);const last=i===data.length-1;return(
+        <div key={i} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"flex-end",height:"100%"}}>
+          <span style={{fontSize:10,fontWeight:700,color:last?color:C.ink3,marginBottom:3}}>{d.v}</span>
+          <div style={{width:"100%",maxWidth:34,height:h,borderRadius:8,background:last?color:C.s3}}/>
+        </div>);})}
+    </div>
+    <div style={{display:"flex",gap:6,marginTop:6}}>
+      {data.map((d,i)=>(<div key={i} style={{flex:1,textAlign:"center",fontSize:10,color:C.ink4}}>{d.date}</div>))}
+    </div>
+  </div>);
+}
 function StatsTab({sessions,weights,accent,onOpenPhotos}) {
   const[selEx,setSelEx]=useState(null);
   const total=sessions.length,totalKg=sessions.reduce((a,s)=>a+(s.totalKg||0),0);
   const avgScore=total?Math.round(sessions.reduce((a,s)=>a+(s.score||0),0)/total):0;
-  const pbs=Object.entries(weights).map(([id,kg])=>{const ex=DB.find(e=>e.id===id);if(!ex)return null;return{...ex,pbKg:kg,oneRM:orm(kg,ex.reps)};}).filter(Boolean).sort((a,b)=>(b.oneRM||0)-(a.oneRM||0));
+  const PBCAT={bar:"Barre",db:"Haltères",kb:"Kettlebell",mc:"Machine",bw:"Poids du corps",cd:"Cardio"};
+  const[showAllPB,setShowAllPB]=useState(false);
+  const pbs=useMemo(()=>{const m={};(sessions||[]).forEach(s=>{(s.exercises||[]).forEach(e=>{if(e&&e.id&&(e.completedSets>0)&&(e.weight>0)){if(!m[e.id]||e.weight>m[e.id])m[e.id]=e.weight;}});});return Object.entries(m).map(([id,kg])=>{const ex=DB.find(x=>x.id===id);if(!ex)return null;return{...ex,pbKg:kg,oneRM:orm(kg,ex.reps)};}).filter(Boolean).sort((a,b)=>(b.oneRM||0)-(a.oneRM||0));},[sessions]);
   const progressData=useMemo(()=>{
     if(!selEx) return [];
-    return sessions.filter(s=>s.weights?.[selEx]).map(s=>({date:s.date.slice(5),v:s.weights[selEx]})).slice(-8);
+    return (sessions||[]).filter(s=>(s.exercises||[]).some(e=>e.id===selEx&&e.weight>0)).map(s=>{const e=(s.exercises||[]).find(x=>x.id===selEx);return{date:(s.date||"").slice(5),v:e?e.weight:0};}).filter(d=>d.v>0).slice(-10);
   },[selEx,sessions]);
   const volumeByWeek=useMemo(()=>{
     const weeks={};sessions.forEach(s=>{const w=s.date.slice(0,7);weeks[w]=(weeks[w]||0)+(s.totalKg||0);});
@@ -1514,23 +1545,17 @@ function StatsTab({sessions,weights,accent,onOpenPhotos}) {
             </Tap>
           ))}
         </div>
-        {selEx?<ProgressLine data={progressData} color={C.green} height={56}/>:<div style={{height:56,display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,color:C.ink4}}>Sélectionne un exercice</div>}
+        {selEx?<LoadChart data={progressData} color={C.green}/>:<div style={{height:56,display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,color:C.ink4}}>Sélectionne un exercice</div>}
       </div>
       {/* PBs */}
       <div style={{fontSize:12,fontWeight:600,color:C.ink4,textTransform:"uppercase",letterSpacing:".1em",marginBottom:12}}>Personal Bests</div>
-      {pbs.length===0?<div style={{textAlign:"center",padding:"32px 0",fontSize:17,color:C.ink4}}>Log des charges pour voir tes PBs.</div>:
-        pbs.map((pb,i)=>(
-          <div key={i} style={{background:C.s1,borderRadius:14,padding:"14px 18px",marginBottom:8,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-            <div>
-              <div style={{fontSize:15,fontWeight:600,color:C.ink}}>{pb.n}</div>
-              <div style={{fontSize:13,color:C.ink3}}>{pb.m}</div>
-            </div>
-            <div style={{textAlign:"right"}}>
-              <div style={{fontSize:20,fontWeight:700,color:C.ink}}>{pb.pbKg===0?"BW":`${pb.pbKg}kg`}</div>
-              {pb.oneRM&&<div style={{fontSize:12,fontWeight:600,color:C.blue}}>1RM ~{pb.oneRM}kg</div>}
-            </div>
-          </div>
-        ))}
+      {pbs.length===0?<div style={{textAlign:"center",padding:"32px 0",fontSize:15,color:C.ink4}}>Réalise des séances avec charges pour débloquer tes PB.</div>:
+        (()=>{
+          const Row=(pb,i)=>(<div key={pb.id||i} style={{background:C.s1,borderRadius:14,padding:"14px 18px",marginBottom:8,display:"flex",justifyContent:"space-between",alignItems:"center"}}><div><div style={{fontSize:15,fontWeight:600,color:C.ink}}>{pb.n}</div><div style={{fontSize:13,color:C.ink3}}>{pb.m}</div></div><div style={{textAlign:"right"}}><div style={{fontSize:20,fontWeight:700,color:C.ink}}>{pb.pbKg===0?"BW":pb.pbKg+"kg"}</div>{pb.oneRM?<div style={{fontSize:12,fontWeight:600,color:C.blue}}>1RM ~{pb.oneRM}kg</div>:null}</div></div>);
+          if(!showAllPB){return(<>{pbs.slice(0,5).map(Row)}{pbs.length>5&&<Tap onTap={()=>setShowAllPB(true)} style={{textAlign:"center",padding:"12px 0",marginTop:2}}><span style={{fontSize:14,fontWeight:700,color:C.blue}}>Voir tous les PB ({pbs.length}) ›</span></Tap>}</>);}
+          const groups={};pbs.forEach(pb=>{const eqc=Array.isArray(pb.eq)?pb.eq[0]:pb.eq;const k=PBCAT[eqc]||"Autre";(groups[k]=groups[k]||[]).push(pb);});
+          return(<>{Object.keys(groups).map(cat=>(<div key={cat} style={{marginBottom:14}}><div style={{fontSize:11,fontWeight:700,color:C.ink4,textTransform:"uppercase",letterSpacing:".1em",marginBottom:8}}>{cat}</div>{groups[cat].map(Row)}</div>))}<Tap onTap={()=>setShowAllPB(false)} style={{textAlign:"center",padding:"12px 0"}}><span style={{fontSize:14,fontWeight:700,color:C.ink3}}>Réduire ‹</span></Tap></>);
+        })()}
     </div>
   );
 }
@@ -1604,7 +1629,6 @@ function HistoryTab({sessions,onSelect,accent,onOpenPhotos}) {
   const dates=sessions.map(s=>s.date);
   return(
     <div style={{padding:"20px 20px 100px",maxWidth:600,margin:"0 auto",fontFamily:F}}>
-      <WeekSummary sessions={sessions} accent={accent}/>
       {(()=>{
         let photos={};try{photos=JSON.parse(localStorage.getItem("soma_photos")||"{}");}catch(_e){}
         const dates=Object.keys(photos).sort().reverse();
@@ -1731,14 +1755,19 @@ function SettingsTab({user,excluded,onToggleExclude,onSignOut,onReset,onOpenLibr
   const[ag,setAg]=useState(profile?.age!=null?String(profile.age):"");
   const[saved,setSaved]=useState(false);
   const[saveErr,setSaveErr]=useState(false);
+  const[avatar,setAvatar]=useState(()=>{try{return localStorage.getItem("soma_avatar_"+(user?.id||""))||"";}catch(_e){return"";}});
+  const avatarRef=useRef(null);
+  const onAvatar=e=>{const f=e.target.files&&e.target.files[0];if(!f)return;const r=new FileReader();r.onload=()=>{const d=r.result;setAvatar(d);try{localStorage.setItem("soma_avatar_"+(user?.id||""),d);}catch(_e){}};r.readAsDataURL(f);};
   const trainDays=(schedule||[]).map((d,i)=>(d&&d.salle)?i:-1).filter(i=>i>=0);
   return(
     <div style={{padding:"20px 20px 100px",maxWidth:600,margin:"0 auto",fontFamily:F}}>
       {/* Profile card */}
       <div style={{background:C.s1,borderRadius:20,padding:"24px",marginBottom:16,display:"flex",alignItems:"center",gap:18}}>
-        <div style={{width:56,height:56,borderRadius:"50%",background:C.blue,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
-          <span style={{fontSize:22,fontWeight:700,color:"#000"}}>{(user?.user_metadata?.name||user?.email||"U")[0].toUpperCase()}</span>
+        <div onClick={()=>avatarRef.current&&avatarRef.current.click()} style={{position:"relative",width:56,height:56,borderRadius:"50%",background:C.blue,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,overflow:"hidden",cursor:"pointer"}}>
+          {avatar?<img src={avatar} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/>:<span style={{fontSize:22,fontWeight:700,color:"#000"}}>{(user?.user_metadata?.name||user?.email||"U")[0].toUpperCase()}</span>}
+          <div style={{position:"absolute",left:0,right:0,bottom:0,background:"rgba(0,0,0,.45)",fontSize:9,color:"#fff",textAlign:"center",padding:"1px 0"}}>{avatar?"Modifier":"Ajouter"}</div>
         </div>
+        <input ref={avatarRef} type="file" accept="image/*" onChange={onAvatar} style={{display:"none"}}/>
         <div style={{flex:1,minWidth:0}}>
           <div style={{fontSize:19,fontWeight:600,color:C.ink,marginBottom:3}}>{user?.user_metadata?.name||"Athlète"}</div>
           <div style={{fontSize:14,color:C.ink3,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{user?.email||""}</div>
@@ -1834,7 +1863,7 @@ function SettingsTab({user,excluded,onToggleExclude,onSignOut,onReset,onOpenLibr
           <span style={{fontSize:17,color:C.red}}>›</span>
         </Tap>
       </div>
-      <div style={{fontSize:12,color:C.ink4,textAlign:"center",marginTop:28}}>SŌMA · {"S"+weekNumber()} · {DB.length} exercices · build 23.17a</div>
+      <div style={{fontSize:12,color:C.ink4,textAlign:"center",marginTop:28}}>SŌMA · {"S"+weekNumber()} · {DB.length} exercices · build 23.18a</div>
     </div>
   );
 }
