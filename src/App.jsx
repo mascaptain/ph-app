@@ -916,9 +916,9 @@ function SessionSettingsSheet({day,curMode,onClose,onApply}) {
     </div>
   </div>);
 }
-function CircuitPlayer({mode,exos,onClose,defMin,blocks,onAllDone}) {
+function CircuitPlayer({mode,exos,onClose,defMin,blocks,onAllDone,startBlock}) {
   const BLK=(blocks&&blocks.length)?blocks:[{label:mode==="amrap"?"AMRAP":"EMOM",kind:mode,exercises:exos||[],durationMin:defMin||(mode==="amrap"?12:Math.max((exos||[]).length,8))}];
-  const [bi,setBi]=useState(0);
+  const [bi,setBi]=useState(startBlock||0);
   const [checked,setChecked]=useState({});
   const cur=BLK[Math.min(bi,BLK.length-1)];
   mode=cur.kind||mode; exos=cur.exercises||[];
@@ -1834,7 +1834,7 @@ function SettingsTab({user,excluded,onToggleExclude,onSignOut,onReset,onOpenLibr
           <span style={{fontSize:17,color:C.red}}>›</span>
         </Tap>
       </div>
-      <div style={{fontSize:12,color:C.ink4,textAlign:"center",marginTop:28}}>SŌMA · {"S"+weekNumber()} · {DB.length} exercices · build 23.16a</div>
+      <div style={{fontSize:12,color:C.ink4,textAlign:"center",marginTop:28}}>SŌMA · {"S"+weekNumber()} · {DB.length} exercices · build 23.17a</div>
     </div>
   );
 }
@@ -2029,6 +2029,7 @@ export default function SomaApp() {
   const[detailEx,setDetailEx]=useState(null);
   const[focusIdx,setFocusIdx]=useState(null);
   const[showCircuit,setShowCircuit]=useState(false);
+  const[circuitStart,setCircuitStart]=useState(0);
   const[showSettings,setShowSettings]=useState(false);
   const[dayCons,setDayCons]=useState(null);
   const[modeOverride,setModeOverride]=useState(null);
@@ -2306,7 +2307,7 @@ const NAV=[{id:"home",l:"Accueil"},{id:"seance",l:"Séances"},{id:"stats",l:"Sta
             const pct=exList.length?done/exList.length:0;
             const isSel=i===dayIdx,isToday=i===todayIdx();
             return(
-              <Tap key={i} onTap={()=>{setDayIdx(i);setAiOverride(null);setDayCons(null);setModeOverride(null);}} style={{flexShrink:0,minWidth:52,padding:"10px 6px",textAlign:"center",borderRadius:12,background:isSel?C.s2:"transparent",border:`1px solid ${isSel?C.s4:"transparent"}`,transition:`all 200ms ${EO}`}}>
+              <Tap key={i} onTap={()=>{setDayIdx(i);setAiOverride(null);setDayCons(null);setModeOverride(null);setCircuitStart(0);}} style={{flexShrink:0,minWidth:52,padding:"10px 6px",textAlign:"center",borderRadius:12,background:isSel?C.s2:"transparent",border:`1px solid ${isSel?C.s4:"transparent"}`,transition:`all 200ms ${EO}`}}>
                 <div style={{fontSize:10,fontWeight:600,color:isSel?C.ink2:C.ink4,letterSpacing:".06em",marginBottom:4}}>{d.day}</div>
                 {isToday&&<div style={{width:6,height:6,borderRadius:"50%",background:C.lime,margin:"0 auto 4px"}}/>}
                 {d.salle&&pct>0&&<div style={{width:"70%",height:2,background:C.s4,borderRadius:1,margin:"0 auto"}}>
@@ -2391,7 +2392,7 @@ const NAV=[{id:"home",l:"Accueil"},{id:"seance",l:"Séances"},{id:"stats",l:"Sta
                     {sessionMode!=="classique"&&<Tap onTap={()=>setShowCircuit(true)} style={{display:"flex",alignItems:"center",justifyContent:"center",gap:8,padding:"14px",borderRadius:12,background:C.blueDim,border:`1px solid ${C.blue}`}}><span style={{fontSize:15}}>⏱</span><span style={{fontSize:15,fontWeight:700,color:C.blue}}>Démarrer le circuit {sessionMode==="amrap"?"AMRAP":"EMOM"}</span></Tap>}
                   </div>}
                   <div>
-                    {day.metcon&&<div style={{marginBottom:16}}><div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}><span style={{fontSize:13,fontWeight:700,color:C.ink}}>Séance {sessionMode==="amrap"?"AMRAP":"EMOM"} · {day.blocks.length} blocs</span><span style={{fontSize:13,fontWeight:700,color:"#000",background:C.blue,padding:"2px 10px",borderRadius:8}}>~{day.totalMin} min</span></div>{day.blocks.map((bl,bi)=>(<div key={bi} style={{marginBottom:12,background:C.s1,borderRadius:14,padding:"12px 14px"}}><div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}><span style={{fontSize:14,fontWeight:800,color:C.ink}}>{bl.label}</span><span style={{fontSize:12,fontWeight:600,color:C.ink3}}>{bl.kind==="emom"?bl.durationMin+" min · "+bl.rounds+" tours":bl.durationMin+" min"}</span></div>{bl.exercises.map((ex,ei)=>(<div key={ei} style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"5px 0",borderTop:ei?`1px solid ${C.s2}`:"none"}}><span style={{fontSize:14,color:C.ink2}}>{bl.kind==="emom"?("Min "+(ei+1)+" · "):""}{ex.n}</span><span style={{fontSize:13,fontWeight:600,color:C.ink3}}>{ex.kg>0?ex.kg+"kg · ":""}{ex.reps}{bl.kind==="emom"?"/min":"/tour"}</span></div>))}</div>))}</div>}
+                    {day.metcon&&<div style={{marginBottom:16}}><div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}><span style={{fontSize:13,fontWeight:700,color:C.ink}}>Séance {sessionMode==="amrap"?"AMRAP":"EMOM"} · {day.blocks.length} blocs</span><span style={{fontSize:13,fontWeight:700,color:"#000",background:C.blue,padding:"2px 10px",borderRadius:8}}>~{day.totalMin} min</span></div><div style={{fontSize:12,color:C.ink4,marginBottom:10}}>Touchez un bloc pour le démarrer</div>{day.blocks.map((bl,bi)=>(<Tap key={bi} onTap={()=>{setCircuitStart(bi);setShowCircuit(true);}} style={{marginBottom:12,background:C.s1,borderRadius:14,padding:"12px 14px"}}><div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}><span style={{fontSize:14,fontWeight:800,color:C.ink}}>{bl.label}</span><span style={{fontSize:12,fontWeight:600,color:C.ink3}}>{bl.kind==="emom"?bl.durationMin+" min · "+bl.rounds+" tours":bl.durationMin+" min"}</span></div>{bl.exercises.map((ex,ei)=>(<div key={ei} style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"5px 0",borderTop:ei?`1px solid ${C.s2}`:"none"}}><span style={{fontSize:14,color:C.ink2}}>{bl.kind==="emom"?("Min "+(ei+1)+" · "):""}{ex.n}</span><span style={{fontSize:13,fontWeight:600,color:C.ink3}}>{ex.kg>0?ex.kg+"kg · ":""}{ex.reps}{bl.kind==="emom"?"/min":"/tour"}</span></div>))}</Tap>))}</div>}
                     {!day.metcon&&groupBlocks(exos).map((blk,bi)=>(
                       <div key={bi} style={{marginBottom:16}}>
                         <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10,paddingLeft:2}}>
@@ -2413,7 +2414,7 @@ const NAV=[{id:"home",l:"Accueil"},{id:"seance",l:"Séances"},{id:"stats",l:"Sta
                       onClose={()=>setFocusIdx(null)} hasNext={focusIdx<exos.length-1} onNext={()=>setFocusIdx(focusIdx+1)}/>
                   )}
                   {showCircuit&&sessionMode!=="classique"&&exos.length>0&&(
-                    <CircuitPlayer mode={sessionMode} exos={exos} blocks={day.blocks} defMin={sessionMode==="amrap"?(day.timeCapMin||12):(day.emomMinutes||Math.max(exos.length,8))} onClose={()=>setShowCircuit(false)} onAllDone={()=>{}}/>
+                    <CircuitPlayer mode={sessionMode} exos={exos} blocks={day.blocks} defMin={sessionMode==="amrap"?(day.timeCapMin||12):(day.emomMinutes||Math.max(exos.length,8))} onClose={()=>setShowCircuit(false)} onAllDone={()=>{}} startBlock={circuitStart}/>
                   )}
                   {absExos.length>0&&(
                     <div style={{marginTop:24,paddingTop:20,borderTop:`1px solid ${C.s3}`}}>
