@@ -919,6 +919,7 @@ function SessionSettingsSheet({day,curMode,onClose,onApply}) {
 function CircuitPlayer({mode,exos,onClose,defMin,blocks,onAllDone}) {
   const BLK=(blocks&&blocks.length)?blocks:[{label:mode==="amrap"?"AMRAP":"EMOM",kind:mode,exercises:exos||[],durationMin:defMin||(mode==="amrap"?12:Math.max((exos||[]).length,8))}];
   const [bi,setBi]=useState(0);
+  const [checked,setChecked]=useState({});
   const cur=BLK[Math.min(bi,BLK.length-1)];
   mode=cur.kind||mode; exos=cur.exercises||[];
   const [amrapMin,setAmrapMin]=useState(cur.durationMin||defMin||12);
@@ -930,7 +931,7 @@ function CircuitPlayer({mode,exos,onClose,defMin,blocks,onAllDone}) {
   const minutes=mode==="amrap"?amrapMin:emomMin;
   const total=minutes*60;
   useEffect(()=>()=>clearInterval(ref.current),[]);
-  useEffect(()=>{ clearInterval(ref.current); setRunning(false); setElapsed(0); setRounds(0); lastMin.current=0; const dm=cur.durationMin||12; setAmrapMin(dm); setEmomMin(dm); },[bi]);
+  useEffect(()=>{ clearInterval(ref.current); setRunning(false); setElapsed(0); setRounds(0); lastMin.current=0; const dm=cur.durationMin||12; setAmrapMin(dm); setEmomMin(dm); setChecked({}); },[bi]);
   const start=()=>{ if(running||total<=0)return; setRunning(true); lastMin.current=Math.floor(elapsed/60); const tt=total,md=mode; ref.current=setInterval(()=>{ setElapsed(pp=>{ const n=pp+1; if(md==="emom"){const cm=Math.floor(n/60); if(cm!==lastMin.current&&n<tt){lastMin.current=cm;beep();}} if(n>=tt){clearInterval(ref.current);setRunning(false);beep();return tt;} return n;}); },1000); };
   const pause=()=>{clearInterval(ref.current);setRunning(false);};
   const reset=()=>{clearInterval(ref.current);setRunning(false);setElapsed(0);setRounds(0);lastMin.current=0;};
@@ -968,8 +969,8 @@ function CircuitPlayer({mode,exos,onClose,defMin,blocks,onAllDone}) {
           {mode==="amrap"&&<div style={{marginTop:18,display:"flex",flexDirection:"column",alignItems:"center",gap:8}}><div style={{fontSize:46,fontWeight:700,color:C.blue,lineHeight:1}}>{rounds}</div><div style={{fontSize:12,color:C.ink4,textTransform:"uppercase",letterSpacing:".1em"}}>tours</div><Tap onTap={()=>running&&setRounds(r=>r+1)} style={{marginTop:4,padding:"14px 34px",borderRadius:980,background:C.s2,border:`1px solid ${C.div}`,opacity:running?1:0.5}}><span style={{fontSize:16,fontWeight:600,color:C.ink2}}>+1 tour</span></Tap></div>}
         </div>
         <div style={{marginBottom:16}}>
-          <div style={{fontSize:12,fontWeight:600,color:C.ink4,textTransform:"uppercase",letterSpacing:".08em",marginBottom:10}}>{mode==="amrap"?"1 tour =":"Rotation des minutes"}</div>
-          {exos.map((ex,i)=>{const hot=mode==="emom"&&running&&emomEx&&emomEx.id===ex.id;return (<div key={ex.id} style={{display:"flex",alignItems:"center",gap:12,padding:"12px 14px",borderRadius:12,background:hot?C.blueDim:C.s1,border:`1px solid ${hot?C.blue:"transparent"}`,marginBottom:8}}><div style={{width:26,height:26,borderRadius:"50%",background:C.s3,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}><span style={{fontSize:12,fontWeight:700,color:C.ink3}}>{i+1}</span></div><div style={{flex:1,fontSize:15,fontWeight:600,color:C.ink}}>{ex.n}</div><div style={{fontSize:14,color:C.ink3}}>{ex.reps} reps</div></div>);})}
+          <div style={{fontSize:12,fontWeight:600,color:C.ink4,textTransform:"uppercase",letterSpacing:".08em",marginBottom:10}}>{mode==="amrap"?"1 tour = (tape pour cocher)":"Rotation des minutes (tape pour cocher)"}</div>
+          {exos.map((ex,i)=>{const hot=mode==="emom"&&running&&emomEx&&emomEx.id===ex.id;const ck=!!checked[i];return (<Tap key={ex.id} onTap={()=>setChecked(c=>({...c,[i]:!c[i]}))} style={{display:"flex",alignItems:"center",gap:12,padding:"12px 14px",borderRadius:12,background:ck?C.blueDim:(hot?C.blueDim:C.s1),border:`1px solid ${(ck||hot)?C.blue:"transparent"}`,marginBottom:8}}><div style={{width:28,height:28,borderRadius:"50%",background:ck?C.blue:C.s3,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}><span style={{fontSize:13,fontWeight:700,color:ck?"#000":C.ink3}}>{ck?"\u2713":(i+1)}</span></div><div style={{flex:1,fontSize:15,fontWeight:600,color:C.ink,textDecoration:ck?"line-through":"none",opacity:ck?0.6:1}}>{ex.n}</div><div style={{fontSize:14,color:C.ink3}}>{ex.reps}{mode==="emom"?"/min":"/tour"}</div></Tap>);})}
         </div>
       </div>
       <div style={{display:"flex",gap:10,padding:"12px 20px"}}>
@@ -1010,7 +1011,9 @@ function ExerciseFocus({ex,dayIdx,log,onLogSet,onClose,onNext,hasNext,idx,count,
   const [done,setDone]=useState(()=>plan.map((_,i)=>!!(log[`${lk}_s${i}`]&&log[`${lk}_s${i}`].done)));
   const [resting,setResting]=useState(0);
   const restRef=useRef(null);
+  const scRef=useRef(null);
   useEffect(()=>()=>clearInterval(restRef.current),[]);
+  useEffect(()=>{ if(scRef.current) scRef.current.scrollTop=0; window.scrollTo&&window.scrollTo(0,0); },[ex.id]);
   const startRest=(s)=>{clearInterval(restRef.current);setResting(s);restRef.current=setInterval(()=>{setResting(pp=>{if(pp<=1){clearInterval(restRef.current);beep();return 0;}return pp-1;});},1000);};
   const skipRest=()=>{clearInterval(restRef.current);setResting(0);};
   const cur=done.findIndex(d=>!d);
@@ -1036,7 +1039,7 @@ function ExerciseFocus({ex,dayIdx,log,onLogSet,onClose,onNext,hasNext,idx,count,
         <div style={{fontSize:30,fontWeight:700,color:C.ink,letterSpacing:"-.02em",lineHeight:1.1}}>{ex.n}</div>
         <div style={{fontSize:14,color:C.ink4,marginTop:6}}>{ex.m}{ex.cue?` · ${ex.cue}`:""}</div>
       </div>
-      <div style={{flex:1,overflowY:"auto",padding:"12px 20px",WebkitOverflowScrolling:"touch"}}>
+      <div ref={scRef} style={{flex:1,overflowY:"auto",padding:"12px 20px",WebkitOverflowScrolling:"touch"}}>
         {plan.map((s,i)=>{
           const d=done[i];const isCur=i===cur&&resting===0;
           return (
@@ -1464,7 +1467,7 @@ function SkillsOctagon({sessions}) {
   );
 }
 
-function StatsTab({sessions,weights,accent}) {
+function StatsTab({sessions,weights,accent,onOpenPhotos}) {
   const[selEx,setSelEx]=useState(null);
   const total=sessions.length,totalKg=sessions.reduce((a,s)=>a+(s.totalKg||0),0);
   const avgScore=total?Math.round(sessions.reduce((a,s)=>a+(s.score||0),0)/total):0;
@@ -1480,6 +1483,7 @@ function StatsTab({sessions,weights,accent}) {
 
   return(
     <div style={{padding:"20px 20px 100px",maxWidth:600,margin:"0 auto",fontFamily:F}}>
+      {onOpenPhotos&&<Tap onTap={onOpenPhotos} style={{display:"flex",alignItems:"center",justifyContent:"space-between",background:C.s1,borderRadius:16,padding:"16px 18px",marginBottom:16}}><div><div style={{fontSize:15,fontWeight:700,color:C.ink}}>Progression photo</div><div style={{fontSize:12,color:C.ink4,marginTop:2}}>Suivi visuel \u00b7 avant / apr\u00e8s</div></div><span style={{fontSize:20,color:C.ink3}}>\u203a</span></Tap>}
       <WeekSummary sessions={sessions} accent={accent}/>
       <SkillsOctagon sessions={sessions}/>
       {/* Metrics grid */}
@@ -1830,7 +1834,7 @@ function SettingsTab({user,excluded,onToggleExclude,onSignOut,onReset,onOpenLibr
           <span style={{fontSize:17,color:C.red}}>›</span>
         </Tap>
       </div>
-      <div style={{fontSize:12,color:C.ink4,textAlign:"center",marginTop:28}}>SŌMA · {"S"+weekNumber()} · {DB.length} exercices · build 23.14a</div>
+      <div style={{fontSize:12,color:C.ink4,textAlign:"center",marginTop:28}}>SŌMA · {"S"+weekNumber()} · {DB.length} exercices · build 23.15a</div>
     </div>
   );
 }
@@ -2243,7 +2247,7 @@ export default function SomaApp() {
     persist(uid,{schedule:sched,profile:prof});
     try{await supabase.from("profiles").upsert(prof,{onConflict:"id"});}catch(e){console.error("profile",e);}
   }}/>;
-  if(showWelcome) return(<WelcomeScreen user={user} todaySession={viewSchedule[todayIdx()]||PROGRAM[todayIdx()]} streak={streak} onStart={()=>{setShowWelcome(false);setDayIdx(todayIdx());}} onSkip={()=>setShowWelcome(false)}/>);
+  if(false&&showWelcome) return(<WelcomeScreen user={user} todaySession={viewSchedule[todayIdx()]||PROGRAM[todayIdx()]} streak={streak} onStart={()=>{setShowWelcome(false);setDayIdx(todayIdx());}} onSkip={()=>setShowWelcome(false)}/>);
 
   const day0=viewSchedule[dayIdx]||PROGRAM[dayIdx];
   const effMode=modeOverride||day0?.recommendedMode||"classique";
@@ -2254,7 +2258,14 @@ export default function SomaApp() {
   const isRest=!day?.salle;
   const exos=(aiOverride?.exercises||day?.exercises||[]).filter(e=>!excluded.includes(e.id));
   const absExos=aiOverride?.abs||day?.abs||[];
-  const NAV=[{id:"home",l:"Accueil"},{id:"seance",l:"Séances"},{id:"stats",l:"Stats"},{id:"settings",l:"Profil"}];
+  const NAV_ICONS={
+  home:(<><path d="M3 11l9-8 9 8"/><path d="M5 10v10a1 1 0 0 0 1 1h3v-6h6v6h3a1 1 0 0 0 1-1V10"/></>),
+  seance:(<><path d="M6.5 6.5l11 11"/><path d="M21 21l-1-1"/><path d="M3 3l1 1"/><path d="M18 22l4-4"/><path d="M2 6l4-4"/><path d="M3 10l7-7"/><path d="M14 21l7-7"/></>),
+  stats:(<><path d="M3 3v18h18"/><rect x="7" y="10" width="3" height="7"/><rect x="12" y="6" width="3" height="11"/><rect x="17" y="13" width="3" height="4"/></>),
+  history:(<><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></>),
+  settings:(<><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 4-6 8-6s8 2 8 6"/></>)
+};
+const NAV=[{id:"home",l:"Accueil"},{id:"seance",l:"Séances"},{id:"stats",l:"Stats"},{id:"settings",l:"Profil"}];
 
   return(
     <div style={{background:C.bg,minHeight:"100dvh",color:C.ink,fontFamily:F,overflowX:"hidden"}}>
@@ -2424,7 +2435,7 @@ export default function SomaApp() {
               )}
             </div>
           )}
-          {tab==="stats"&&<StatsTab sessions={sessions} weights={weights} accent={accent}/>}
+          {tab==="stats"&&<StatsTab sessions={sessions} weights={weights} accent={accent} onOpenPhotos={()=>setShowPhotos(true)}/>}
           {tab==="history"&&<HistoryTab sessions={sessions} onSelect={setShowReport} accent={accent} onOpenPhotos={()=>setShowPhotos(true)}/>}
           {tab==="settings"&&<SettingsTab user={user} excluded={excluded} onToggleExclude={toggleExclude} onOpenLibrary={()=>setShowLibrary(true)} profile={profile} schedule={schedule} onUpdateConfig={updateConfig}
             onSignOut={async()=>{await supabase.auth.signOut();setUser(null);setLog({});setWeights({});setSessions([]);setExcluded([]);setStreak(0);}}
@@ -2449,13 +2460,16 @@ export default function SomaApp() {
       </div>
 
       {/* BOTTOM NAV */}
-      <div style={{position:"fixed",bottom:0,left:0,right:0,zIndex:Z.sticky+10,background:"rgba(0,0,0,.92)",backdropFilter:"blur(24px)",WebkitBackdropFilter:"blur(24px)",borderTop:`1px solid ${C.s3}`,display:"flex",paddingBottom:"env(safe-area-inset-bottom)"}}>
-        {NAV.map(({id,l})=>(
-          <Tap key={id} onTap={()=>switchTab(id)} style={{flex:1,padding:"10px 4px 14px",display:"flex",flexDirection:"column",alignItems:"center",gap:5}}>
-            <div style={{width:20,height:2,borderRadius:1,background:tab===id?accent:"transparent",marginBottom:2,transition:`background 250ms ${EO}`}}/>
-            <span style={{fontSize:11,fontWeight:tab===id?600:400,color:tab===id?C.ink:C.ink4,transition:`color 250ms ${EO}`}}>{l}</span>
-          </Tap>
-        ))}
+      <div style={{position:"fixed",bottom:0,left:0,right:0,zIndex:Z.sticky+10,background:"rgba(255,255,255,.96)",backdropFilter:"blur(24px)",WebkitBackdropFilter:"blur(24px)",borderTop:`1px solid ${C.s3}`,display:"flex",paddingBottom:"env(safe-area-inset-bottom)"}}>
+        {NAV.map(({id,l})=>{
+          const on=tab===id;
+          const ic=NAV_ICONS[id]||NAV_ICONS.seance;
+          return (
+          <Tap key={id} onTap={()=>switchTab(id)} style={{flex:1,padding:"9px 4px calc(8px + env(safe-area-inset-bottom))",display:"flex",flexDirection:"column",alignItems:"center",gap:4}}>
+            <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke={on?accent:C.ink4} strokeWidth={on?2.4:2} strokeLinecap="round" strokeLinejoin="round" style={{transition:`stroke 200ms ${EO}`}}>{ic}</svg>
+            <span style={{fontSize:11.5,fontWeight:on?700:500,color:on?C.ink:C.ink4,transition:`color 200ms ${EO}`}}>{l}</span>
+          </Tap>);
+        })}
       </div>
 
       {/* OVERLAYS — z-index ordering per semantic scale */}
