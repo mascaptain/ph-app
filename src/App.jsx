@@ -1483,7 +1483,7 @@ function StatsTab({sessions,weights,accent,onOpenPhotos}) {
 
   return(
     <div style={{padding:"20px 20px 100px",maxWidth:600,margin:"0 auto",fontFamily:F}}>
-      {onOpenPhotos&&<Tap onTap={onOpenPhotos} style={{display:"flex",alignItems:"center",justifyContent:"space-between",background:C.s1,borderRadius:16,padding:"16px 18px",marginBottom:16}}><div><div style={{fontSize:15,fontWeight:700,color:C.ink}}>Progression photo</div><div style={{fontSize:12,color:C.ink4,marginTop:2}}>Suivi visuel \u00b7 avant / apr\u00e8s</div></div><span style={{fontSize:20,color:C.ink3}}>\u203a</span></Tap>}
+      
       <WeekSummary sessions={sessions} accent={accent}/>
       <SkillsOctagon sessions={sessions}/>
       {/* Metrics grid */}
@@ -1834,7 +1834,7 @@ function SettingsTab({user,excluded,onToggleExclude,onSignOut,onReset,onOpenLibr
           <span style={{fontSize:17,color:C.red}}>›</span>
         </Tap>
       </div>
-      <div style={{fontSize:12,color:C.ink4,textAlign:"center",marginTop:28}}>SŌMA · {"S"+weekNumber()} · {DB.length} exercices · build 23.15a</div>
+      <div style={{fontSize:12,color:C.ink4,textAlign:"center",marginTop:28}}>SŌMA · {"S"+weekNumber()} · {DB.length} exercices · build 23.16a</div>
     </div>
   );
 }
@@ -1953,7 +1953,7 @@ function OnboardingScreen({user,onDone}) {
   const [freq,setFreq]=useState(4);
   const [weight,setWeight]=useState("");
   const [saving,setSaving]=useState(false);
-  const GOALS=[["force","Force","Soulever plus lourd"],["endurance","Endurance","Tenir plus longtemps"],["hybride","Hybride","Force + condition"],["seche","Perte de gras","Bruler, rester sec"]];
+  const GOALS=[["force","Force","Force maximale & puissance"],["hypertrophie","Hypertrophie","Prise de muscle & volume"],["seche","Sèche","Perdre du gras, garder le muscle"],["hybride","Hybride","Force + conditionnement"],["endurance","Endurance","Cardio & endurance"],["performance","Performance","Athlétique complet"]];
   const LEVELS=[["debutant","Debutant","Je debute"],["inter","Intermediaire","Quelques mois ou annees"],["avance","Avance","Entraine et regulier"],["athlete","Athlete","Niveau competition"]];
   const EQUIP=[["bw","Poids du corps"],["kb","Kettlebell"],["db","Halteres"],["bar","Barre"],["mc","Machine / salle"],["cd","Cardio"]];
   const FREQS=[3,4,5,6];
@@ -2435,8 +2435,7 @@ const NAV=[{id:"home",l:"Accueil"},{id:"seance",l:"Séances"},{id:"stats",l:"Sta
               )}
             </div>
           )}
-          {tab==="stats"&&<StatsTab sessions={sessions} weights={weights} accent={accent} onOpenPhotos={()=>setShowPhotos(true)}/>}
-          {tab==="history"&&<HistoryTab sessions={sessions} onSelect={setShowReport} accent={accent} onOpenPhotos={()=>setShowPhotos(true)}/>}
+          {tab==="stats"&&<><StatsTab sessions={sessions} weights={weights} accent={accent}/><HistoryTab sessions={sessions} onSelect={setShowReport} accent={accent}/><div style={{padding:"4px 20px 120px",maxWidth:600,margin:"0 auto"}}><Tap onTap={()=>setShowPhotos(true)} style={{display:"flex",alignItems:"center",justifyContent:"space-between",background:C.s1,borderRadius:16,padding:"16px 18px"}}><div><div style={{fontSize:15,fontWeight:700,color:C.ink}}>Progression photo</div><div style={{fontSize:12,color:C.ink4,marginTop:2}}>Suivi visuel · avant / après</div></div><span style={{fontSize:20,color:C.ink3}}>›</span></Tap></div></>}
           {tab==="settings"&&<SettingsTab user={user} excluded={excluded} onToggleExclude={toggleExclude} onOpenLibrary={()=>setShowLibrary(true)} profile={profile} schedule={schedule} onUpdateConfig={updateConfig}
             onSignOut={async()=>{await supabase.auth.signOut();setUser(null);setLog({});setWeights({});setSessions([]);setExcluded([]);setStreak(0);}}
             onReset={async()=>{
