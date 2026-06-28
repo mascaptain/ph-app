@@ -1003,10 +1003,9 @@ function CircuitPlayer({mode,exos,onClose,defMin,blocks,onAllDone,startBlock}) {
   }
   return (
     <div style={{position:"fixed",inset:0,background:C.bg,zIndex:Z.fullscreen,overflowY:"auto",overscrollBehavior:"contain",fontFamily:F,paddingTop:"env(safe-area-inset-top)"}}>
-      <div style={{maxWidth:600,margin:"0 auto",minHeight:"100%",display:"flex",flexDirection:"column"}}>
+      <div style={{maxWidth:600,margin:"0 auto",paddingBottom:24}}>
         {HEAD}
         {BODY}
-        <div style={{flexGrow:1,minHeight:24}}/>
         {FOOT}
       </div>
     </div>);
@@ -1893,7 +1892,7 @@ function SettingsTab({user,excluded,onToggleExclude,onSignOut,onReset,onOpenLibr
           <span style={{fontSize:17,color:C.red}}>›</span>
         </Tap>
       </div>
-      <div style={{fontSize:12,color:C.ink4,textAlign:"center",marginTop:28}}>SŌMA · {"S"+weekNumber()} · {DB.length} exercices · build 23.22a</div>
+      <div style={{fontSize:12,color:C.ink4,textAlign:"center",marginTop:28}}>SŌMA · {"S"+weekNumber()} · {DB.length} exercices · build 23.23a</div>
     </div>
   );
 }
