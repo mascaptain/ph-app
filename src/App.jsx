@@ -973,7 +973,6 @@ function CircuitPlayer({mode,exos,onClose,defMin,blocks,onAllDone,startBlock}) {
       )}
     </div>);
     FOOT=(<div style={{display:"flex",gap:10,padding:"12px 20px calc(12px + env(safe-area-inset-bottom))",flexShrink:0}}>
-      <Tap onTap={onClose} style={{padding:"16px 22px",borderRadius:14,background:C.s2,display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{fontSize:15,fontWeight:600,color:C.ink3}}>Quitter</span></Tap>
       <Tap onTap={resting>0?undefined:validateSup} style={{flex:1,padding:"16px",borderRadius:14,background:resting>0?C.s3:C.blue,display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{fontSize:16,fontWeight:700,color:resting>0?C.ink4:"#000"}}>{resting>0?"Repos en cours…":(si<cexos.length-1?("Valider "+String.fromCharCode(65+si)):(stour>=supTours?"Terminer le bloc":"Valider → repos"))}</span></Tap>
     </div>);
   } else {
@@ -1003,7 +1002,7 @@ function CircuitPlayer({mode,exos,onClose,defMin,blocks,onAllDone,startBlock}) {
   }
   return (
     <div style={{position:"fixed",inset:0,background:C.bg,zIndex:Z.fullscreen,overflowY:"auto",overscrollBehavior:"contain",fontFamily:F,paddingTop:"env(safe-area-inset-top)"}}>
-      <div style={{maxWidth:600,margin:"0 auto",paddingBottom:24}}>
+      <div style={{maxWidth:600,margin:"0 auto"}}>
         {HEAD}
         {BODY}
         {FOOT}
@@ -1585,6 +1584,7 @@ function StatsTab({sessions,weights,accent,onOpenPhotos}) {
           const groups={};pbs.forEach(pb=>{const eqc=Array.isArray(pb.eq)?pb.eq[0]:pb.eq;const k=PBCAT[eqc]||"Autre";(groups[k]=groups[k]||[]).push(pb);});
           return(<>{Object.keys(groups).map(cat=>(<div key={cat} style={{marginBottom:14}}><div style={{fontSize:11,fontWeight:700,color:C.ink4,textTransform:"uppercase",letterSpacing:".1em",marginBottom:8}}>{cat}</div>{groups[cat].map(Row)}</div>))}<Tap onTap={()=>setShowAllPB(false)} style={{textAlign:"center",padding:"12px 0"}}><span style={{fontSize:14,fontWeight:700,color:C.ink3}}>Réduire ‹</span></Tap></>);
         })()}
+        {(()=>{const totalS=(sessions||[]).length;const maxW=(sessions||[]).reduce((m,s)=>Math.max(m,((s.exercises||[]).reduce((mm,e)=>Math.max(mm,e.weight||0),0))),0);const days=new Set((sessions||[]).map(s=>s.date)).size;const B=[{t:"Première séance",d:"Termine 1 séance",ok:totalS>=1},{t:"5 séances",d:"Atteins 5 séances",ok:totalS>=5},{t:"10 séances",d:"Atteins 10 séances",ok:totalS>=10},{t:"25 séances",d:"Atteins 25 séances",ok:totalS>=25},{t:"Club 100 kg",d:"Soulève 100 kg",ok:maxW>=100},{t:"Assidu",d:"7 jours actifs",ok:days>=7}];const earned=B.filter(b=>b.ok).length;return(<div style={{marginTop:24}}><div style={{display:"flex",alignItems:"baseline",justifyContent:"space-between",marginBottom:12}}><span style={{fontSize:11,fontWeight:700,color:C.ink3,textTransform:"uppercase",letterSpacing:".15em"}}>Récompenses</span><span style={{fontSize:12,fontWeight:600,color:C.ink4}}>{earned}/{B.length}</span></div><div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>{B.map((b,i)=>(<div key={i} style={{background:b.ok?C.blueDim:C.s1,border:`1.5px solid ${b.ok?C.blue:"transparent"}`,borderRadius:14,padding:"14px"}}><div style={{display:"flex",alignItems:"center",gap:8,marginBottom:4}}><div style={{width:22,height:22,borderRadius:"50%",background:b.ok?C.blue:C.s3,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}><span style={{fontSize:12,fontWeight:700,color:b.ok?"#000":C.ink4}}>{b.ok?"✓":"·"}</span></div><span style={{fontSize:14,fontWeight:700,color:b.ok?C.ink:C.ink3}}>{b.t}</span></div><div style={{fontSize:11,color:C.ink4,paddingLeft:30}}>{b.ok?"Débloqué":b.d}</div></div>))}</div></div>);})()}
     </div>
   );
 }
@@ -1593,6 +1593,7 @@ function StatsTab({sessions,weights,accent,onOpenPhotos}) {
 function PhotoProgress({onClose}) {
   const [photos,setPhotos]=useState(()=>{try{return JSON.parse(localStorage.getItem("soma_photos")||"{}");}catch(_e){return {};}});
   const [date,setDate]=useState(todayKey());
+  const _pf=useRef(null);
   const save=(map)=>{try{localStorage.setItem("soma_photos",JSON.stringify(map));}catch(_e){} setPhotos({...map});};
   const onPhoto=(e)=>{const f=e.target.files&&e.target.files[0];if(!f)return;const rd=new FileReader();rd.onload=()=>{const im=new Image();im.onload=()=>{const mx=520;const sc=Math.min(1,mx/Math.max(im.width,im.height));const cw=Math.round(im.width*sc),ch=Math.round(im.height*sc);const cv=document.createElement("canvas");cv.width=cw;cv.height=ch;cv.getContext("2d").drawImage(im,0,0,cw,ch);const next={...photos,[date]:cv.toDataURL("image/jpeg",0.72)};save(next);};im.src=rd.result;};rd.readAsDataURL(f);e.target.value="";};
   const del=(d)=>{const next={...photos};delete next[d];save(next);};
@@ -1612,7 +1613,7 @@ function PhotoProgress({onClose}) {
             <span style={{fontSize:13,color:C.ink3,width:46}}>Date</span>
             <input type="date" value={date} max={todayKey()} onChange={e=>setDate(e.target.value)} style={{flex:1,height:44,borderRadius:10,border:`1px solid ${C.s4}`,background:C.s2,color:C.ink,fontSize:15,fontFamily:F,padding:"0 12px",outline:"none",boxSizing:"border-box"}}/>
           </div>
-          <label style={{display:"flex",alignItems:"center",justifyContent:"center",gap:8,height:48,borderRadius:12,background:C.blue,cursor:"pointer"}}><span style={{fontSize:15,fontWeight:700,color:"#000"}}>Choisir une photo</span><input type="file" accept="image/*" onChange={onPhoto} style={{display:"none"}}/></label>
+          <Tap onTap={()=>_pf.current&&_pf.current.click()} style={{display:"flex",alignItems:"center",justifyContent:"center",gap:8,height:48,borderRadius:12,background:C.blue}}><span style={{fontSize:15,fontWeight:700,color:"#000"}}>Choisir une photo</span></Tap><input ref={_pf} type="file" accept="image/*" onChange={onPhoto} style={{display:"none"}}/>
           <div style={{fontSize:11,color:C.ink4,marginTop:10,lineHeight:1.5}}>La photo est enregistrée sur cet appareil. Tu peux en ajouter une après coup pour n'importe quelle date.</div>
         </div>
         {keys.length>=2&&(
@@ -1892,7 +1893,7 @@ function SettingsTab({user,excluded,onToggleExclude,onSignOut,onReset,onOpenLibr
           <span style={{fontSize:17,color:C.red}}>›</span>
         </Tap>
       </div>
-      <div style={{fontSize:12,color:C.ink4,textAlign:"center",marginTop:28}}>SŌMA · {"S"+weekNumber()} · {DB.length} exercices · build 23.23a</div>
+      <div style={{fontSize:12,color:C.ink4,textAlign:"center",marginTop:28}}>SŌMA · {"S"+weekNumber()} · {DB.length} exercices · build 23.24a</div>
     </div>
   );
 }
@@ -2377,7 +2378,7 @@ const NAV=[{id:"home",l:"Accueil"},{id:"seance",l:"Séances"},{id:"stats",l:"Sta
             );
           })}
           <Tap onTap={()=>setShowSched(true)} style={{flexShrink:0,minWidth:52,padding:"10px 6px",textAlign:"center",borderRadius:12,background:"transparent",border:`1px dashed ${C.s4}`,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center"}}>
-            <span style={{fontSize:16,color:C.ink4,lineHeight:1}}>\u270e</span>
+            <span style={{fontSize:16,color:C.ink4,lineHeight:1}}>✎</span>
             <span style={{fontSize:9,fontWeight:600,color:C.ink4,letterSpacing:".04em",marginTop:3}}>Modifier</span>
           </Tap>
         </div>
