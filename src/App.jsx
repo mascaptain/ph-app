@@ -919,68 +919,95 @@ function SessionSettingsSheet({day,curMode,onClose,onApply}) {
 function CircuitPlayer({mode,exos,onClose,defMin,blocks,onAllDone,startBlock}) {
   const BLK=(blocks&&blocks.length)?blocks:[{label:mode==="amrap"?"AMRAP":"EMOM",kind:mode,exercises:exos||[],durationMin:defMin||(mode==="amrap"?12:Math.max((exos||[]).length,8))}];
   const [bi,setBi]=useState(startBlock||0);
-  const [checked,setChecked]=useState({});
-  const cur=BLK[Math.min(bi,BLK.length-1)];
-  mode=cur.kind||mode; exos=cur.exercises||[];
-  const [amrapMin,setAmrapMin]=useState(cur.durationMin||defMin||12);
-  const [emomMin,setEmomMin]=useState(cur.durationMin||defMin||Math.max(exos.length,8));
+  const cur=BLK[Math.min(bi,BLK.length-1)]||{exercises:[]};
+  const kind=cur.kind||mode||"amrap";
+  const cexos=cur.exercises||[];
+  const lastBlock=bi>=BLK.length-1;
   const [running,setRunning]=useState(false);
   const [elapsed,setElapsed]=useState(0);
   const [rounds,setRounds]=useState(0);
-  const ref=useRef(null); const lastMin=useRef(0);
-  const minutes=mode==="amrap"?amrapMin:emomMin;
-  const total=minutes*60;
-  useEffect(()=>()=>clearInterval(ref.current),[]);
-  useEffect(()=>{ clearInterval(ref.current); setRunning(false); setElapsed(0); setRounds(0); lastMin.current=0; const dm=cur.durationMin||12; setAmrapMin(dm); setEmomMin(dm); setChecked({}); },[bi]);
-  const start=()=>{ if(running||total<=0)return; setRunning(true); lastMin.current=Math.floor(elapsed/60); const tt=total,md=mode; ref.current=setInterval(()=>{ setElapsed(pp=>{ const n=pp+1; if(md==="emom"){const cm=Math.floor(n/60); if(cm!==lastMin.current&&n<tt){lastMin.current=cm;beep();}} if(n>=tt){clearInterval(ref.current);setRunning(false);beep();return tt;} return n;}); },1000); };
+  const [checked,setChecked]=useState({});
+  const [si,setSi]=useState(0);
+  const [stour,setStour]=useState(1);
+  const [resting,setResting]=useState(0);
+  const ref=useRef(null); const lastMin=useRef(0); const restRef=useRef(null);
+  const durMin=cur.durationMin||defMin||(kind==="amrap"?12:Math.max(cexos.length,8));
+  const total=durMin*60;
+  const supTours=cur.tours||(cexos[0]&&cexos[0].sets)||4;
+  useEffect(()=>()=>{clearInterval(ref.current);clearInterval(restRef.current);},[]);
+  useEffect(()=>{clearInterval(ref.current);clearInterval(restRef.current);setRunning(false);setElapsed(0);setRounds(0);setChecked({});setSi(0);setStour(1);setResting(0);lastMin.current=0;},[bi]);
+  const goNext=()=>{clearInterval(ref.current);clearInterval(restRef.current);if(lastBlock){onAllDone&&onAllDone();onClose&&onClose();}else{setBi(b=>b+1);}};
+  const startTimer=()=>{if(running||total<=0)return;setRunning(true);lastMin.current=Math.floor(elapsed/60);const tt=total;const isEmom=kind==="emom";ref.current=setInterval(()=>{setElapsed(p=>{const n=p+1;if(isEmom){const cm=Math.floor(n/60);if(cm!==lastMin.current&&n<tt){lastMin.current=cm;beep();}}if(n>=tt){clearInterval(ref.current);beep();setRunning(false);setTimeout(()=>goNext(),900);return tt;}return n;});},1000);};
   const pause=()=>{clearInterval(ref.current);setRunning(false);};
   const reset=()=>{clearInterval(ref.current);setRunning(false);setElapsed(0);setRounds(0);lastMin.current=0;};
   const remaining=Math.max(0,total-elapsed);
   const done=total>0&&elapsed>=total;
-  const curMin=Math.min(minutes,Math.floor(elapsed/60)+1);
+  const curMin=Math.min(durMin,Math.floor(elapsed/60)+1);
   const secInMin=done?0:60-(elapsed%60);
-  const emomEx=exos.length?exos[(curMin-1)%exos.length]:null;
-  const setMin=mode==="amrap"?setAmrapMin:setEmomMin;
-  const lastBlock=bi>=BLK.length-1;
-  const nextBlock=()=>{ if(lastBlock){ onAllDone&&onAllDone(); onClose&&onClose(); } else { setBi(b=>b+1); } };
-  const primary=running?{label:"Pause",act:pause,bg:C.redDim,fg:C.red,bd:C.red}
-    :done?{label:lastBlock?"Terminer la séance":"Bloc suivant →",act:nextBlock,bg:C.blue,fg:"#000",bd:C.blue}
-    :{label:"Démarrer le bloc",act:start,bg:C.blue,fg:"#000",bd:C.blue};
+  const emomEx=cexos.length?cexos[(curMin-1)%cexos.length]:null;
+  const startRest=()=>{const rs=cur.restSec||90;setResting(rs);clearInterval(restRef.current);restRef.current=setInterval(()=>{setResting(pp=>{if(pp<=1){clearInterval(restRef.current);beep();return 0;}return pp-1;});},1000);};
+  const validateSup=()=>{if(resting>0)return;if(si<cexos.length-1){setSi(si+1);}else{setSi(0);if(stour>=supTours){goNext();}else{setStour(stour+1);startRest();}}};
+  const HEAD=(
+    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"16px 20px",flexShrink:0}}>
+      <div><div style={{fontSize:20,fontWeight:700,color:C.ink}}>{cur.label||(kind==="amrap"?"AMRAP":kind==="emom"?"EMOM":kind==="circuit"?"Circuit":"Superset")}</div><div style={{fontSize:12,color:C.ink4,marginTop:2}}>Bloc {bi+1}/{BLK.length} \u00b7 {cexos.length} exercices</div></div>
+      <Tap onTap={onClose} style={{width:40,height:40,borderRadius:10,background:C.s2,display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{fontSize:14,color:C.ink3}}>\u2715</span></Tap>
+    </div>);
+  let BODY,FOOT;
+  if(kind==="superset"||kind==="circuit"){
+    BODY=(<div style={{margin:"auto 0",padding:"0 20px 8px",width:"100%"}}>
+      {resting>0?(
+        <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:8}}>
+          <div style={{fontSize:13,fontWeight:700,color:C.ink4,textTransform:"uppercase",letterSpacing:".1em"}}>Repos</div>
+          <div style={{fontSize:72,fontWeight:700,color:C.green,letterSpacing:"-.03em",lineHeight:1}}>{fmtMSS(resting)}</div>
+          <div style={{fontSize:13,color:C.ink4}}>Tour {stour-1>0?stour-1:1}/{supTours} termin\u00e9</div>
+        </div>
+      ):(
+        <div>
+          <div style={{textAlign:"center",fontSize:13,fontWeight:700,color:C.ink4,textTransform:"uppercase",letterSpacing:".1em",marginBottom:14}}>Tour {stour}/{supTours}</div>
+          {cexos.map((ex,i)=>{const act=i===si;const dn=i<si;return(
+            <div key={ex.id||i} style={{display:"flex",alignItems:"center",gap:12,padding:"16px",borderRadius:14,background:act?C.blueDim:C.s1,border:`1.5px solid ${act?C.blue:"transparent"}`,marginBottom:10,opacity:dn?0.5:1}}>
+              <div style={{width:30,height:30,borderRadius:"50%",background:act?C.blue:C.s3,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}><span style={{fontSize:13,fontWeight:700,color:act?"#000":C.ink3}}>{dn?"\u2713":String.fromCharCode(65+i)}</span></div>
+              <div style={{flex:1}}><div style={{fontSize:16,fontWeight:700,color:C.ink}}>{ex.n}</div><div style={{fontSize:13,color:C.ink3}}>{ex.kg>0?ex.kg+"kg \u00b7 ":""}{ex.reps} reps</div></div>
+            </div>);})}
+        </div>
+      )}
+    </div>);
+    FOOT=(<div style={{display:"flex",gap:10,padding:"12px 20px calc(12px + env(safe-area-inset-bottom))",flexShrink:0}}>
+      <Tap onTap={onClose} style={{padding:"16px 22px",borderRadius:14,background:C.s2,display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{fontSize:15,fontWeight:600,color:C.ink3}}>Quitter</span></Tap>
+      <Tap onTap={resting>0?undefined:validateSup} style={{flex:1,padding:"16px",borderRadius:14,background:resting>0?C.s3:C.blue,display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{fontSize:16,fontWeight:700,color:resting>0?C.ink4:"#000"}}>{resting>0?"Repos en cours\u2026":(si<cexos.length-1?("Valider "+String.fromCharCode(65+si)):(stour>=supTours?"Terminer le bloc":"Valider \u2192 repos"))}</span></Tap>
+    </div>);
+  } else {
+    const big=kind==="emom"?fmtMSS(secInMin):fmtMSS(remaining);
+    BODY=(<div style={{margin:"auto 0",padding:"0 20px 8px",width:"100%"}}>
+      <div style={{display:"flex",flexDirection:"column",alignItems:"center",marginBottom:18}}>
+        {kind==="emom"&&<div style={{fontSize:14,fontWeight:700,color:C.blue,marginBottom:6}}>Minute {curMin}/{durMin}</div>}
+        {kind==="amrap"&&<div style={{fontSize:14,fontWeight:700,color:C.blue,marginBottom:6}}>{rounds} tour{rounds>1?"s":""}</div>}
+        <div style={{fontSize:72,fontWeight:700,color:done?C.green:C.ink,letterSpacing:"-.03em",lineHeight:1}}>{done?"FINI":big}</div>
+        {kind==="emom"&&emomEx&&!done&&<div style={{marginTop:14,textAlign:"center"}}><div style={{fontSize:22,fontWeight:700,color:C.ink}}>{emomEx.n}</div><div style={{fontSize:15,color:C.ink3,marginTop:2}}>{emomEx.kg>0?emomEx.kg+"kg \u00b7 ":""}{emomEx.reps} reps</div></div>}
+      </div>
+      <div>
+        {cexos.map((ex,i)=>{const hot=kind==="emom"&&running&&emomEx&&emomEx.id===ex.id;const ck=!!checked[i];return(
+          <Tap key={ex.id||i} onTap={()=>setChecked(c=>({...c,[i]:!c[i]}))} style={{display:"flex",alignItems:"center",gap:12,padding:"12px 14px",borderRadius:12,background:(ck||hot)?C.blueDim:C.s1,border:`1px solid ${(ck||hot)?C.blue:"transparent"}`,marginBottom:8}}>
+            <div style={{width:28,height:28,borderRadius:"50%",background:ck?C.blue:C.s3,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}><span style={{fontSize:13,fontWeight:700,color:ck?"#000":C.ink3}}>{ck?"\u2713":(i+1)}</span></div>
+            <div style={{flex:1,fontSize:15,fontWeight:600,color:C.ink,textDecoration:ck?"line-through":"none",opacity:ck?0.6:1}}>{ex.n}</div>
+            <div style={{fontSize:14,color:C.ink3}}>{ex.reps}{kind==="emom"?"/min":"/tour"}</div>
+          </Tap>);})}
+      </div>
+    </div>);
+    FOOT=(<div style={{display:"flex",gap:10,padding:"12px 20px calc(12px + env(safe-area-inset-bottom))",flexShrink:0}}>
+      <Tap onTap={running?pause:reset} style={{padding:"16px 22px",borderRadius:14,background:running?C.redDim:C.s2,border:running?`1px solid ${C.red}`:"none",display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{fontSize:15,fontWeight:600,color:running?C.red:C.ink3}}>{running?"Pause":"Reset"}</span></Tap>
+      {(kind==="amrap"&&running&&!done)
+        ? <Tap onTap={()=>{setRounds(r=>r+1);setChecked({});}} style={{flex:1,padding:"16px",borderRadius:14,background:C.green,display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{fontSize:16,fontWeight:700,color:"#000"}}>+1 tour</span></Tap>
+        : (!running ? <Tap onTap={startTimer} style={{flex:1,padding:"16px",borderRadius:14,background:C.blue,display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{fontSize:16,fontWeight:700,color:"#000"}}>{elapsed>0?"Reprendre":"D\u00e9marrer le bloc"}</span></Tap> : <div style={{flex:1}}/>)}
+    </div>);
+  }
   return (
-    <div style={{position:"fixed",inset:0,background:C.bg,zIndex:Z.fullscreen,display:"flex",flexDirection:"column",fontFamily:F,paddingTop:"env(safe-area-inset-top)",paddingBottom:"env(safe-area-inset-bottom)"}}>
-      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"16px 20px"}}>
-        <div><div style={{fontSize:20,fontWeight:700,color:C.ink}}>{cur.label||(mode==="amrap"?"AMRAP":"EMOM")}</div><div style={{fontSize:12,color:C.ink4,marginTop:2}}>Bloc {bi+1}/{BLK.length} · {exos.length} exercices</div></div>
-        <Tap onTap={onClose} style={{width:40,height:40,borderRadius:10,background:C.s2,display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{fontSize:14,color:C.ink3}}>✕</span></Tap>
-      </div>
-      <div style={{flex:1,overflowY:"auto",overscrollBehavior:"contain",padding:"0 20px 24px",display:"flex",flexDirection:"column",justifyContent:"flex-start"}}>
-        <div style={{fontSize:13,color:C.ink4,lineHeight:1.5,marginBottom:16}}>{mode==="amrap"?"Fais un maximum de tours du circuit avant la fin du temps. Compte chaque tour terminé.":"À chaque début de minute (bip), enchaine l'exercice affiché, puis repose-toi jusqu'à la minute suivante."}</div>
-        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",background:C.s2,borderRadius:14,padding:"12px 16px",marginBottom:16}}>
-          <span style={{fontSize:15,color:C.ink2}}>Durée</span>
-          <div style={{display:"flex",alignItems:"center",gap:12}}>
-            <Tap onTap={()=>!running&&setMin(v=>Math.max(1,v-1))} style={{width:38,height:38,borderRadius:10,background:C.s3,display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{fontSize:20,color:C.ink}}>−</span></Tap>
-            <span style={{fontSize:20,fontWeight:700,color:C.ink,minWidth:64,textAlign:"center"}}>{minutes} min</span>
-            <Tap onTap={()=>!running&&setMin(v=>Math.min(60,v+1))} style={{width:38,height:38,borderRadius:10,background:C.s3,display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{fontSize:20,color:C.ink}}>+</span></Tap>
-          </div>
-        </div>
-        <div style={{display:"flex",flexDirection:"column",alignItems:"center",padding:"8px 0 16px"}}>
-          {mode==="emom"&&running&&emomEx&&<div style={{fontSize:14,fontWeight:600,color:C.blue,marginBottom:6}}>Minute {curMin}/{minutes}</div>}
-          <div style={{fontSize:68,fontWeight:700,color:done?C.green:C.ink,letterSpacing:"-.03em",lineHeight:1}}>{done?"FINI":(mode==="emom"&&running?fmtMSS(secInMin):fmtMSS(remaining))}</div>
-          {mode==="emom"&&running&&emomEx&&<div style={{marginTop:14,textAlign:"center"}}><div style={{fontSize:22,fontWeight:700,color:C.ink}}>{emomEx.n}</div><div style={{fontSize:15,color:C.ink3,marginTop:2}}>{emomEx.reps} reps · total {fmtMSS(remaining)}</div></div>}
-          {mode==="amrap"&&<div style={{marginTop:18,display:"flex",flexDirection:"column",alignItems:"center",gap:8}}><div style={{fontSize:46,fontWeight:700,color:C.blue,lineHeight:1}}>{rounds}</div><div style={{fontSize:12,color:C.ink4,textTransform:"uppercase",letterSpacing:".1em"}}>tours</div><Tap onTap={()=>running&&setRounds(r=>r+1)} style={{marginTop:4,padding:"14px 34px",borderRadius:980,background:C.s2,border:`1px solid ${C.div}`,opacity:running?1:0.5}}><span style={{fontSize:16,fontWeight:600,color:C.ink2}}>+1 tour</span></Tap></div>}
-        </div>
-        <div style={{marginBottom:16}}>
-          <div style={{fontSize:12,fontWeight:600,color:C.ink4,textTransform:"uppercase",letterSpacing:".08em",marginBottom:10}}>{mode==="amrap"?"1 tour = (tape pour cocher)":"Rotation des minutes (tape pour cocher)"}</div>
-          {exos.map((ex,i)=>{const hot=mode==="emom"&&running&&emomEx&&emomEx.id===ex.id;const ck=!!checked[i];return (<Tap key={ex.id} onTap={()=>setChecked(c=>({...c,[i]:!c[i]}))} style={{display:"flex",alignItems:"center",gap:12,padding:"12px 14px",borderRadius:12,background:ck?C.blueDim:(hot?C.blueDim:C.s1),border:`1px solid ${(ck||hot)?C.blue:"transparent"}`,marginBottom:8}}><div style={{width:28,height:28,borderRadius:"50%",background:ck?C.blue:C.s3,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}><span style={{fontSize:13,fontWeight:700,color:ck?"#000":C.ink3}}>{ck?"\u2713":(i+1)}</span></div><div style={{flex:1,fontSize:15,fontWeight:600,color:C.ink,textDecoration:ck?"line-through":"none",opacity:ck?0.6:1}}>{ex.n}</div><div style={{fontSize:14,color:C.ink3}}>{ex.reps}{mode==="emom"?"/min":"/tour"}</div></Tap>);})}
-        </div>
-      </div>
-      <div style={{display:"flex",gap:10,padding:"12px 20px"}}>
-        <Tap onTap={reset} style={{padding:"16px 22px",borderRadius:14,background:C.s2,display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{fontSize:15,fontWeight:600,color:C.ink3}}>Reset</span></Tap>
-        <Tap onTap={primary.act} style={{flex:1,padding:"16px",borderRadius:14,background:primary.bg,border:`1px solid ${primary.bd}`,display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{fontSize:17,fontWeight:700,color:primary.fg}}>{primary.label}</span></Tap>
-      </div>
-    </div>
-  );
+    <div style={{position:"fixed",inset:0,background:C.bg,zIndex:Z.fullscreen,display:"flex",flexDirection:"column",fontFamily:F,paddingTop:"env(safe-area-inset-top)"}}>
+      {HEAD}
+      <div style={{flex:1,overflowY:"auto",overscrollBehavior:"contain",display:"flex",flexDirection:"column"}}>{BODY}</div>
+      {FOOT}
+    </div>);
 }
-
 function ExerciseRowCollapsed({ex,dayIdx,log,idx,onOpen,onReplace}) {
   const plan=setPlanFor(ex);const n=plan.length;
   const completed=plan.filter((_,i)=>log[`d${dayIdx}_${ex.id}_s${i}`]&&log[`d${dayIdx}_${ex.id}_s${i}`].done).length;
@@ -1863,7 +1890,7 @@ function SettingsTab({user,excluded,onToggleExclude,onSignOut,onReset,onOpenLibr
           <span style={{fontSize:17,color:C.red}}>›</span>
         </Tap>
       </div>
-      <div style={{fontSize:12,color:C.ink4,textAlign:"center",marginTop:28}}>SŌMA · {"S"+weekNumber()} · {DB.length} exercices · build 23.20a</div>
+      <div style={{fontSize:12,color:C.ink4,textAlign:"center",marginTop:28}}>SŌMA · {"S"+weekNumber()} · {DB.length} exercices · build 23.21a</div>
     </div>
   );
 }
@@ -2058,6 +2085,7 @@ export default function SomaApp() {
   const[detailEx,setDetailEx]=useState(null);
   const[focusIdx,setFocusIdx]=useState(null);
   const[showCircuit,setShowCircuit]=useState(false);
+  const[supBlock,setSupBlock]=useState(null);
   const[circuitStart,setCircuitStart]=useState(0);
   const[showSettings,setShowSettings]=useState(false);
   const[dayCons,setDayCons]=useState(null);
@@ -2337,7 +2365,7 @@ const NAV=[{id:"home",l:"Accueil"},{id:"seance",l:"Séances"},{id:"stats",l:"Sta
             const pct=exList.length?done/exList.length:0;
             const isSel=i===dayIdx,isToday=i===todayIdx();
             return(
-              <Tap key={i} onTap={()=>{setDayIdx(i);setAiOverride(null);setDayCons(null);setModeOverride(null);setCircuitStart(0);}} style={{flexShrink:0,minWidth:52,padding:"10px 6px",textAlign:"center",borderRadius:12,background:isSel?C.s2:"transparent",border:`1px solid ${isSel?C.s4:"transparent"}`,transition:`all 200ms ${EO}`}}>
+              <Tap key={i} onTap={()=>{setDayIdx(i);setAiOverride(null);setDayCons(null);setModeOverride(null);setCircuitStart(0);setSupBlock(null);}} style={{flexShrink:0,minWidth:52,padding:"10px 6px",textAlign:"center",borderRadius:12,background:isSel?C.s2:"transparent",border:`1px solid ${isSel?C.s4:"transparent"}`,transition:`all 200ms ${EO}`}}>
                 <div style={{fontSize:10,fontWeight:600,color:isSel?C.ink2:C.ink4,letterSpacing:".06em",marginBottom:4}}>{d.day}</div>
                 {isToday&&<div style={{width:6,height:6,borderRadius:"50%",background:C.lime,margin:"0 auto 4px"}}/>}
                 {d.salle&&pct>0&&<div style={{width:"70%",height:2,background:C.s4,borderRadius:1,margin:"0 auto"}}>
@@ -2430,6 +2458,7 @@ const NAV=[{id:"home",l:"Accueil"},{id:"seance",l:"Séances"},{id:"stats",l:"Sta
                           <span style={{fontSize:11,fontWeight:700,color:C.ink3,textTransform:"uppercase",letterSpacing:".1em"}}>{blk.muscle}</span>
                           <span style={{fontSize:11,fontWeight:600,color:C.ink4}}>{blk.items.length} exo{blk.items.length>1?"s":""}</span>{blk.groupType&&<span style={{fontSize:10,fontWeight:700,color:"#000",background:C.blue,padding:"1px 7px",borderRadius:6,textTransform:"uppercase",letterSpacing:".08em"}}>{blk.groupType==="circuit"?"Circuit":"Superset"}</span>}
                         </div>
+                        {blk.groupType&&!isDayDone&&<Tap onTap={()=>setSupBlock({label:blk.muscle,kind:blk.groupType==="circuit"?"circuit":"superset",exercises:blk.items.map(x=>x.ex),restSec:90,tours:(blk.items[0]&&blk.items[0].ex&&blk.items[0].ex.sets)||4})} style={{display:"flex",alignItems:"center",justifyContent:"center",gap:8,padding:"12px",borderRadius:12,background:C.blueDim,border:`1px solid ${C.blue}`,marginBottom:10}}><span style={{fontSize:14,fontWeight:700,color:C.blue}}>Démarrer le {blk.groupType==="circuit"?"circuit":"superset"}</span></Tap>}
                         <div style={{paddingLeft:12,borderLeft:`2px solid ${C.s3}`}}>
                           {blk.items.map(({ex,idx})=>(
                             <ExerciseRowCollapsed key={ex.id} ex={ex} idx={idx} dayIdx={dayIdx} log={log}
@@ -2444,6 +2473,7 @@ const NAV=[{id:"home",l:"Accueil"},{id:"seance",l:"Séances"},{id:"stats",l:"Sta
                       log={log} onLogSet={saveLog} onDetail={e=>setDetailEx(e)}
                       onClose={()=>setFocusIdx(null)} hasNext={focusIdx<exos.length-1} onNext={()=>setFocusIdx(focusIdx+1)}/>
                   )}
+                  {supBlock&&<CircuitPlayer mode={supBlock.kind} exos={supBlock.exercises} blocks={[supBlock]} onClose={()=>setSupBlock(null)} onAllDone={()=>{}}/>}
                   {showCircuit&&sessionMode!=="classique"&&exos.length>0&&(
                     <CircuitPlayer mode={sessionMode} exos={exos} blocks={day.blocks} defMin={sessionMode==="amrap"?(day.timeCapMin||12):(day.emomMinutes||Math.max(exos.length,8))} onClose={()=>setShowCircuit(false)} onAllDone={()=>{}} startBlock={circuitStart}/>
                   )}
