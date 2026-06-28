@@ -447,7 +447,7 @@ const metRepsEmom=(ex)=> ex.eq==="cd"?0:ex.eq==="bw"?12:ex.eq==="kb"?10:8;
 const metKg=(ex,profile,f)=>{ if(ex.eq==="bw"||ex.eq==="cd") return 0; const sc=engineScale(profile); const base=(typeof ex.kg==="number"?ex.kg:0)*sc*f; return base>0?Math.max(4,Math.round(base/2)*2):0; };
 const buildMetcon=(day,mode,profile,week,seed)=>{ if(!day||!day.salle) return day; const goal=baseGoal(profile&&profile.goal); const equip=(profile&&profile.equipment)||[]; const ph=phaseOf(week); let pool=DB.filter(e=>metconScore(e,goal)>0).filter(e=> e.eq==="bw" || !equip.length || equip.indexOf(e.eq)>=0); const seen={}; pool=pool.filter(e=>{ if(seen[e.n]) return false; seen[e.n]=1; return true; }); const dayEqs={};(day.exercises||[]).forEach(e=>{dayEqs[e.eq]=(dayEqs[e.eq]||0)+1;});pool=pool.map(e=>({e,s:metconScore(e,goal)+((dayEqs[e.eq]||0)>0?2:0)})).sort((a,b)=>b.s-a.s).map(x=>x.e); if(pool.length<6) pool=DB.filter(e=>metconScore(e,"hybride")>0); const off=pool.length?(((week-1)*3+(seed||0)*5)%pool.length):0; const rot=pool.slice(off).concat(pool.slice(0,off)); const lvl=profile&&profile.level; let nBlocks=lvl==="avance"?3:lvl==="debutant"?2:3; if(ph.k==="Deload") nBlocks=2; const perBlock=3; const rounds=lvl==="debutant"?3:lvl==="avance"?4:3; const cap=lvl==="avance"?12:10; const f=mode==="amrap"?0.55:0.65; const used={}; const blocks=[]; for(let b=0;b<nBlocks;b++){ const exs=[]; let cd=0; const mus={}; while(exs.length<perBlock){ let e=rot.find(x=>!used[x.n]&&(x.eq!=="cd"||cd<1)&&!mus[primaryMuscle(x.m)]); if(!e) e=rot.find(x=>!used[x.n]&&(x.eq!=="cd"||cd<1)); if(!e) e=rot.find(x=>!used[x.n]); if(!e) break; used[e.n]=1; if(e.eq==="cd")cd++; mus[primaryMuscle(e.m)]=1; exs.push(e); } if(!exs.length) break; const exercises=exs.map(ex=>{ const kg=metKg(ex,profile,f); if(mode==="amrap"){ const r=metRepsAmrap(ex); return {...ex,kg,reps:String(ex.eq==="cd"?"40s":r),repsPerRound:r,modeTag:"AMRAP"}; } const r=metRepsEmom(ex); return {...ex,kg,reps:String(ex.eq==="cd"?"40s":r),repsPerMinute:r,modeTag:"EMOM"}; }); const durationMin=mode==="amrap"?cap:(exercises.length*rounds); blocks.push({label:(mode==="amrap"?"AMRAP ":"EMOM ")+(b+1),kind:mode,durationMin,rounds:mode==="emom"?rounds:0,exercises}); } const totalMin=blocks.reduce((a,bl)=>a+bl.durationMin,0)+Math.max(0,blocks.length-1)*2; const flat=[]; blocks.forEach(bl=>bl.exercises.forEach(e=>flat.push(e))); return {...day,mode,metcon:true,blocks,totalMin,timeCapMin:blocks[0]?blocks[0].durationMin:cap,emomMinutes:blocks[0]?blocks[0].durationMin:8,exercises:flat}; };
 const applyMode=(day,mode,profile,week,seed)=>{ if(!day||!day.salle) return day; if(mode==="amrap"||mode==="emom") return buildMetcon(day,mode,profile,week,seed); return day.circuit?buildCircuits(day,profile):day; };
-const primaryMuscle = (m) => String(m||"").split("\u00b7")[0].trim().toLowerCase();
+const primaryMuscle = (m) => String(m||"").split("·")[0].trim().toLowerCase();
 const altPool = (ex) => DB.filter(e=>e.id!==ex.id && e.eq===ex.eq && primaryMuscle(e.m)===primaryMuscle(ex.m));
 const rotateDay = (day,w) => {
   if(!day || !day.salle) return day;
@@ -949,46 +949,46 @@ function CircuitPlayer({mode,exos,onClose,defMin,blocks,onAllDone,startBlock}) {
   const validateSup=()=>{if(resting>0)return;if(si<cexos.length-1){setSi(si+1);}else{setSi(0);if(stour>=supTours){goNext();}else{setStour(stour+1);startRest();}}};
   const HEAD=(
     <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"16px 20px",flexShrink:0}}>
-      <div><div style={{fontSize:20,fontWeight:700,color:C.ink}}>{cur.label||(kind==="amrap"?"AMRAP":kind==="emom"?"EMOM":kind==="circuit"?"Circuit":"Superset")}</div><div style={{fontSize:12,color:C.ink4,marginTop:2}}>Bloc {bi+1}/{BLK.length} \u00b7 {cexos.length} exercices</div></div>
-      <Tap onTap={onClose} style={{width:40,height:40,borderRadius:10,background:C.s2,display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{fontSize:14,color:C.ink3}}>\u2715</span></Tap>
+      <div><div style={{fontSize:20,fontWeight:700,color:C.ink}}>{cur.label||(kind==="amrap"?"AMRAP":kind==="emom"?"EMOM":kind==="circuit"?"Circuit":"Superset")}</div><div style={{fontSize:12,color:C.ink4,marginTop:2}}>Bloc {bi+1}/{BLK.length} · {cexos.length} exercices</div></div>
+      <Tap onTap={onClose} style={{width:40,height:40,borderRadius:10,background:C.s2,display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{fontSize:14,color:C.ink3}}>✕</span></Tap>
     </div>);
   let BODY,FOOT;
   if(kind==="superset"||kind==="circuit"){
-    BODY=(<div style={{margin:"auto 0",padding:"0 20px 8px",width:"100%"}}>
+    BODY=(<div style={{margin:"8px 0 0",padding:"0 20px 8px",width:"100%"}}>
       {resting>0?(
         <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:8}}>
           <div style={{fontSize:13,fontWeight:700,color:C.ink4,textTransform:"uppercase",letterSpacing:".1em"}}>Repos</div>
           <div style={{fontSize:72,fontWeight:700,color:C.green,letterSpacing:"-.03em",lineHeight:1}}>{fmtMSS(resting)}</div>
-          <div style={{fontSize:13,color:C.ink4}}>Tour {stour-1>0?stour-1:1}/{supTours} termin\u00e9</div>
+          <div style={{fontSize:13,color:C.ink4}}>Tour {stour-1>0?stour-1:1}/{supTours} terminé</div>
         </div>
       ):(
         <div>
           <div style={{textAlign:"center",fontSize:13,fontWeight:700,color:C.ink4,textTransform:"uppercase",letterSpacing:".1em",marginBottom:14}}>Tour {stour}/{supTours}</div>
           {cexos.map((ex,i)=>{const act=i===si;const dn=i<si;return(
             <div key={ex.id||i} style={{display:"flex",alignItems:"center",gap:12,padding:"16px",borderRadius:14,background:act?C.blueDim:C.s1,border:`1.5px solid ${act?C.blue:"transparent"}`,marginBottom:10,opacity:dn?0.5:1}}>
-              <div style={{width:30,height:30,borderRadius:"50%",background:act?C.blue:C.s3,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}><span style={{fontSize:13,fontWeight:700,color:act?"#000":C.ink3}}>{dn?"\u2713":String.fromCharCode(65+i)}</span></div>
-              <div style={{flex:1}}><div style={{fontSize:16,fontWeight:700,color:C.ink}}>{ex.n}</div><div style={{fontSize:13,color:C.ink3}}>{ex.kg>0?ex.kg+"kg \u00b7 ":""}{ex.reps} reps</div></div>
+              <div style={{width:30,height:30,borderRadius:"50%",background:act?C.blue:C.s3,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}><span style={{fontSize:13,fontWeight:700,color:act?"#000":C.ink3}}>{dn?"✓":String.fromCharCode(65+i)}</span></div>
+              <div style={{flex:1}}><div style={{fontSize:16,fontWeight:700,color:C.ink}}>{ex.n}</div><div style={{fontSize:13,color:C.ink3}}>{ex.kg>0?ex.kg+"kg · ":""}{ex.reps} reps</div></div>
             </div>);})}
         </div>
       )}
     </div>);
     FOOT=(<div style={{display:"flex",gap:10,padding:"12px 20px calc(12px + env(safe-area-inset-bottom))",flexShrink:0}}>
       <Tap onTap={onClose} style={{padding:"16px 22px",borderRadius:14,background:C.s2,display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{fontSize:15,fontWeight:600,color:C.ink3}}>Quitter</span></Tap>
-      <Tap onTap={resting>0?undefined:validateSup} style={{flex:1,padding:"16px",borderRadius:14,background:resting>0?C.s3:C.blue,display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{fontSize:16,fontWeight:700,color:resting>0?C.ink4:"#000"}}>{resting>0?"Repos en cours\u2026":(si<cexos.length-1?("Valider "+String.fromCharCode(65+si)):(stour>=supTours?"Terminer le bloc":"Valider \u2192 repos"))}</span></Tap>
+      <Tap onTap={resting>0?undefined:validateSup} style={{flex:1,padding:"16px",borderRadius:14,background:resting>0?C.s3:C.blue,display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{fontSize:16,fontWeight:700,color:resting>0?C.ink4:"#000"}}>{resting>0?"Repos en cours…":(si<cexos.length-1?("Valider "+String.fromCharCode(65+si)):(stour>=supTours?"Terminer le bloc":"Valider → repos"))}</span></Tap>
     </div>);
   } else {
     const big=kind==="emom"?fmtMSS(secInMin):fmtMSS(remaining);
-    BODY=(<div style={{margin:"auto 0",padding:"0 20px 8px",width:"100%"}}>
+    BODY=(<div style={{margin:"8px 0 0",padding:"0 20px 8px",width:"100%"}}>
       <div style={{display:"flex",flexDirection:"column",alignItems:"center",marginBottom:18}}>
         {kind==="emom"&&<div style={{fontSize:14,fontWeight:700,color:C.blue,marginBottom:6}}>Minute {curMin}/{durMin}</div>}
         {kind==="amrap"&&<div style={{fontSize:14,fontWeight:700,color:C.blue,marginBottom:6}}>{rounds} tour{rounds>1?"s":""}</div>}
         <div style={{fontSize:72,fontWeight:700,color:done?C.green:C.ink,letterSpacing:"-.03em",lineHeight:1}}>{done?"FINI":big}</div>
-        {kind==="emom"&&emomEx&&!done&&<div style={{marginTop:14,textAlign:"center"}}><div style={{fontSize:22,fontWeight:700,color:C.ink}}>{emomEx.n}</div><div style={{fontSize:15,color:C.ink3,marginTop:2}}>{emomEx.kg>0?emomEx.kg+"kg \u00b7 ":""}{emomEx.reps} reps</div></div>}
+        {kind==="emom"&&emomEx&&!done&&<div style={{marginTop:14,textAlign:"center"}}><div style={{fontSize:22,fontWeight:700,color:C.ink}}>{emomEx.n}</div><div style={{fontSize:15,color:C.ink3,marginTop:2}}>{emomEx.kg>0?emomEx.kg+"kg · ":""}{emomEx.reps} reps</div></div>}
       </div>
       <div>
         {cexos.map((ex,i)=>{const hot=kind==="emom"&&running&&emomEx&&emomEx.id===ex.id;const ck=!!checked[i];return(
           <Tap key={ex.id||i} onTap={()=>setChecked(c=>({...c,[i]:!c[i]}))} style={{display:"flex",alignItems:"center",gap:12,padding:"12px 14px",borderRadius:12,background:(ck||hot)?C.blueDim:C.s1,border:`1px solid ${(ck||hot)?C.blue:"transparent"}`,marginBottom:8}}>
-            <div style={{width:28,height:28,borderRadius:"50%",background:ck?C.blue:C.s3,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}><span style={{fontSize:13,fontWeight:700,color:ck?"#000":C.ink3}}>{ck?"\u2713":(i+1)}</span></div>
+            <div style={{width:28,height:28,borderRadius:"50%",background:ck?C.blue:C.s3,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}><span style={{fontSize:13,fontWeight:700,color:ck?"#000":C.ink3}}>{ck?"✓":(i+1)}</span></div>
             <div style={{flex:1,fontSize:15,fontWeight:600,color:C.ink,textDecoration:ck?"line-through":"none",opacity:ck?0.6:1}}>{ex.n}</div>
             <div style={{fontSize:14,color:C.ink3}}>{ex.reps}{kind==="emom"?"/min":"/tour"}</div>
           </Tap>);})}
@@ -998,14 +998,17 @@ function CircuitPlayer({mode,exos,onClose,defMin,blocks,onAllDone,startBlock}) {
       <Tap onTap={running?pause:reset} style={{padding:"16px 22px",borderRadius:14,background:running?C.redDim:C.s2,border:running?`1px solid ${C.red}`:"none",display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{fontSize:15,fontWeight:600,color:running?C.red:C.ink3}}>{running?"Pause":"Reset"}</span></Tap>
       {(kind==="amrap"&&running&&!done)
         ? <Tap onTap={()=>{setRounds(r=>r+1);setChecked({});}} style={{flex:1,padding:"16px",borderRadius:14,background:C.green,display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{fontSize:16,fontWeight:700,color:"#000"}}>+1 tour</span></Tap>
-        : (!running ? <Tap onTap={startTimer} style={{flex:1,padding:"16px",borderRadius:14,background:C.blue,display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{fontSize:16,fontWeight:700,color:"#000"}}>{elapsed>0?"Reprendre":"D\u00e9marrer le bloc"}</span></Tap> : <div style={{flex:1}}/>)}
+        : (!running ? <Tap onTap={startTimer} style={{flex:1,padding:"16px",borderRadius:14,background:C.blue,display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{fontSize:16,fontWeight:700,color:"#000"}}>{elapsed>0?"Reprendre":"Démarrer le bloc"}</span></Tap> : <div style={{flex:1}}/>)}
     </div>);
   }
   return (
-    <div style={{position:"fixed",inset:0,background:C.bg,zIndex:Z.fullscreen,display:"flex",flexDirection:"column",fontFamily:F,paddingTop:"env(safe-area-inset-top)"}}>
-      {HEAD}
-      <div style={{flex:1,overflowY:"auto",overscrollBehavior:"contain",display:"flex",flexDirection:"column"}}>{BODY}</div>
-      {FOOT}
+    <div style={{position:"fixed",inset:0,background:C.bg,zIndex:Z.fullscreen,overflowY:"auto",overscrollBehavior:"contain",fontFamily:F,paddingTop:"env(safe-area-inset-top)"}}>
+      <div style={{maxWidth:600,margin:"0 auto",minHeight:"100%",display:"flex",flexDirection:"column"}}>
+        {HEAD}
+        {BODY}
+        <div style={{flexGrow:1,minHeight:24}}/>
+        {FOOT}
+      </div>
     </div>);
 }
 function ExerciseRowCollapsed({ex,dayIdx,log,idx,onOpen,onReplace}) {
@@ -1890,7 +1893,7 @@ function SettingsTab({user,excluded,onToggleExclude,onSignOut,onReset,onOpenLibr
           <span style={{fontSize:17,color:C.red}}>›</span>
         </Tap>
       </div>
-      <div style={{fontSize:12,color:C.ink4,textAlign:"center",marginTop:28}}>SŌMA · {"S"+weekNumber()} · {DB.length} exercices · build 23.21a</div>
+      <div style={{fontSize:12,color:C.ink4,textAlign:"center",marginTop:28}}>SŌMA · {"S"+weekNumber()} · {DB.length} exercices · build 23.22a</div>
     </div>
   );
 }
@@ -2462,7 +2465,7 @@ const NAV=[{id:"home",l:"Accueil"},{id:"seance",l:"Séances"},{id:"stats",l:"Sta
                         <div style={{paddingLeft:12,borderLeft:`2px solid ${C.s3}`}}>
                           {blk.items.map(({ex,idx})=>(
                             <ExerciseRowCollapsed key={ex.id} ex={ex} idx={idx} dayIdx={dayIdx} log={log}
-                              onOpen={()=>{if(isDayDone)return;sessionMode==="classique"?setFocusIdx(idx):setShowCircuit(true);}} onReplace={e=>setShowPicker(e)}/>
+                              onOpen={()=>{if(isDayDone)return;if(sessionMode!=="classique"){setShowCircuit(true);return;}const _e=exos[idx];if(_e&&_e.circuitId){const _g=exos.filter(e=>e.circuitId===_e.circuitId);setSupBlock({label:_e.m||"Superset",kind:_g.length>=3?"circuit":"superset",exercises:_g,restSec:90,tours:(_g[0]&&_g[0].sets)||4});}else{setFocusIdx(idx);}}} onReplace={e=>setShowPicker(e)}/>
                           ))}
                         </div>
                       </div>
@@ -2497,7 +2500,7 @@ const NAV=[{id:"home",l:"Accueil"},{id:"seance",l:"Séances"},{id:"stats",l:"Sta
               )}
             </div>
           )}
-          {tab==="stats"&&<><StatsTab sessions={sessions} weights={weights} accent={accent}/><HistoryTab sessions={sessions} onSelect={setShowReport} accent={accent}/></>}
+          {tab==="stats"&&<><StatsTab sessions={sessions} weights={weights} accent={accent}/><HistoryTab sessions={sessions} onSelect={setShowReport} accent={accent} onOpenPhotos={()=>setShowPhotos(true)}/></>}
           {tab==="settings"&&<SettingsTab user={user} excluded={excluded} onToggleExclude={toggleExclude} onOpenLibrary={()=>setShowLibrary(true)} profile={profile} schedule={schedule} onUpdateConfig={updateConfig}
             onSignOut={async()=>{await supabase.auth.signOut();setUser(null);setLog({});setWeights({});setSessions([]);setExcluded([]);setStreak(0);}}
             onReset={async()=>{
