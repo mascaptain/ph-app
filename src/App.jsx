@@ -1931,7 +1931,7 @@ function SettingsTab({user,excluded,onToggleExclude,onSignOut,onReset,onOpenLibr
           <span style={{fontSize:17,color:C.red}}>›</span>
         </Tap>
       </div>
-      <div style={{fontSize:12,color:C.ink4,textAlign:"center",marginTop:28}}>SŌMA · {"S"+weekNumber()} · {DB.length} exercices · build 23.27a</div>
+      <div style={{fontSize:12,color:C.ink4,textAlign:"center",marginTop:28}}>SŌMA · {"S"+weekNumber()} · {DB.length} exercices · build 23.28a</div>
     </div>
   );
 }
@@ -2246,8 +2246,8 @@ export default function SomaApp() {
   const toggleFav=useCallback(id=>{setFavorites(prev=>{const next=prev.includes(id)?prev.filter(x=>x!==id):[...prev,id];persist(user?.id,{favorites:next});return next;});},[persist]);
   const updateConfig=useCallback((updates)=>{
     const next={...(profile||{}),...updates};
-    if(updates.days){ next.frequency=updates.days.length; const sched=generateScheduleDays(updates.days); setSchedule(sched); persist(user?.id,{schedule:sched}); }
-    else if(updates.frequency){ const days=FREQ_DAYS[updates.frequency]||FREQ_DAYS[4]; const sched=generateScheduleDays(days); setSchedule(sched); persist(user?.id,{schedule:sched}); }
+    if(updates.days){ next.frequency=updates.days.length; const sched=generateScheduleDays(updates.days); setSchedule(sched); persist(user?.id,{schedule:sched}); if(!(profile?.session_index)) next.total_sessions=12*updates.days.length; }
+    else if(updates.frequency){ const days=FREQ_DAYS[updates.frequency]||FREQ_DAYS[4]; const sched=generateScheduleDays(days); setSchedule(sched); persist(user?.id,{schedule:sched}); if(!(profile?.session_index)) next.total_sessions=12*days.length; }
     setProfile(next);
     persist(user?.id,{profile:next});
     return (async()=>{ try{ const{error}=await supabase.from("profiles").upsert({id:user?.id,goal:next.goal,level:next.level,equipment:next.equipment,frequency:next.frequency,weight_kg:next.weight_kg,sex:next.sex,height_cm:next.height_cm,age:next.age,program_start:next.program_start,rms:next.rms,avatar:next.avatar,photos:next.photos,session_index:next.session_index,total_sessions:next.total_sessions,updated_at:new Date().toISOString()},{onConflict:"id"}); if(error)console.error("profile save",error.message); return {error}; }catch(e){ console.error("profile save",e); return {error:e}; } })();
@@ -2374,10 +2374,12 @@ export default function SomaApp() {
   if(false&&showWelcome) return(<WelcomeScreen user={user} todaySession={viewSchedule[todayIdx()]||PROGRAM[todayIdx()]} streak={streak} onStart={()=>{setShowWelcome(false);setDayIdx(todayIdx());}} onSkip={()=>setShowWelcome(false)}/>);
 
   const sessionIndex=profile?.session_index||0;
-  const totalSessions=profile?.total_sessions||(12*(profile?.frequency||4));
   const trainingDaysPerWeek=(schedule||[]).filter(d=>d&&d.salle).length||(profile?.frequency||4);
+  const expectedTotalSessions=12*trainingDaysPerWeek;
+  const totalSessions=profile?.total_sessions||expectedTotalSessions;
   const sessionWeek=Math.min(PROG_WEEKS,Math.max(1,Math.floor(sessionIndex/trainingDaysPerWeek)+1));
   const programDone=sessionIndex>=totalSessions;
+  useEffect(()=>{ if(profile&&sessionIndex===0&&profile.total_sessions!==expectedTotalSessions){ updateConfig({total_sessions:expectedTotalSessions}); } },[expectedTotalSessions,profile?.total_sessions,sessionIndex]);
   const isViewingToday=dayIdx===todayIdx();
   const rawDay0=viewSchedule[dayIdx]||PROGRAM[dayIdx];
   const pendingTemplate=(!programDone&&TRAIN_TEMPLATES.length)?TRAIN_TEMPLATES[sessionIndex%TRAIN_TEMPLATES.length]:null;
@@ -2538,15 +2540,6 @@ const NAV=[{id:"home",l:"Accueil"},{id:"seance",l:"Séances"},{id:"stats",l:"Sta
                       </div>
                     ))}
                   </div>
-                  {focusIdx!=null&&exos[focusIdx]&&(
-                    <ExerciseFocus key={exos[focusIdx].id} ex={exos[focusIdx]} idx={focusIdx} count={exos.length} dayIdx={dayIdx}
-                      log={log} onLogSet={saveLog} onDetail={e=>setDetailEx(e)}
-                      onClose={()=>setFocusIdx(null)} hasNext={focusIdx<exos.length-1} onNext={()=>setFocusIdx(focusIdx+1)}/>
-                  )}
-                  {supBlock&&<CircuitPlayer mode={supBlock.kind} exos={supBlock.exercises} blocks={[supBlock]} onClose={()=>setSupBlock(null)} onAllDone={()=>{}}/>}
-                  {showCircuit&&sessionMode!=="classique"&&exos.length>0&&(
-                    <CircuitPlayer mode={sessionMode} exos={exos} blocks={day.blocks} defMin={sessionMode==="amrap"?(day.timeCapMin||12):(day.emomMinutes||Math.max(exos.length,8))} onClose={()=>setShowCircuit(false)} onAllDone={()=>{}} startBlock={circuitStart}/>
-                  )}
                   {absExos.length>0&&(
                     <div style={{marginTop:24,paddingTop:20,borderTop:`1px solid ${C.s3}`}}>
                       <div style={{fontSize:11,fontWeight:600,color:C.ink4,textTransform:"uppercase",letterSpacing:".1em",marginBottom:16}}>Abdominaux</div>
@@ -2589,6 +2582,17 @@ const NAV=[{id:"home",l:"Accueil"},{id:"seance",l:"Séances"},{id:"stats",l:"Sta
           />}
         </TabContent>
       </div>
+
+      {/* Overlays plein ecran sortis du wrapper anime (position:fixed casse sous un ancetre avec transform) */}
+      {focusIdx!=null&&exos[focusIdx]&&(
+        <ExerciseFocus key={exos[focusIdx].id} ex={exos[focusIdx]} idx={focusIdx} count={exos.length} dayIdx={dayIdx}
+          log={log} onLogSet={saveLog} onDetail={e=>setDetailEx(e)}
+          onClose={()=>setFocusIdx(null)} hasNext={focusIdx<exos.length-1} onNext={()=>setFocusIdx(focusIdx+1)}/>
+      )}
+      {supBlock&&<CircuitPlayer mode={supBlock.kind} exos={supBlock.exercises} blocks={[supBlock]} onClose={()=>setSupBlock(null)} onAllDone={()=>{}}/>}
+      {showCircuit&&sessionMode!=="classique"&&exos.length>0&&(
+        <CircuitPlayer mode={sessionMode} exos={exos} blocks={day.blocks} defMin={sessionMode==="amrap"?(day.timeCapMin||12):(day.emomMinutes||Math.max(exos.length,8))} onClose={()=>setShowCircuit(false)} onAllDone={()=>{}} startBlock={circuitStart}/>
+      )}
 
       {/* BOTTOM NAV */}
       <div style={{position:"fixed",bottom:0,left:0,right:0,zIndex:Z.sticky+10,background:"rgba(255,255,255,.96)",backdropFilter:"blur(24px)",WebkitBackdropFilter:"blur(24px)",borderTop:`1px solid ${C.s3}`,display:"flex",paddingBottom:"env(safe-area-inset-bottom)"}}>
