@@ -462,7 +462,7 @@ const rotateDay = (day,w) => {
 };
 
 // Adapte les exercices au materiel disponible (epic A) : remplace un exo non realisable par une variante du meme muscle dans le materiel dispo
-const GOAL_ADJ={force:{rest:1.25,reps:0.7},endurance:{rest:0.7,reps:1.5},seche:{rest:0.8,reps:1.15},hybride:{rest:1,reps:1}};
+const GOAL_ADJ={force:{rest:1.25,reps:0.7},hypertrophie:{rest:0.9,reps:1.25},endurance:{rest:0.7,reps:1.5},seche:{rest:0.8,reps:1.15},hybride:{rest:1,reps:1},performance:{rest:0.85,reps:1.1}};
 const adaptGoal = (day, goal) => {
   if(!day || !day.salle) return day;
   const a=GOAL_ADJ[goal]||GOAL_ADJ.hybride;
@@ -876,10 +876,21 @@ function HomeTab({profile,streak,sessions,weights,todaySession,onStartToday,acce
   const hello=hour<12?"Bonjour":hour<18?"Bon après-midi":"Bonsoir";
   const name=(profile&&profile.name)?profile.name:"";
   const isRest=!todaySession||!todaySession.salle;
+  const progIndex=Math.min(profile?.session_index||0,profile?.total_sessions||0);
+  const progTotal=profile?.total_sessions||null;
+  const goalLabel=(GOALS.find(g=>g[0]===profile?.goal)||[])[1]||null;
   const Stat=({v,l,sub})=>(<div style={{flex:1,background:C.s1,borderRadius:16,padding:"16px 14px"}}><div style={{fontSize:26,fontWeight:800,color:C.ink,lineHeight:1}}>{v}</div><div style={{fontSize:12,color:C.ink3,marginTop:6,fontWeight:600}}>{l}</div>{sub&&<div style={{fontSize:11,color:C.ink4,marginTop:2}}>{sub}</div>}</div>);
   return (<div style={{padding:"20px 20px 0",maxWidth:600,margin:"0 auto"}}>
     <div style={{marginBottom:6,fontSize:13,color:C.ink4}}>{hello}{name?(", "+name):""}</div>
-    <div style={{fontSize:26,fontWeight:800,color:C.ink,letterSpacing:"-.02em",marginBottom:20}}>SŌMA</div>
+    <div style={{fontSize:26,fontWeight:800,color:C.ink,letterSpacing:"-.02em",marginBottom:goalLabel?6:20}}>SŌMA</div>
+    {goalLabel&&<div style={{marginBottom:20}}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",marginBottom:6}}>
+        <span style={{fontSize:13,fontWeight:700,color:C.ink2}}>Programme {goalLabel}</span>
+        {progTotal>0&&<span style={{fontSize:12,fontWeight:600,color:C.ink4}}>Séance {progIndex}/{progTotal}</span>}
+      </div>
+      {progTotal>0&&<div style={{height:4,borderRadius:2,background:C.s2,overflow:"hidden"}}><div style={{height:"100%",width:`${Math.min(100,progIndex/progTotal*100)}%`,background:accent||C.blue,borderRadius:2,transition:`width 400ms ${EO}`}}/></div>}
+      {progTotal>0&&progIndex>=progTotal&&<div style={{marginTop:10,fontSize:12,fontWeight:600,color:C.green}}>Programme terminé — choisis un nouveau programme dans Réglages</div>}
+    </div>}
     <div style={{background:isRest?C.s1:C.ink,borderRadius:20,padding:"20px",marginBottom:16}}>
       <div style={{fontSize:12,fontWeight:700,letterSpacing:".1em",textTransform:"uppercase",color:isRest?C.ink4:"rgba(255,255,255,.55)",marginBottom:8}}>Aujourd'hui</div>
       <div style={{fontSize:22,fontWeight:800,color:isRest?C.ink:"#fff",marginBottom:4}}>{todaySession?todaySession.label:"Repos"}</div>
@@ -1797,6 +1808,7 @@ function ScheduleEditor({schedule,onChange,onReset,onClose,autoRotate,onToggleAu
 
 function SettingsTab({user,excluded,onToggleExclude,onSignOut,onReset,onOpenLibrary,profile,schedule,onUpdateConfig,onOpenScheduleEditor}) {
   const[showLib,setShowLib]=useState(false);
+  const[confirmGoal,setConfirmGoal]=useState(null);
   const[w,setW]=useState(profile?.weight_kg!=null?String(profile.weight_kg):"");
   const[h,setH]=useState(profile?.height_cm!=null?String(profile.height_cm):"");
   const[ag,setAg]=useState(profile?.age!=null?String(profile.age):"");
@@ -1824,11 +1836,20 @@ function SettingsTab({user,excluded,onToggleExclude,onSignOut,onReset,onOpenLibr
       {onUpdateConfig&&<div style={{background:C.s1,borderRadius:16,padding:"20px",marginBottom:12}}>
         <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:16}}><span style={{fontSize:14,fontWeight:600,color:C.ink}}>Mon programme</span>{onOpenScheduleEditor&&<Tap onTap={onOpenScheduleEditor} style={{padding:"6px 12px",borderRadius:980,background:C.s2}}><span style={{fontSize:12,fontWeight:600,color:C.ink3}}>Modifier les séances ›</span></Tap>}</div>
         <div style={{fontSize:12,fontWeight:600,color:C.ink4,textTransform:"uppercase",letterSpacing:".08em",marginBottom:8}}>Objectif</div>
-        <div style={{display:"flex",flexWrap:"wrap",gap:8,marginBottom:18}}>
-          {[["force","Force"],["endurance","Endurance"],["hybride","Hybride"],["seche","Perte de gras"]].map(([k,l])=>(
-            <Tap key={k} onTap={()=>onUpdateConfig({goal:k})} style={{padding:"9px 16px",borderRadius:980,border:`1.5px solid ${profile?.goal===k?C.blue:C.div}`,background:profile?.goal===k?C.blueDim:"transparent"}}><span style={{fontSize:13,fontWeight:600,color:profile?.goal===k?C.blue:C.ink3}}>{l}</span></Tap>
+        <div style={{display:"flex",flexWrap:"wrap",gap:8,marginBottom:confirmGoal?10:18}}>
+          {GOALS.map(([k,l])=>(
+            <Tap key={k} onTap={()=>{if(k===profile?.goal)return;setConfirmGoal(k);}} style={{padding:"9px 16px",borderRadius:980,border:`1.5px solid ${profile?.goal===k?C.blue:C.div}`,background:profile?.goal===k?C.blueDim:"transparent"}}><span style={{fontSize:13,fontWeight:600,color:profile?.goal===k?C.blue:C.ink3}}>{l}</span></Tap>
           ))}
         </div>
+        {confirmGoal&&(()=>{const g=GOALS.find(x=>x[0]===confirmGoal);const tdpw=(schedule||[]).filter(d=>d&&d.salle).length||(profile?.frequency||4);return(
+          <div style={{background:C.orDim||C.s2,border:`1px solid ${C.orange||C.s4}`,borderRadius:14,padding:"14px",marginBottom:18}}>
+            <div style={{fontSize:13,fontWeight:700,color:C.ink,marginBottom:4}}>Passer à {g?g[1]:confirmGoal} ?</div>
+            <div style={{fontSize:12,color:C.ink3,marginBottom:12}}>Cela redémarre le programme à la séance 1.</div>
+            <div style={{display:"flex",gap:8}}>
+              <Tap onTap={()=>setConfirmGoal(null)} style={{flex:1,padding:"10px",borderRadius:10,background:C.s2,textAlign:"center"}}><span style={{fontSize:13,fontWeight:600,color:C.ink3}}>Annuler</span></Tap>
+              <Tap onTap={()=>{onUpdateConfig({goal:confirmGoal,session_index:0,total_sessions:12*tdpw,program_start:todayKey()});setConfirmGoal(null);}} style={{flex:1,padding:"10px",borderRadius:10,background:C.blue,textAlign:"center"}}><span style={{fontSize:13,fontWeight:700,color:"#000"}}>Confirmer</span></Tap>
+            </div>
+          </div>);})()}
         <div style={{fontSize:12,fontWeight:600,color:C.ink4,textTransform:"uppercase",letterSpacing:".08em",marginBottom:8}}>Jours de séance</div>
         <div style={{display:"flex",gap:6,marginBottom:18}}>
           {["LUN","MAR","MER","JEU","VEN","SAM","DIM"].map((lbl,i)=>{
@@ -1861,7 +1882,7 @@ function SettingsTab({user,excluded,onToggleExclude,onSignOut,onReset,onOpenLibr
         <div style={{marginTop:20,paddingTop:18,borderTop:`1px solid ${C.s3}`}}>
           <div style={{fontSize:12,fontWeight:600,color:C.ink4,textTransform:"uppercase",letterSpacing:".08em",marginBottom:8}}>Programme</div>
           {profile?.program_start?(
-            <div style={{fontSize:14,color:C.ink2,marginBottom:12}}>Semaine {progWeekOf(profile.program_start)}/12 · {fmtDateShort(profile.program_start)} → {fmtDateShort(progEndDate(profile.program_start))}</div>
+            <div style={{fontSize:14,color:C.ink2,marginBottom:12}}>Séance {Math.min(profile?.session_index||0,profile?.total_sessions||48)}/{profile?.total_sessions||48} · débuté le {fmtDateShort(profile.program_start)}</div>
           ):(
             <div style={{fontSize:14,color:C.ink4,marginBottom:12}}>Aucun programme démarré.</div>
           )}
@@ -1910,7 +1931,7 @@ function SettingsTab({user,excluded,onToggleExclude,onSignOut,onReset,onOpenLibr
           <span style={{fontSize:17,color:C.red}}>›</span>
         </Tap>
       </div>
-      <div style={{fontSize:12,color:C.ink4,textAlign:"center",marginTop:28}}>SŌMA · {"S"+weekNumber()} · {DB.length} exercices · build 23.26a</div>
+      <div style={{fontSize:12,color:C.ink4,textAlign:"center",marginTop:28}}>SŌMA · {"S"+weekNumber()} · {DB.length} exercices · build 23.27a</div>
     </div>
   );
 }
@@ -2001,6 +2022,8 @@ function LibraryTab({favorites,onToggleFav,onClose,sessions}) {
 
 const FREQ_DAYS = {3:[0,2,4],4:[0,1,3,4],5:[0,1,2,3,4],6:[0,1,2,3,4,5]};
 const DAY_LBL = ["LUN","MAR","MER","JEU","VEN","SAM","DIM"];
+const GOALS=[["force","Force","Force maximale & puissance"],["hypertrophie","Hypertrophie","Prise de muscle & volume"],["seche","Sèche","Perdre du gras, garder le muscle"],["hybride","Hybride","Force + conditionnement"],["endurance","Endurance","Cardio & endurance"],["performance","Performance","Athlétique complet"]];
+const TRAIN_TEMPLATES = PROGRAM.filter(d=>d.salle);
 const generateSchedule = (freq) => {
   const trainIdx = FREQ_DAYS[freq] || FREQ_DAYS[4];
   const train = PROGRAM.filter(d=>d.salle);
@@ -2029,7 +2052,6 @@ function OnboardingScreen({user,onDone}) {
   const [freq,setFreq]=useState(4);
   const [weight,setWeight]=useState("");
   const [saving,setSaving]=useState(false);
-  const GOALS=[["force","Force","Force maximale & puissance"],["hypertrophie","Hypertrophie","Prise de muscle & volume"],["seche","Sèche","Perdre du gras, garder le muscle"],["hybride","Hybride","Force + conditionnement"],["endurance","Endurance","Cardio & endurance"],["performance","Performance","Athlétique complet"]];
   const LEVELS=[["debutant","Debutant","Je debute"],["inter","Intermediaire","Quelques mois ou annees"],["avance","Avance","Entraine et regulier"],["athlete","Athlete","Niveau competition"]];
   const EQUIP=[["bw","Poids du corps"],["kb","Kettlebell"],["db","Halteres"],["bar","Barre"],["mc","Machine / salle"],["cd","Cardio"]];
   const FREQS=[3,4,5,6];
@@ -2228,7 +2250,7 @@ export default function SomaApp() {
     else if(updates.frequency){ const days=FREQ_DAYS[updates.frequency]||FREQ_DAYS[4]; const sched=generateScheduleDays(days); setSchedule(sched); persist(user?.id,{schedule:sched}); }
     setProfile(next);
     persist(user?.id,{profile:next});
-    return (async()=>{ try{ const{error}=await supabase.from("profiles").upsert({id:user?.id,goal:next.goal,level:next.level,equipment:next.equipment,frequency:next.frequency,weight_kg:next.weight_kg,sex:next.sex,height_cm:next.height_cm,age:next.age,program_start:next.program_start,rms:next.rms,avatar:next.avatar,photos:next.photos,updated_at:new Date().toISOString()},{onConflict:"id"}); if(error)console.error("profile save",error.message); return {error}; }catch(e){ console.error("profile save",e); return {error:e}; } })();
+    return (async()=>{ try{ const{error}=await supabase.from("profiles").upsert({id:user?.id,goal:next.goal,level:next.level,equipment:next.equipment,frequency:next.frequency,weight_kg:next.weight_kg,sex:next.sex,height_cm:next.height_cm,age:next.age,program_start:next.program_start,rms:next.rms,avatar:next.avatar,photos:next.photos,session_index:next.session_index,total_sessions:next.total_sessions,updated_at:new Date().toISOString()},{onConflict:"id"}); if(error)console.error("profile save",error.message); return {error}; }catch(e){ console.error("profile save",e); return {error:e}; } })();
   },[persist,user,profile]);
 
   const switchTab=useCallback(id=>{setPrevTab(tab);setTab(id);try{window.scrollTo(0,0);}catch(_e){}},[tab]);
@@ -2272,8 +2294,14 @@ export default function SomaApp() {
       score,
       feedback:fb,
       user_id:user?.id,
+      sessionIndex:sessionIndex+1,
       weights:{...weights,...Object.fromEntries(exercisesData.filter(e=>e.weight>0).map(e=>[e.id,e.weight]))}
     };
+    // avance la sequence du programme (uniquement si ce jour est un jour d'entrainement pris en compte dans la file)
+    if(day?.salle&&!programDone){
+      const nextIdx=sessionIndex+1;
+      updateConfig({session_index:nextIdx});
+    }
     // 1. localStorage immédiat
     const uid=user?.id;
     if(uid){
@@ -2302,6 +2330,7 @@ export default function SomaApp() {
         user_id:uid,date:sDate,week:"S"+wk,
         day:day.day,day_label:entry.dayLabel,
         session_type:entry.dayLabel,
+        session_index:entry.sessionIndex,
         total_kg:Math.round(totalKg),total_sets:totalSets,
         duration_seconds:clock.sec,score,
         exercises:JSON.stringify(exercisesData),
@@ -2337,20 +2366,28 @@ export default function SomaApp() {
     const uid=user.id;
     const sched=generateSchedule(data.frequency);
     setSchedule(sched);
-    const prof={id:uid,name:user?.user_metadata?.name||null,goal:data.goal,level:data.level,equipment:data.equipment,frequency:data.frequency,weight_kg:data.weight_kg,program_start:todayKey(),updated_at:new Date().toISOString()};
+    const prof={id:uid,name:user?.user_metadata?.name||null,goal:data.goal,level:data.level,equipment:data.equipment,frequency:data.frequency,weight_kg:data.weight_kg,program_start:todayKey(),session_index:0,total_sessions:12*(data.frequency||4),updated_at:new Date().toISOString()};
     setProfile(prof);
     persist(uid,{schedule:sched,profile:prof});
     try{await supabase.from("profiles").upsert(prof,{onConflict:"id"});}catch(e){console.error("profile",e);}
   }}/>;
   if(false&&showWelcome) return(<WelcomeScreen user={user} todaySession={viewSchedule[todayIdx()]||PROGRAM[todayIdx()]} streak={streak} onStart={()=>{setShowWelcome(false);setDayIdx(todayIdx());}} onSkip={()=>setShowWelcome(false)}/>);
 
-  const day0=viewSchedule[dayIdx]||PROGRAM[dayIdx];
+  const sessionIndex=profile?.session_index||0;
+  const totalSessions=profile?.total_sessions||(12*(profile?.frequency||4));
+  const trainingDaysPerWeek=(schedule||[]).filter(d=>d&&d.salle).length||(profile?.frequency||4);
+  const sessionWeek=Math.min(PROG_WEEKS,Math.max(1,Math.floor(sessionIndex/trainingDaysPerWeek)+1));
+  const programDone=sessionIndex>=totalSessions;
+  const isViewingToday=dayIdx===todayIdx();
+  const rawDay0=viewSchedule[dayIdx]||PROGRAM[dayIdx];
+  const pendingTemplate=(!programDone&&TRAIN_TEMPLATES.length)?TRAIN_TEMPLATES[sessionIndex%TRAIN_TEMPLATES.length]:null;
+  const day0=(isViewingToday&&rawDay0?.salle&&pendingTemplate)?(()=>{let c={...pendingTemplate,day:rawDay0.day};if(profile?.equipment?.length)c=adaptEquip(c,profile.equipment);if(profile?.goal&&profile.goal!=="hybride")c=adaptGoal(c,profile.goal);return c;})():rawDay0;
   const effMode=modeOverride||day0?.recommendedMode||"classique";
   const sessionMode=effMode;
-  const day=applyMode(day0,effMode,profile,progWeekOf(profile?.program_start),dayIdx,dayCons);
+  const day=applyMode(day0,effMode,profile,sessionWeek,dayIdx,dayCons);
   const sDate=programDate(dayIdx);
-  const isDayDone=sessions.some(s=>s.date===sDate&&s.day===day?.day);
-  const doneSession=isDayDone?sessions.find(s=>s.date===sDate&&s.day===day?.day):null;
+  const isDayDone=sessions.some(s=>s.date===sDate);
+  const doneSession=isDayDone?sessions.find(s=>s.date===sDate):null;
   const isRest=!day?.salle;
   const exos=((isDayDone&&doneSession)?(doneSession.exercises||[]):(aiOverride?.exercises||day?.exercises||[])).filter(e=>!excluded.includes(e.id));
   const absExos=aiOverride?.abs||day?.abs||[];
@@ -2434,7 +2471,7 @@ const NAV=[{id:"home",l:"Accueil"},{id:"seance",l:"Séances"},{id:"stats",l:"Sta
                     <div style={{fontSize:11,fontWeight:600,color:C.ink4,textTransform:"uppercase",letterSpacing:".14em",marginBottom:8}}>{day.day} · {"S"+wk} · {day.salle==="haut"?"Salle Haute":"Salle Basse"}</div>
                     <div style={{fontSize:34,fontWeight:700,color:C.ink,letterSpacing:"-.02em",lineHeight:1.1,marginBottom:8}}>{aiOverride?.titre||day.label}</div>
                     <div style={{fontSize:17,color:C.ink3}}>{day.muscle}</div>
-                    {day.salle&&(()=>{const pw=progWeekOf(profile?.program_start);const ph12=PHASES12[pw-1];const pend=progEndDate(profile?.program_start);return(
+                    {day.salle&&(()=>{const pw=sessionWeek;const ph12=PHASES12[pw-1];const pend=progEndDate(profile?.program_start);return(
                       <div style={{marginTop:12,padding:"12px 14px",borderRadius:14,background:C.s2}}>
                         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
                           <span style={{fontSize:12,fontWeight:700,color:C.blue,textTransform:"uppercase",letterSpacing:".06em"}}>Cycle 12 sem · S{pw}/12</span>
