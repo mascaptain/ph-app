@@ -863,8 +863,14 @@ function HomeTab({profile,streak,sessions,weights,todaySession,onStartToday,acce
   const now=new Date();
   const wk=(()=>{const d=new Date(now);const day=(d.getDay()+6)%7;d.setDate(d.getDate()-day);d.setHours(0,0,0,0);return d;})();
   const weekSessions=sessions.filter(s=>{const sd=new Date(s.date);return sd>=wk;});
-  const weekVol=weekSessions.reduce((a,s)=>a+(s.total_kg||0),0);
+  const weekVol=weekSessions.reduce((a,s)=>a+(s.totalKg||0),0);
   const totalSessions=sessions.length;
+  const lwStart=new Date(wk);lwStart.setDate(lwStart.getDate()-7);
+  const lastWeekSessions=sessions.filter(s=>{const sd=new Date(s.date);return sd>=lwStart&&sd<wk;});
+  const lastWeekVol=lastWeekSessions.reduce((a,s)=>a+(s.totalKg||0),0);
+  const volDeltaPct=lastWeekVol>0?Math.round((weekVol-lastWeekVol)/lastWeekVol*100):null;
+  const sessDelta=weekSessions.length-lastWeekSessions.length;
+  const showBilan=lastWeekSessions.length>0||weekSessions.length>0;
   const bw=weights&&weights.length?weights[weights.length-1].kg:(profile&&profile.weight_kg);
   const hour=now.getHours();
   const hello=hour<12?"Bonjour":hour<18?"Bon après-midi":"Bonsoir";
@@ -888,6 +894,17 @@ function HomeTab({profile,streak,sessions,weights,todaySession,onStartToday,acce
       <Stat v={Math.round(weekVol).toLocaleString("fr-FR")} l="Volume semaine" sub="kg soulevés"/>
       <Stat v={totalSessions} l="Total" sub="séances faites"/>
     </div>
+    {showBilan&&<div style={{background:C.s1,borderRadius:16,padding:"16px",marginBottom:12}}>
+      <div style={{fontSize:11,fontWeight:700,color:C.ink4,textTransform:"uppercase",letterSpacing:".1em",marginBottom:10}}>Bilan vs semaine dernière</div>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
+        <span style={{fontSize:13,color:C.ink3}}>Séances</span>
+        <span style={{fontSize:14,fontWeight:700,color:C.ink}}>{weekSessions.length} <span style={{color:C.ink4,fontWeight:600}}>vs {lastWeekSessions.length}</span> {sessDelta!==0&&<span style={{color:sessDelta>0?C.green:C.red}}>{sessDelta>0?"▲":"▼"}{Math.abs(sessDelta)}</span>}</span>
+      </div>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+        <span style={{fontSize:13,color:C.ink3}}>Volume</span>
+        <span style={{fontSize:14,fontWeight:700,color:C.ink}}>{Math.round(weekVol).toLocaleString("fr-FR")} kg {volDeltaPct!==null&&<span style={{color:volDeltaPct>=0?C.green:C.red}}>{volDeltaPct>=0?"▲+":"▼"}{Math.abs(volDeltaPct)}%</span>}</span>
+      </div>
+    </div>}
     {bw>0&&<div style={{background:C.s1,borderRadius:16,padding:"14px 16px",display:"flex",alignItems:"center",justifyContent:"space-between"}}><span style={{fontSize:13,color:C.ink3,fontWeight:600}}>Poids de corps</span><span style={{fontSize:17,fontWeight:800,color:C.ink}}>{bw} kg</span></div>}
   </div>);
 }
@@ -1001,7 +1018,7 @@ function CircuitPlayer({mode,exos,onClose,defMin,blocks,onAllDone,startBlock}) {
     </div>);
   }
   return (
-    <div style={{position:"fixed",inset:0,background:C.bg,zIndex:Z.fullscreen,overflowY:"auto",overscrollBehavior:"contain",fontFamily:F,paddingTop:"env(safe-area-inset-top)"}}>
+    <div style={{position:"fixed",top:0,left:0,right:0,height:"100dvh",maxHeight:"100dvh",background:C.bg,zIndex:Z.fullscreen,overflowY:"auto",overscrollBehavior:"none",WebkitOverflowScrolling:"touch",fontFamily:F,paddingTop:"env(safe-area-inset-top)",boxSizing:"border-box"}}>
       <div style={{maxWidth:600,margin:"0 auto"}}>
         {HEAD}
         {BODY}
@@ -1893,7 +1910,7 @@ function SettingsTab({user,excluded,onToggleExclude,onSignOut,onReset,onOpenLibr
           <span style={{fontSize:17,color:C.red}}>›</span>
         </Tap>
       </div>
-      <div style={{fontSize:12,color:C.ink4,textAlign:"center",marginTop:28}}>SŌMA · {"S"+weekNumber()} · {DB.length} exercices · build 23.24a</div>
+      <div style={{fontSize:12,color:C.ink4,textAlign:"center",marginTop:28}}>SŌMA · {"S"+weekNumber()} · {DB.length} exercices · build 23.25a</div>
     </div>
   );
 }
@@ -2161,9 +2178,20 @@ export default function SomaApp() {
   useEffect(()=>{if(user) loadUserData(user.id);},[user]);
 
   function computeStreak(sess){
-    const dates=(sess||[]).map(s=>s.date);let s=0;
-    for(let i=0;i<60;i++){const d=new Date();d.setDate(d.getDate()-i);if(dates.includes(localDateKey(d)))s++;else break;}
-    setStreak(s);
+    const dateSet=new Set((sess||[]).map(x=>x.date));
+    let cnt=0;
+    for(let i=0;i<180;i++){
+      const dt=new Date();dt.setDate(dt.getDate()-i);
+      const dow=(dt.getDay()+6)%7;
+      const dd=(schedule&&schedule[dow])||PROG_DEF[dow];
+      const isTraining=!!(dd&&dd.salle);
+      if(!isTraining) continue;
+      const key=localDateKey(dt);
+      if(dateSet.has(key)){cnt++;continue;}
+      if(i===0) continue;
+      break;
+    }
+    setStreak(cnt);
   }
 
   const persist = useCallback((uid,updates)=>{
@@ -2377,10 +2405,6 @@ const NAV=[{id:"home",l:"Accueil"},{id:"seance",l:"Séances"},{id:"stats",l:"Sta
               </Tap>
             );
           })}
-          <Tap onTap={()=>setShowSched(true)} style={{flexShrink:0,minWidth:52,padding:"10px 6px",textAlign:"center",borderRadius:12,background:"transparent",border:`1px dashed ${C.s4}`,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center"}}>
-            <span style={{fontSize:16,color:C.ink4,lineHeight:1}}>✎</span>
-            <span style={{fontSize:9,fontWeight:600,color:C.ink4,letterSpacing:".04em",marginTop:3}}>Modifier</span>
-          </Tap>
         </div>
       )}
 
