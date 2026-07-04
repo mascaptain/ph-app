@@ -1607,11 +1607,11 @@ function StatsTab({sessions,weights,accent,onOpenPhotos}) {
 }
 
 // ─── HISTORY TAB ─────────────────────────────────────────────────────────────
-function PhotoProgress({onClose}) {
+function PhotoProgress({onClose,onSavePhotos}) {
   const [photos,setPhotos]=useState(()=>{try{return JSON.parse(localStorage.getItem("soma_photos")||"{}");}catch(_e){return {};}});
   const [date,setDate]=useState(todayKey());
   const _pf=useRef(null);
-  const save=(map)=>{try{localStorage.setItem("soma_photos",JSON.stringify(map));}catch(_e){} setPhotos({...map});};
+  const save=(map)=>{try{localStorage.setItem("soma_photos",JSON.stringify(map));}catch(_e){} setPhotos({...map}); onSavePhotos&&onSavePhotos(map);};
   const onPhoto=(e)=>{const f=e.target.files&&e.target.files[0];if(!f)return;const rd=new FileReader();rd.onload=()=>{const im=new Image();im.onload=()=>{const mx=520;const sc=Math.min(1,mx/Math.max(im.width,im.height));const cw=Math.round(im.width*sc),ch=Math.round(im.height*sc);const cv=document.createElement("canvas");cv.width=cw;cv.height=ch;cv.getContext("2d").drawImage(im,0,0,cw,ch);const next={...photos,[date]:cv.toDataURL("image/jpeg",0.72)};save(next);};im.src=rd.result;};rd.readAsDataURL(f);e.target.value="";};
   const del=(d)=>{const next={...photos};delete next[d];save(next);};
   const keys=Object.keys(photos).sort();
@@ -1795,7 +1795,7 @@ function ScheduleEditor({schedule,onChange,onReset,onClose,autoRotate,onToggleAu
   );
 }
 
-function SettingsTab({user,excluded,onToggleExclude,onSignOut,onReset,onOpenLibrary,profile,schedule,onUpdateConfig}) {
+function SettingsTab({user,excluded,onToggleExclude,onSignOut,onReset,onOpenLibrary,profile,schedule,onUpdateConfig,onOpenScheduleEditor}) {
   const[showLib,setShowLib]=useState(false);
   const[w,setW]=useState(profile?.weight_kg!=null?String(profile.weight_kg):"");
   const[h,setH]=useState(profile?.height_cm!=null?String(profile.height_cm):"");
@@ -1804,7 +1804,7 @@ function SettingsTab({user,excluded,onToggleExclude,onSignOut,onReset,onOpenLibr
   const[saveErr,setSaveErr]=useState(false);
   const[avatar,setAvatar]=useState(()=>{try{return localStorage.getItem("soma_avatar_"+(user?.id||""))||"";}catch(_e){return"";}});
   const avatarRef=useRef(null);
-  const onAvatar=e=>{const f=e.target.files&&e.target.files[0];if(!f)return;const r=new FileReader();r.onload=()=>{const d=r.result;setAvatar(d);try{localStorage.setItem("soma_avatar_"+(user?.id||""),d);}catch(_e){}};r.readAsDataURL(f);};
+  const onAvatar=e=>{const f=e.target.files&&e.target.files[0];if(!f)return;const r=new FileReader();r.onload=()=>{const d=r.result;setAvatar(d);try{localStorage.setItem("soma_avatar_"+(user?.id||""),d);}catch(_e){} onUpdateConfig&&onUpdateConfig({avatar:d});};r.readAsDataURL(f);};
   const trainDays=(schedule||[]).map((d,i)=>(d&&d.salle)?i:-1).filter(i=>i>=0);
   return(
     <div style={{padding:"20px 20px 100px",maxWidth:600,margin:"0 auto",fontFamily:F}}>
@@ -1822,7 +1822,7 @@ function SettingsTab({user,excluded,onToggleExclude,onSignOut,onReset,onOpenLibr
       </div>
       {/* Mon programme */}
       {onUpdateConfig&&<div style={{background:C.s1,borderRadius:16,padding:"20px",marginBottom:12}}>
-        <div style={{fontSize:14,fontWeight:600,color:C.ink,marginBottom:16}}>Mon programme</div>
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:16}}><span style={{fontSize:14,fontWeight:600,color:C.ink}}>Mon programme</span>{onOpenScheduleEditor&&<Tap onTap={onOpenScheduleEditor} style={{padding:"6px 12px",borderRadius:980,background:C.s2}}><span style={{fontSize:12,fontWeight:600,color:C.ink3}}>Modifier les séances ›</span></Tap>}</div>
         <div style={{fontSize:12,fontWeight:600,color:C.ink4,textTransform:"uppercase",letterSpacing:".08em",marginBottom:8}}>Objectif</div>
         <div style={{display:"flex",flexWrap:"wrap",gap:8,marginBottom:18}}>
           {[["force","Force"],["endurance","Endurance"],["hybride","Hybride"],["seche","Perte de gras"]].map(([k,l])=>(
@@ -1910,7 +1910,7 @@ function SettingsTab({user,excluded,onToggleExclude,onSignOut,onReset,onOpenLibr
           <span style={{fontSize:17,color:C.red}}>›</span>
         </Tap>
       </div>
-      <div style={{fontSize:12,color:C.ink4,textAlign:"center",marginTop:28}}>SŌMA · {"S"+weekNumber()} · {DB.length} exercices · build 23.25a</div>
+      <div style={{fontSize:12,color:C.ink4,textAlign:"center",marginTop:28}}>SŌMA · {"S"+weekNumber()} · {DB.length} exercices · build 23.26a</div>
     </div>
   );
 }
@@ -2156,6 +2156,12 @@ export default function SomaApp() {
         supabase.from("profiles").select("*").eq("id",uid).maybeSingle(),
       ]);
       setProfile(prof||null); if(prof) persist(uid,{profile:prof});
+      try{
+        const remotePhotos=(prof&&prof.photos)||{};
+        const localPhotos=JSON.parse(localStorage.getItem("soma_photos")||"{}");
+        localStorage.setItem("soma_photos",JSON.stringify({...localPhotos,...remotePhotos}));
+        if(prof&&prof.avatar) localStorage.setItem("soma_avatar_"+uid,prof.avatar);
+      }catch(_e){}
       // Le serveur fait autorite : sa liste remplace le local (evite les seances fantomes apres suppression/wipe)
       const norm=(sess||[]).map(s=>({...s,
         dayLabel:s.day_label||s.dayLabel||s.day||"",
@@ -2222,7 +2228,7 @@ export default function SomaApp() {
     else if(updates.frequency){ const days=FREQ_DAYS[updates.frequency]||FREQ_DAYS[4]; const sched=generateScheduleDays(days); setSchedule(sched); persist(user?.id,{schedule:sched}); }
     setProfile(next);
     persist(user?.id,{profile:next});
-    return (async()=>{ try{ const{error}=await supabase.from("profiles").upsert({id:user?.id,goal:next.goal,level:next.level,equipment:next.equipment,frequency:next.frequency,weight_kg:next.weight_kg,sex:next.sex,height_cm:next.height_cm,age:next.age,program_start:next.program_start,rms:next.rms,updated_at:new Date().toISOString()},{onConflict:"id"}); if(error)console.error("profile save",error.message); return {error}; }catch(e){ console.error("profile save",e); return {error:e}; } })();
+    return (async()=>{ try{ const{error}=await supabase.from("profiles").upsert({id:user?.id,goal:next.goal,level:next.level,equipment:next.equipment,frequency:next.frequency,weight_kg:next.weight_kg,sex:next.sex,height_cm:next.height_cm,age:next.age,program_start:next.program_start,rms:next.rms,avatar:next.avatar,photos:next.photos,updated_at:new Date().toISOString()},{onConflict:"id"}); if(error)console.error("profile save",error.message); return {error}; }catch(e){ console.error("profile save",e); return {error:e}; } })();
   },[persist,user,profile]);
 
   const switchTab=useCallback(id=>{setPrevTab(tab);setTab(id);try{window.scrollTo(0,0);}catch(_e){}},[tab]);
@@ -2525,7 +2531,7 @@ const NAV=[{id:"home",l:"Accueil"},{id:"seance",l:"Séances"},{id:"stats",l:"Sta
             </div>
           )}
           {tab==="stats"&&<><StatsTab sessions={sessions} weights={weights} accent={accent}/><HistoryTab sessions={sessions} onSelect={setShowReport} accent={accent} onOpenPhotos={()=>setShowPhotos(true)}/></>}
-          {tab==="settings"&&<SettingsTab user={user} excluded={excluded} onToggleExclude={toggleExclude} onOpenLibrary={()=>setShowLibrary(true)} profile={profile} schedule={schedule} onUpdateConfig={updateConfig}
+          {tab==="settings"&&<SettingsTab user={user} excluded={excluded} onToggleExclude={toggleExclude} onOpenLibrary={()=>setShowLibrary(true)} profile={profile} schedule={schedule} onUpdateConfig={updateConfig} onOpenScheduleEditor={()=>setShowSched(true)}
             onSignOut={async()=>{await supabase.auth.signOut();setUser(null);setLog({});setWeights({});setSessions([]);setExcluded([]);setStreak(0);}}
             onReset={async()=>{
               const uid=user?.id;
@@ -2567,7 +2573,7 @@ const NAV=[{id:"home",l:"Accueil"},{id:"seance",l:"Séances"},{id:"stats",l:"Sta
       {showFeedback&&<FeedbackSheet onClose={()=>setShowFeedback(false)} onSave={handleFeedbackSave}/>}
       {showSettings&&<SessionSettingsSheet day={day} curMode={effMode} onClose={()=>setShowSettings(false)} onApply={({mode,cons})=>{setModeOverride(mode);setDayCons(cons);setShowSettings(false);}}/>}
       {showAI&&<AISheet onClose={()=>setShowAI(false)} onResult={o=>{setAiOverride(o);setShowAI(false);}} excluded={excluded}/>}
-      {showPhotos&&<PhotoProgress onClose={()=>setShowPhotos(false)}/>}
+      {showPhotos&&<PhotoProgress onClose={()=>setShowPhotos(false)} onSavePhotos={(map)=>updateConfig({photos:map})}/>}
       {showTimer&&<IntervalTimer onClose={()=>setShowTimer(false)}/>}
       {showPicker&&<ExPicker onSelect={newEx=>handleReplaceEx(showPicker,newEx)} onClose={()=>setShowPicker(null)} currentId={showPicker.id} excluded={excluded}/>}
       {showLibrary&&<LibraryTab favorites={favorites} onToggleFav={toggleFav} onClose={()=>setShowLibrary(false)} sessions={sessions}/>}
