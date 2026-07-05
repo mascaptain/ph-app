@@ -359,6 +359,138 @@ const DB = [
   {id:"x196",n:"Landmine Squat to Press",m:"Full body",eq:"bar",kg:25,reps:"10",rest:90,rpe:8,cue:"Squat puis press en un mouvement."},
   {id:"x197",n:"Z Press",m:"Épaules · Core",eq:"bar",kg:30,reps:"6",rest:120,rpe:8,cue:"Assis jambes tendues. Press strict."},
   {id:"x198",n:"Bradford Press",m:"Épaules",eq:"bar",kg:30,reps:"10",rest:90,rpe:7,cue:"Alterne nuque-devant sans verrouiller."},
+
+  // NOUVEAUX EXERCICES (S4) - tagges par objectif
+  {id:"kb26",n:"Halo KB",m:"Épaules · Core",eq:"kb",kg:10,reps:"10",rest:60,rpe:6,cue:"Cercle du KB autour de la tête, coudes proches.",goals:["seche","endurance","performance"]},
+  {id:"kb27",n:"Figure 8 to Hold KB",m:"Core · Full body",eq:"kb",kg:12,reps:"10",rest:60,rpe:7,cue:"Passe le KB entre les jambes en huit puis tient en rack.",goals:["seche","endurance"]},
+  {id:"kb28",n:"Renegade Row KB",m:"Dos · Core",eq:"kb",kg:14,reps:"8",rest:75,rpe:7,cue:"Position planche, tire le KB sans faire pivoter le bassin.",goals:["seche","hypertrophie","endurance"]},
+  {id:"kb29",n:"Single Arm Overhead Carry KB",m:"Core · Épaules",eq:"kb",kg:16,reps:"20m",rest:90,rpe:7,cue:"Bras verrouillé au-dessus, marche stable.",goals:["seche","performance","endurance"]},
+  {id:"kb30",n:"Double KB Front Squat",m:"Quads · Fessiers",eq:"kb",kg:16,reps:"10",rest:90,rpe:7,cue:"Deux KB en rack, torse droit, descend profond.",goals:["seche","hypertrophie","performance"]},
+  {id:"kb31",n:"KB Thruster",m:"Full body",eq:"kb",kg:14,reps:"8",rest:90,rpe:8,cue:"Squat puis press explosif en un mouvement.",goals:["seche","endurance","performance"]},
+  {id:"kb32",n:"Single Leg RDL KB",m:"Ischios · Fessiers",eq:"kb",kg:14,reps:"8",rest:75,rpe:7,cue:"Jambe tendue arrière, bascule du bassin, dos plat.",goals:["seche","hypertrophie","performance"]},
+  {id:"kb33",n:"KB Around the Body Pass",m:"Core",eq:"kb",kg:10,reps:"12",rest:60,rpe:6,cue:"Passe le KB autour de la taille, garde le tronc gainé.",goals:["seche","endurance"]},
+  {id:"kb34",n:"KB Man Maker",m:"Full body",eq:"kb",kg:12,reps:"6",rest:120,rpe:8,cue:"Pompe + row + clean + press, enchâine sans reposer.",goals:["seche","endurance","performance"]},
+  {id:"kb35",n:"KB Sumo Deadlift High Pull",m:"Fessiers · Épaules",eq:"kb",kg:16,reps:"10",rest:75,rpe:7,cue:"Squat sumo puis tire le KB haut sous le menton.",goals:["seche","endurance"]},
+  {id:"kb36",n:"Bottoms-Up Clean KB",m:"Avant-bras · Full body",eq:"kb",kg:8,reps:"6",rest:90,rpe:8,cue:"KB tenu tête en bas, exige un grip et gainage strict.",goals:["performance","endurance"]},
+  {id:"kb37",n:"KB Push-up Row",m:"Dos · Pecs",eq:"kb",kg:14,reps:"8",rest:75,rpe:7,cue:"Pompe sur KB puis row unilatéral, alterne les côtés.",goals:["seche","hypertrophie"]},
+  {id:"kb38",n:"KB Lateral Lunge",m:"Fessiers · Adducteurs",eq:"kb",kg:14,reps:"10",rest:60,rpe:7,cue:"Fente latérale, KB en goblet, genou aligné.",goals:["seche","endurance","performance"]},
+  {id:"kb39",n:"KB Overhead Squat",m:"Full body",eq:"kb",kg:10,reps:"6",rest:90,rpe:8,cue:"KB verrouillé au-dessus, squat profond et contrôlé.",goals:["performance","seche"]},
+  {id:"kb40",n:"Double KB Clean & Jerk",m:"Full body",eq:"kb",kg:14,reps:"5",rest:120,rpe:8,cue:"Deux KB, clean puis jerk explosif.",goals:["performance","endurance"]},
+  {id:"kb41",n:"KB Bear Crawl Drag",m:"Full body · Core",eq:"kb",kg:10,reps:"20m",rest:75,rpe:7,cue:"Rampé en traînant le KB à côté, hanches basses.",goals:["seche","endurance"]},
+  {id:"kb42",n:"KB Reverse Lunge to Press",m:"Full body",eq:"kb",kg:12,reps:"8",rest:90,rpe:7,cue:"Fente arrière puis press vertical au sommet.",goals:["performance","seche"]},
+  {id:"kb43",n:"KB Windmill lourd",m:"Obliques · Épaules",eq:"kb",kg:10,reps:"6",rest:90,rpe:7,cue:"Bras verrouillé, hanche recule, regard sur le KB.",goals:["performance","endurance"]},
+  {id:"kb44",n:"KB Single Arm Swing",m:"Fessiers · Core",eq:"kb",kg:16,reps:"12",rest:60,rpe:7,cue:"Swing unilatéral, résiste à la rotation du buste.",goals:["seche","endurance"]},
+  {id:"kb45",n:"KB Goblet Reverse Lunge",m:"Quads · Fessiers",eq:"kb",kg:16,reps:"10",rest:75,rpe:7,cue:"KB en goblet, fente arrière contrôlée.",goals:["hypertrophie","seche","endurance"]},
+  {id:"kb46",n:"KB Alternating Floor Press",m:"Pecs · Triceps",eq:"kb",kg:14,reps:"8",rest:75,rpe:7,cue:"Allé au sol, presse en alternant les bras.",goals:["hypertrophie","seche"]},
+  {id:"kb47",n:"KB Suitcase Carry",m:"Core · Avant-bras",eq:"kb",kg:20,reps:"20m",rest:90,rpe:7,cue:"Un seul KB au sol, marche sans se pencher.",goals:["performance","seche","endurance"]},
+  {id:"kb48",n:"KB High Pull unilatéral",m:"Épaules · Dos",eq:"kb",kg:12,reps:"10",rest:75,rpe:7,cue:"Coude haut, KB proche du corps.",goals:["seche","endurance"]},
+  {id:"kb49",n:"KB Clean Pull",m:"Full body",eq:"kb",kg:16,reps:"6",rest:90,rpe:7,cue:"Tire le KB explosivement sans le recevoir en rack.",goals:["performance","seche"]},
+  {id:"kb50",n:"KB Cossack Squat",m:"Adducteurs · Quads",eq:"kb",kg:10,reps:"8",rest:75,rpe:7,cue:"KB en goblet, descend d'un côté en gardant l'autre jambe tendue.",goals:["hypertrophie","seche","performance"]},
+  {id:"bb19",n:"Squat Pause",m:"Quads · Fessiers",eq:"bar",kg:70,reps:"5",rest:180,rpe:8,cue:"Pause 2s au fond, remonte explosif.",goals:["force","performance"]},
+  {id:"bb20",n:"Bench Press Tempo",m:"Pecs · Triceps",eq:"bar",kg:55,reps:"6",rest:150,rpe:8,cue:"Descente 3s, pause 1s, pousse rapide.",goals:["force","hypertrophie"]},
+  {id:"bb21",n:"Sumo Deadlift",m:"Fessiers · Ischios",eq:"bar",kg:90,reps:"5",rest:180,rpe:8,cue:"Pieds larges, prise étroite, pousse le sol.",goals:["force","performance"]},
+  {id:"bb22",n:"Overhead Squat",m:"Full body",eq:"bar",kg:30,reps:"5",rest:150,rpe:8,cue:"Barre verrouillée au-dessus, mobilité requise.",goals:["performance","force"]},
+  {id:"bb23",n:"Push Jerk",m:"Full body",eq:"bar",kg:40,reps:"3",rest:180,rpe:9,cue:"Dip léger puis pousse explosive sous la barre.",goals:["performance"]},
+  {id:"bb24",n:"Hip Thrust Barre",m:"Fessiers",eq:"bar",kg:60,reps:"8",rest:120,rpe:7,cue:"Dos sur banc, pousse les hanches, contracte en haut.",goals:["hypertrophie","force"]},
+  {id:"bb25",n:"Barbell Row Pendlay",m:"Dos",eq:"bar",kg:60,reps:"6",rest:120,rpe:8,cue:"Barre au sol à chaque rep, tire explosif.",goals:["force","hypertrophie"]},
+  {id:"bb26",n:"Close Grip Bench Press",m:"Triceps · Pecs",eq:"bar",kg:50,reps:"6",rest:120,rpe:7,cue:"Prise étroite, coudes proches du corps.",goals:["hypertrophie","force"]},
+  {id:"bb27",n:"Front Squat",m:"Quads · Core",eq:"bar",kg:50,reps:"5",rest:150,rpe:8,cue:"Barre en rack avant, torse vertical.",goals:["force","performance"]},
+  {id:"bb28",n:"Barbell Hip Thrust Lourd",m:"Fessiers",eq:"bar",kg:80,reps:"5",rest:150,rpe:8,cue:"Charge lourde, verrouillage complet en haut.",goals:["force","hypertrophie"]},
+  {id:"bb29",n:"Incline Bench Press",m:"Pecs sup",eq:"bar",kg:45,reps:"8",rest:120,rpe:7,cue:"Banc incliné 30°, contrôle la descente.",goals:["hypertrophie","force"]},
+  {id:"bb30",n:"Barbell Lunge",m:"Quads · Fessiers",eq:"bar",kg:40,reps:"8",rest:90,rpe:7,cue:"Barre sur les trapèzes, fentes alternées.",goals:["hypertrophie","performance"]},
+  {id:"bb31",n:"Snatch Grip Deadlift",m:"Dos · Ischios",eq:"bar",kg:60,reps:"5",rest:150,rpe:8,cue:"Prise large, tire depuis le sol, dos plat.",goals:["force","performance"]},
+  {id:"bb32",n:"Barbell Shrug",m:"Trapèzes",eq:"bar",kg:70,reps:"10",rest:90,rpe:7,cue:"Hausse les épaules, contracte 1s en haut.",goals:["hypertrophie"]},
+  {id:"bb33",n:"Good Morning Léger",m:"Ischios · Lombaires",eq:"bar",kg:30,reps:"10",rest:90,rpe:6,cue:"Bascule le buste hanches reculées, dos plat.",goals:["hypertrophie","force"]},
+  {id:"bb34",n:"Power Clean",m:"Full body",eq:"bar",kg:50,reps:"3",rest:180,rpe:9,cue:"Tire puis reçoit en rack, explosif.",goals:["performance","force"]},
+  {id:"bb35",n:"Barbell Step-Up",m:"Quads · Fessiers",eq:"bar",kg:30,reps:"8",rest:90,rpe:7,cue:"Barre sur les trapèzes, monte sur banc.",goals:["hypertrophie","performance"]},
+  {id:"bb36",n:"Floor Press Barre",m:"Triceps · Pecs",eq:"bar",kg:50,reps:"6",rest:120,rpe:7,cue:"Coudes touchent le sol, presse depuis le bas.",goals:["force","hypertrophie"]},
+  {id:"bb37",n:"Barbell Curl",m:"Biceps",eq:"bar",kg:25,reps:"10",rest:75,rpe:6,cue:"Coudes fixes, monte sans balancer.",goals:["hypertrophie"]},
+  {id:"bb38",n:"Seal Row",m:"Dos",eq:"bar",kg:50,reps:"8",rest:90,rpe:7,cue:"Allongé sur banc, tire sans triche.",goals:["hypertrophie","force"]},
+  {id:"bb39",n:"Box Squat Lourd",m:"Fessiers · Quads",eq:"bar",kg:80,reps:"5",rest:180,rpe:8,cue:"S'assoit sur box, repart explosif sans rebondir.",goals:["force"]},
+  {id:"bb40",n:"Barbell Rollout",m:"Core",eq:"bar",kg:20,reps:"8",rest:90,rpe:7,cue:"Genoux au sol, roule la barre en gainant fort.",goals:["hypertrophie","performance"]},
+  {id:"bb41",n:"Push Press Lourd",m:"Épaules · Jambes",eq:"bar",kg:50,reps:"5",rest:150,rpe:8,cue:"Légère impulsion jambes puis verrouille au-dessus.",goals:["performance","force"]},
+  {id:"bb42",n:"Deadlift Déficit",m:"Ischios · Dos",eq:"bar",kg:70,reps:"5",rest:180,rpe:8,cue:"Pieds sur plateforme, amplitude augmentée.",goals:["force"]},
+  {id:"bb43",n:"Barbell Landmine Press",m:"Épaules",eq:"bar",kg:25,reps:"10",rest:90,rpe:7,cue:"Barre en landmine, presse en diagonale.",goals:["hypertrophie","performance"]},
+  {id:"db21",n:"Arnold Press",m:"Épaules",eq:"db",kg:14,reps:"10",rest:90,rpe:7,cue:"Rotation des paumes en montant.",goals:["hypertrophie"]},
+  {id:"db22",n:"Renegade Row Haltères",m:"Dos · Core",eq:"db",kg:12,reps:"8",rest:90,rpe:7,cue:"Position planche, tire sans tourner le bassin.",goals:["hypertrophie","seche"]},
+  {id:"db23",n:"Single Arm Snatch DB",m:"Full body",eq:"db",kg:14,reps:"6",rest:90,rpe:8,cue:"Tire puis verrouille au-dessus en un mouvement.",goals:["performance","endurance"]},
+  {id:"db24",n:"Goblet Lunge Haltère",m:"Quads · Fessiers",eq:"db",kg:16,reps:"10",rest:75,rpe:7,cue:"Haltère en goblet, fente contrôlée.",goals:["hypertrophie","seche"]},
+  {id:"db25",n:"Skull Crusher Haltères",m:"Triceps",eq:"db",kg:10,reps:"12",rest:75,rpe:6,cue:"Coudes fixes, descend derrière la tête.",goals:["hypertrophie"]},
+  {id:"db26",n:"Concentration Curl",m:"Biceps",eq:"db",kg:10,reps:"12",rest:60,rpe:6,cue:"Coude appuyé sur la cuisse, isole le biceps.",goals:["hypertrophie"]},
+  {id:"db27",n:"DB Bench Press Prise Neutre",m:"Pecs",eq:"db",kg:22,reps:"10",rest:90,rpe:7,cue:"Paumes face à face, amplitude complète.",goals:["hypertrophie"]},
+  {id:"db28",n:"Single Arm Overhead Press DB",m:"Épaules · Core",eq:"db",kg:14,reps:"8",rest:90,rpe:7,cue:"Anti-rotation du tronc pendant la press.",goals:["hypertrophie","performance"]},
+  {id:"db29",n:"DB Romanian Deadlift Unilatéral",m:"Ischios · Fessiers",eq:"db",kg:16,reps:"8",rest:75,rpe:7,cue:"Un haltère, jambe libre en équilibre.",goals:["hypertrophie","force"]},
+  {id:"db30",n:"DB Pullover",m:"Dos · Pecs",eq:"db",kg:18,reps:"10",rest:90,rpe:7,cue:"Allongé sur banc, descend l'haltère derrière la tête.",goals:["hypertrophie"]},
+  {id:"db31",n:"DB Thruster",m:"Full body",eq:"db",kg:14,reps:"10",rest:90,rpe:7,cue:"Squat puis press, enchâine sans pause.",goals:["seche","endurance"]},
+  {id:"db32",n:"DB Step-Up",m:"Quads · Fessiers",eq:"db",kg:16,reps:"10",rest:75,rpe:7,cue:"Monte sur banc, contrôle la descente.",goals:["hypertrophie","seche"]},
+  {id:"db33",n:"DB Farmer Carry",m:"Core · Avant-bras",eq:"db",kg:24,reps:"20m",rest:90,rpe:7,cue:"Deux haltères, marche droite et stable.",goals:["performance","seche"]},
+  {id:"db34",n:"DB Hammer Curl",m:"Biceps · Avant-bras",eq:"db",kg:12,reps:"12",rest:60,rpe:6,cue:"Prise neutre, coudes fixes.",goals:["hypertrophie"]},
+  {id:"db35",n:"DB Lateral Raise Lourd",m:"Épaules",eq:"db",kg:8,reps:"12",rest:60,rpe:6,cue:"Légère flexion du coude, monte à hauteur d'épaule.",goals:["hypertrophie"]},
+  {id:"db36",n:"DB Squat Jump",m:"Quads · Fessiers",eq:"db",kg:10,reps:"10",rest:75,rpe:7,cue:"Squat puis saut explosif, atterrit souple.",goals:["seche","endurance","performance"]},
+  {id:"db37",n:"DB Chest Fly Incliné",m:"Pecs sup",eq:"db",kg:12,reps:"12",rest:75,rpe:6,cue:"Légère flexion des coudes, étire les pecs.",goals:["hypertrophie"]},
+  {id:"db38",n:"DB Single Leg RDL",m:"Ischios · Fessiers",eq:"db",kg:14,reps:"8",rest:75,rpe:7,cue:"Équilibre sur une jambe, dos plat.",goals:["hypertrophie","performance"]},
+  {id:"db39",n:"DB Zottman Curl",m:"Biceps · Avant-bras",eq:"db",kg:10,reps:"10",rest:60,rpe:6,cue:"Monte paume en haut, descend paume en bas.",goals:["hypertrophie"]},
+  {id:"db40",n:"DB Clean & Press",m:"Full body",eq:"db",kg:14,reps:"8",rest:90,rpe:7,cue:"Clean puis press, un mouvement fluide.",goals:["performance","seche"]},
+  {id:"db41",n:"DB Bulgarian Split Squat",m:"Quads · Fessiers",eq:"db",kg:16,reps:"8",rest:90,rpe:7,cue:"Pied arrière surélevé, descend droit.",goals:["hypertrophie","force"]},
+  {id:"db42",n:"DB Reverse Fly",m:"Deltoïdes lat.",eq:"db",kg:8,reps:"12",rest:60,rpe:6,cue:"Buste penché, écarte les bras en arrière.",goals:["hypertrophie"]},
+  {id:"db43",n:"DB Front Raise",m:"Épaules ant",eq:"db",kg:8,reps:"12",rest:60,rpe:6,cue:"Monte tendu jusqu'à hauteur d'épaule.",goals:["hypertrophie"]},
+  {id:"db44",n:"DB Man Maker",m:"Full body",eq:"db",kg:12,reps:"6",rest:120,rpe:8,cue:"Pompe + row + clean + press, enchâîne.",goals:["seche","endurance","performance"]},
+  {id:"db45",n:"DB Incline Curl",m:"Biceps",eq:"db",kg:10,reps:"12",rest:60,rpe:6,cue:"Banc incliné, étirement maximal du biceps.",goals:["hypertrophie"]},
+  {id:"bw16",n:"Pistol Squat",m:"Quads · Fessiers",eq:"bw",kg:0,reps:"5",rest:90,rpe:8,cue:"Jambe tendue devant, descend contrôlé.",goals:["hypertrophie","seche","performance"]},
+  {id:"bw17",n:"Nordic Curl",m:"Ischios",eq:"bw",kg:0,reps:"5",rest:90,rpe:8,cue:"Genoux bloqués, descend le plus lentement possible.",goals:["force","hypertrophie","performance"]},
+  {id:"bw18",n:"Handstand Push-up Progression",m:"Épaules",eq:"bw",kg:0,reps:"5",rest:120,rpe:8,cue:"Pieds contre un mur, descend la tête vers le sol.",goals:["hypertrophie","performance"]},
+  {id:"bw19",n:"Broad Jump",m:"Full body",eq:"bw",kg:0,reps:"5",rest:90,rpe:7,cue:"Saut horizontal max, atterrit souple.",goals:["performance","seche"]},
+  {id:"bw20",n:"Bear Crawl",m:"Full body · Core",eq:"bw",kg:0,reps:"20m",rest:60,rpe:6,cue:"Genoux proches du sol sans toucher.",goals:["seche","endurance"]},
+  {id:"bw21",n:"Muscle-up",m:"Dos · Pecs",eq:"bw",kg:0,reps:"3",rest:120,rpe:9,cue:"Traction puis passage au-dessus de la barre.",goals:["performance","hypertrophie"]},
+  {id:"bw22",n:"Front Lever Progression",m:"Dos · Core",eq:"bw",kg:0,reps:"15s",rest:90,rpe:8,cue:"Corps horizontal suspendu, gaine fort.",goals:["performance","force"]},
+  {id:"bw23",n:"Hollow Rock",m:"Core",eq:"bw",kg:0,reps:"20",rest:60,rpe:6,cue:"Corps en banane, balance sans casser la position.",goals:["seche","endurance"]},
+  {id:"bw24",n:"Pike Push-up",m:"Épaules",eq:"bw",kg:0,reps:"10",rest:75,rpe:7,cue:"Hanches hautes, descend la tête vers les mains.",goals:["hypertrophie"]},
+  {id:"bw25",n:"Sissy Squat",m:"Quads",eq:"bw",kg:0,reps:"10",rest:75,rpe:7,cue:"Genoux vers l'avant, buste et tibias alignés.",goals:["hypertrophie","seche"]},
+  {id:"bw26",n:"Copenhagen Plank",m:"Adducteurs · Core",eq:"bw",kg:0,reps:"20s",rest:60,rpe:7,cue:"Jambe sur un banc, corps gainé latéralement.",goals:["performance","seche"]},
+  {id:"bw27",n:"Broad Jump Latéral",m:"Fessiers · Adducteurs",eq:"bw",kg:0,reps:"6",rest:75,rpe:7,cue:"Saut latéral, réception stable.",goals:["performance","seche","endurance"]},
+  {id:"bw28",n:"Wall Walk",m:"Épaules · Core",eq:"bw",kg:0,reps:"4",rest:120,rpe:8,cue:"Pieds contre le mur, marche vers une posture verticale.",goals:["performance"]},
+  {id:"bw29",n:"Shrimp Squat",m:"Quads · Fessiers",eq:"bw",kg:0,reps:"6",rest:90,rpe:8,cue:"Genou arrière proche du sol, jambe avant travaille.",goals:["hypertrophie","seche","performance"]},
+  {id:"bw30",n:"Superman Hold",m:"Lombaires · Fessiers",eq:"bw",kg:0,reps:"20s",rest:60,rpe:6,cue:"Bras et jambes levés, gaine le bas du dos.",goals:["seche","hypertrophie"]},
+  {id:"bw31",n:"Archer Pull-up",m:"Dos · Biceps",eq:"bw",kg:0,reps:"5",rest:120,rpe:8,cue:"Traction en déportant le poids sur un bras.",goals:["performance","hypertrophie"]},
+  {id:"bw32",n:"Plank to Push-up",m:"Core · Triceps",eq:"bw",kg:0,reps:"10",rest:75,rpe:7,cue:"Passe d'avant-bras à mains sans bouger le bassin.",goals:["seche","endurance"]},
+  {id:"bw33",n:"Jump Lunge",m:"Quads · Fessiers",eq:"bw",kg:0,reps:"10",rest:75,rpe:7,cue:"Fente sautée, alterne les jambes en l'air.",goals:["seche","endurance","performance"]},
+  {id:"bw34",n:"Dragon Squat",m:"Quads · Core",eq:"bw",kg:0,reps:"5",rest:90,rpe:8,cue:"Rotation profonde en squat sur une jambe.",goals:["performance","hypertrophie"]},
+  {id:"bw35",n:"L-Sit Progression",m:"Core · Hanches",eq:"bw",kg:0,reps:"15s",rest:75,rpe:7,cue:"Jambes tendues devant, appui sur les mains.",goals:["performance","seche"]},
+  {id:"mc13",n:"Leg Press",m:"Quads · Fessiers",eq:"mc",kg:100,reps:"10",rest:120,rpe:7,cue:"Pieds à largeur d'épaules, ne verrouille pas les genoux.",goals:["hypertrophie","force"]},
+  {id:"mc14",n:"Hack Squat",m:"Quads",eq:"mc",kg:80,reps:"10",rest:120,rpe:7,cue:"Dos plaqué, descend contrôlé.",goals:["hypertrophie","force"]},
+  {id:"mc15",n:"Leg Curl Allongé",m:"Ischios",eq:"mc",kg:35,reps:"12",rest:90,rpe:6,cue:"Contracte en haut, descend lentement.",goals:["hypertrophie"]},
+  {id:"mc16",n:"Leg Extension",m:"Quads",eq:"mc",kg:35,reps:"12",rest:90,rpe:6,cue:"Extension complète, contrôle la descente.",goals:["hypertrophie"]},
+  {id:"mc17",n:"Lat Pulldown Prise Serrée",m:"Dos",eq:"mc",kg:45,reps:"10",rest:90,rpe:7,cue:"Tire vers la poitrine, coudes proches du corps.",goals:["hypertrophie"]},
+  {id:"mc18",n:"Cable Crossover",m:"Pecs",eq:"mc",kg:15,reps:"12",rest:75,rpe:6,cue:"Croise les câbles devant, contracte les pecs.",goals:["hypertrophie"]},
+  {id:"mc19",n:"Seated Row Prise Large",m:"Dos",eq:"mc",kg:45,reps:"10",rest:90,rpe:7,cue:"Tire large, écarte les coudes.",goals:["hypertrophie"]},
+  {id:"mc20",n:"Chest Press Machine",m:"Pecs",eq:"mc",kg:40,reps:"10",rest:90,rpe:7,cue:"Presse devant, contrôle le retour.",goals:["hypertrophie"]},
+  {id:"mc21",n:"Hip Abduction Machine",m:"Fessiers moyens",eq:"mc",kg:30,reps:"15",rest:60,rpe:6,cue:"Écarte les genoux contre la résistance.",goals:["hypertrophie"]},
+  {id:"mc22",n:"Hip Thrust Machine",m:"Fessiers",eq:"mc",kg:50,reps:"10",rest:90,rpe:7,cue:"Pousse avec les talons, contracte en haut.",goals:["hypertrophie","force"]},
+  {id:"mc23",n:"Preacher Curl Machine",m:"Biceps",eq:"mc",kg:20,reps:"12",rest:75,rpe:6,cue:"Coudes fixes sur le pupitre.",goals:["hypertrophie"]},
+  {id:"mc24",n:"Triceps Dip Machine",m:"Triceps",eq:"mc",kg:30,reps:"12",rest:75,rpe:6,cue:"Descend contrôlé, verrouille en haut.",goals:["hypertrophie"]},
+  {id:"mc25",n:"Smith Machine Squat",m:"Quads · Fessiers",eq:"mc",kg:60,reps:"10",rest:120,rpe:7,cue:"Barre guidée, pieds légèrement avancés.",goals:["hypertrophie","force"]},
+  {id:"mc26",n:"Reverse Pec Deck",m:"Deltoïdes lat.",eq:"mc",kg:25,reps:"12",rest:75,rpe:6,cue:"Écarte les bras en arrière, contracte les déltoïdes.",goals:["hypertrophie"]},
+  {id:"mc27",n:"Calf Press Leg Press",m:"Mollets",eq:"mc",kg:80,reps:"15",rest:60,rpe:6,cue:"Pousse sur la pointe des pieds, amplitude complète.",goals:["hypertrophie"]},
+  {id:"cd09",n:"Assault Bike Sprint",m:"Cardio",eq:"cd",kg:0,reps:"30s",rest:60,rpe:8,cue:"Effort maximal 30s, jambes et bras ensemble.",goals:["endurance","seche"]},
+  {id:"cd10",n:"Sled Push",m:"Cardio · Jambes",eq:"cd",kg:40,reps:"20m",rest:90,rpe:8,cue:"Pousse fort, pas courts et puissants.",goals:["endurance","seche","performance"]},
+  {id:"cd11",n:"Sled Pull",m:"Cardio · Dos",eq:"cd",kg:30,reps:"20m",rest:90,rpe:7,cue:"Tire en marchant en arrière, dos droit.",goals:["endurance","seche"]},
+  {id:"cd12",n:"Battle Ropes",m:"Cardio · Épaules",eq:"cd",kg:0,reps:"30s",rest:45,rpe:7,cue:"Vagues alternées, garde le buste gainé.",goals:["endurance","seche"]},
+  {id:"cd13",n:"Box Step-Up Cardio",m:"Cardio · Jambes",eq:"cd",kg:0,reps:"15",rest:45,rpe:6,cue:"Rythme soutenu, alterne les jambes.",goals:["endurance","seche"]},
+  {id:"cd14",n:"Ski Erg",m:"Cardio · Dos",eq:"cd",kg:0,reps:"500m",rest:90,rpe:7,cue:"Tire avec tout le corps, rythme constant.",goals:["endurance","seche"]},
+  {id:"cd15",n:"Shuttle Run",m:"Cardio",eq:"cd",kg:0,reps:"6x20m",rest:90,rpe:8,cue:"Sprint aller-retour, touche la ligne à chaque fois.",goals:["endurance","performance"]},
+  {id:"cd16",n:"Burpee Broad Jump",m:"Cardio · Full body",eq:"cd",kg:0,reps:"10",rest:75,rpe:8,cue:"Burpee puis saut en longueur immédiat.",goals:["endurance","seche","performance"]},
+  {id:"cd17",n:"Jump Rope Double Under",m:"Cardio · Mollets",eq:"cd",kg:0,reps:"30",rest:60,rpe:7,cue:"Deux tours de corde par saut.",goals:["endurance","seche"]},
+  {id:"cd18",n:"Rowing Sprint 250m",m:"Cardio",eq:"cd",kg:0,reps:"250m",rest:90,rpe:8,cue:"Effort maximal, technique propre malgré la vitesse.",goals:["endurance","performance"]},
+  {id:"ab11",n:"Cable Woodchop",m:"Obliques · Core",eq:"mc",kg:15,reps:"12",rest:60,rpe:6,cue:"Rotation du haut vers le bas, hanches stables.",goals:["hypertrophie","seche"]},
+  {id:"ab12",n:"Ab Wheel Rollout",m:"Core",eq:"bw",kg:0,reps:"8",rest:90,rpe:7,cue:"Roule en avant sans casser le dos, revient contrôlé.",goals:["seche","performance","hypertrophie"]},
+  {id:"ab13",n:"Weighted Sit-up",m:"Abdos",eq:"db",kg:8,reps:"12",rest:75,rpe:7,cue:"Disque sur la poitrine, monte complètement.",goals:["hypertrophie"]},
+  {id:"ab14",n:"Pallof Press",m:"Core anti-rotation",eq:"mc",kg:15,reps:"10",rest:60,rpe:6,cue:"Résiste à la rotation du câble, presse devant soi.",goals:["hypertrophie","performance"]},
+  {id:"ab15",n:"Hanging Windshield Wiper",m:"Obliques",eq:"bw",kg:0,reps:"8",rest:90,rpe:8,cue:"Suspendu, balance les jambes tendues de côté.",goals:["performance","hypertrophie"]},
+  {id:"ab16",n:"Cable Crunch",m:"Abdos",eq:"mc",kg:25,reps:"12",rest:75,rpe:6,cue:"À genoux, enroule le buste vers le bas.",goals:["hypertrophie"]},
+  {id:"ab17",n:"Dead Bug Lesté",m:"Core",eq:"db",kg:4,reps:"10",rest:60,rpe:6,cue:"Bras et jambe opposée s'étendent lentement.",goals:["hypertrophie","seche"]},
+  {id:"ab18",n:"V-Up",m:"Abdos",eq:"bw",kg:0,reps:"12",rest:60,rpe:6,cue:"Mains et pieds se rejoignent au sommet.",goals:["seche","endurance"]},
+  {id:"ab19",n:"Landmine Rotation",m:"Obliques · Core",eq:"bar",kg:10,reps:"10",rest:75,rpe:6,cue:"Rotation contrôlée de la barre en landmine.",goals:["performance","hypertrophie"]},
+  {id:"ab20",n:"Suitcase Crunch",m:"Abdos · Hanches",eq:"bw",kg:0,reps:"12",rest:60,rpe:6,cue:"Genou et coude opposé se rejoignent au centre.",goals:["seche","hypertrophie"]},
 ];
 
 const EQ_LABELS = {kb:"KB",bar:"Barre",db:"Haltères",bw:"Corps",mc:"Machine",cd:"Cardio"};
@@ -1920,7 +2052,7 @@ function SettingsTab({user,excluded,onToggleExclude,onSignOut,onReset,onOpenLibr
           <span style={{fontSize:17,color:C.red}}>›</span>
         </Tap>
       </div>
-      <div style={{fontSize:12,color:C.ink4,textAlign:"center",marginTop:28}}>SŌMA · {"S"+weekNumber()} · {DB.length} exercices · build 23.34a</div>
+      <div style={{fontSize:12,color:C.ink4,textAlign:"center",marginTop:28}}>SŌMA · {"S"+weekNumber()} · {DB.length} exercices · build 23.35a</div>
     </div>
   );
 }
@@ -2024,6 +2156,8 @@ const MUSCLE_GROUP_MAP={
   cardio:"cardio","full body":"full",
 };
 const muscleGroupOf=(ex)=>MUSCLE_GROUP_MAP[primaryMuscle(ex.m)]||"full";
+const LEGACY_GOALS_BY_EQ={bar:["force","performance"],kb:["seche","endurance","performance"],bw:["seche","endurance","hypertrophie","performance"],db:["hypertrophie","performance","force"],mc:["hypertrophie"],cd:["endurance","seche"]};
+const goalsOf=(ex)=>ex.goals||LEGACY_GOALS_BY_EQ[ex.eq]||[];
 const GOAL_PROFILES={
   force:{splits:[
     {label:"Force — Bas (Squat)",groups:["legs","core"],mode:"classique",circuit:false},
@@ -2065,8 +2199,10 @@ const buildGoalSession=(goal,sessionIndex,equipment)=>{
   const split=gp.splits[splitIdx];
   const equip=equipment&&equipment.length?equipment:null;
   const usable=(e)=>e.eq==="bw"||!equip||equip.includes(e.eq);
-  let pool=DB.filter(e=>split.groups.includes(muscleGroupOf(e))&&usable(e));
-  if(!pool.length) pool=DB.filter(e=>split.groups.includes(muscleGroupOf(e))); // securite: ne jamais rendre une seance vide
+  const anatomic=(e)=>split.groups.includes(muscleGroupOf(e));
+  let pool=DB.filter(e=>anatomic(e)&&usable(e)&&goalsOf(e).includes(goal));
+  if(pool.length<gp.exCount) pool=DB.filter(e=>anatomic(e)&&usable(e)); // pas assez d'exos taggues pour cet objectif -> retombe sur muscle+materiel
+  if(!pool.length) pool=DB.filter(e=>anatomic(e)); // securite: ne jamais rendre une seance vide
   pool=pool.slice().sort((a,b)=>{
     const pa=gp.eqBias.indexOf(a.eq),pb=gp.eqBias.indexOf(b.eq);
     const wa=pa<0?99:pa,wb=pb<0?99:pb;
