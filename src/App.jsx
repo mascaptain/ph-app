@@ -479,7 +479,7 @@ const adaptEquip = (day, equip) => {
   if(!day || !day.salle || !equip || !equip.length) return day;
   const exercises=(day.exercises||[]).map(ex=>{
     if(equip.includes(ex.eq)) return ex;
-    const sub=DB.find(e=>e.id!==ex.id && primaryMuscle(e)===primaryMuscle(ex) && equip.includes(e.eq));
+    const sub=DB.find(e=>e.id!==ex.id && primaryMuscle(e.m)===primaryMuscle(ex.m) && equip.includes(e.eq));
     return sub?{...sub,sets:ex.sets,rest:ex.rest}:ex;
   });
   return {...day,exercises};
@@ -1920,7 +1920,7 @@ function SettingsTab({user,excluded,onToggleExclude,onSignOut,onReset,onOpenLibr
           <span style={{fontSize:17,color:C.red}}>›</span>
         </Tap>
       </div>
-      <div style={{fontSize:12,color:C.ink4,textAlign:"center",marginTop:28}}>SŌMA · {"S"+weekNumber()} · {DB.length} exercices · build 23.33a</div>
+      <div style={{fontSize:12,color:C.ink4,textAlign:"center",marginTop:28}}>SŌMA · {"S"+weekNumber()} · {DB.length} exercices · build 23.34a</div>
     </div>
   );
 }
@@ -2058,12 +2058,16 @@ const GOAL_PROFILES={
     {label:"Performance — Conditioning",groups:["cardio","core","full"],mode:"amrap",circuit:false},
   ],eqBias:["bar","kb","db","bw"],sets:4,repRange:[5,10],restSec:90,exCount:5},
 };
-const buildGoalSession=(goal,sessionIndex)=>{
+const buildGoalSession=(goal,sessionIndex,equipment)=>{
   const gp=GOAL_PROFILES[goal];
   if(!gp) return null;
   const splitIdx=sessionIndex%gp.splits.length;
   const split=gp.splits[splitIdx];
-  const pool=DB.filter(e=>split.groups.includes(muscleGroupOf(e))).slice().sort((a,b)=>{
+  const equip=equipment&&equipment.length?equipment:null;
+  const usable=(e)=>e.eq==="bw"||!equip||equip.includes(e.eq);
+  let pool=DB.filter(e=>split.groups.includes(muscleGroupOf(e))&&usable(e));
+  if(!pool.length) pool=DB.filter(e=>split.groups.includes(muscleGroupOf(e))); // securite: ne jamais rendre une seance vide
+  pool=pool.slice().sort((a,b)=>{
     const pa=gp.eqBias.indexOf(a.eq),pb=gp.eqBias.indexOf(b.eq);
     const wa=pa<0?99:pa,wb=pb<0?99:pb;
     if(wa!==wb) return wa-wb;
@@ -2085,8 +2089,8 @@ const buildGoalSession=(goal,sessionIndex)=>{
   return {label:split.label,salle:"full",muscle:split.groups.join(" · "),exercises,abs:[],recommendedMode:split.mode,circuit:!!split.circuit};
 };
 const HYBRID_MODES={"Push Force":{mode:"classique",circuit:true},"KB Power":{mode:"emom",circuit:false},"Pull & Legs":{mode:"classique",circuit:true},"KB Endurance":{mode:"amrap",circuit:false},"Full Power":{mode:"classique",circuit:true}};
-const pendingSessionFor=(goal,sessionIndex)=>{
-  const generated=buildGoalSession(goal,sessionIndex);
+const pendingSessionFor=(goal,sessionIndex,equipment)=>{
+  const generated=buildGoalSession(goal,sessionIndex,equipment);
   if(generated) return generated;
   const tpl=TRAIN_TEMPLATES.length?TRAIN_TEMPLATES[sessionIndex%TRAIN_TEMPLATES.length]:null;
   if(!tpl) return null;
@@ -2480,7 +2484,7 @@ export default function SomaApp() {
   const rawDay0=viewSchedule[dayIdx]||PROGRAM[dayIdx];
   const tabDate=programDate(dayIdx);
   const isBeforeProgramStart=!!(profile?.program_start&&tabDate<profile.program_start);
-  const pendingTemplate=(!programDone&&!isBeforeProgramStart)?pendingSessionFor(profile?.goal||"hybride",sessionIndex):null;
+  const pendingTemplate=(!programDone&&!isBeforeProgramStart)?pendingSessionFor(profile?.goal||"hybride",sessionIndex,profile?.equipment):null;
   const day0=isBeforeProgramStart?{...REST_TPL,day:rawDay0?.day}:(isViewingToday&&rawDay0?.salle&&pendingTemplate)?(()=>{let c={...pendingTemplate,day:rawDay0.day};if(profile?.equipment?.length)c=adaptEquip(c,profile.equipment);return c;})():rawDay0;
   const effMode=modeOverride||day0?.recommendedMode||"classique";
   const sessionMode=effMode;
