@@ -1057,7 +1057,7 @@ const setPlanFor=(ex)=>{
 };
 const repsNum=(r)=>{const m=String(r||"").match(/\d+/);return m?parseInt(m[0]):0;};
 
-function HomeTab({profile,streak,sessions,weights,todaySession,onStartToday,accent}) {
+function HomeTab({profile,streak,sessions,weights,todaySession,onStartToday,accent,trainingDaysPerWeek}) {
   const now=new Date();
   const wk=(()=>{const d=new Date(now);const day=(d.getDay()+6)%7;d.setDate(d.getDate()-day);d.setHours(0,0,0,0);return d;})();
   const weekSessions=sessions.filter(s=>{const sd=new Date(s.date);return sd>=wk;});
@@ -1114,9 +1114,14 @@ function HomeTab({profile,streak,sessions,weights,todaySession,onStartToday,acce
       </div>
     </div>}
     {progTotal>0&&(()=>{
-      const NAMES=["Départ","Ancrage","Élan","Rythme","Maîtrise","Accomplissement"];
-      const step=Math.ceil(progTotal/6);
-      const paliers=NAMES.map((nm,i)=>({label:nm,threshold:Math.min(progTotal,step*(i+1))}));
+      const tdpw=trainingDaysPerWeek||5;
+      const phaseBlocks=[];
+      PHASES12.forEach((ph,i)=>{
+        const last=phaseBlocks[phaseBlocks.length-1];
+        if(last&&last.name===ph.n) last.endWeek=i+1;
+        else phaseBlocks.push({name:ph.n,endWeek:i+1});
+      });
+      const paliers=phaseBlocks.map(b=>({label:b.name,threshold:Math.min(progTotal,b.endWeek*tdpw)}));
       return(
         <div style={{background:C.s1,borderRadius:16,padding:"16px",marginBottom:12}}>
           <div style={{fontSize:11,fontWeight:700,color:C.ink4,textTransform:"uppercase",letterSpacing:".1em",marginBottom:14}}>Paliers du programme</div>
@@ -2219,7 +2224,7 @@ function SettingsTab({user,excluded,onToggleExclude,onSignOut,onReset,onOpenLibr
           <span style={{fontSize:17,color:C.red}}>›</span>
         </Tap>
       </div>
-      <div style={{fontSize:12,color:C.ink4,textAlign:"center",marginTop:28}}>SŌMA · {"S"+weekNumber()} · {DB.length} exercices · build 23.40a</div>
+      <div style={{fontSize:12,color:C.ink4,textAlign:"center",marginTop:28}}>SŌMA · {"S"+weekNumber()} · {DB.length} exercices · build 23.41a</div>
     </div>
   );
 }
@@ -2886,7 +2891,7 @@ const NAV=[{id:"home",l:"Accueil"},{id:"seance",l:"Séances"},{id:"stats",l:"Sta
       {/* CONTENT */}
       <div style={{paddingBottom:80}}>
         <TabContent tab={tab} prevTab={prevTab}>
-          {tab==="home"&&<HomeTab profile={profile} streak={streak} sessions={sessions} weights={weights} todaySession={viewSchedule[todayIdx()]||PROGRAM[todayIdx()]} accent={accent} onStartToday={()=>{setDayIdx(todayIdx());switchTab("seance");}}/>}
+          {tab==="home"&&<HomeTab profile={profile} streak={streak} sessions={sessions} weights={weights} todaySession={viewSchedule[todayIdx()]||PROGRAM[todayIdx()]} accent={accent} trainingDaysPerWeek={trainingDaysPerWeek} onStartToday={()=>{setDayIdx(todayIdx());switchTab("seance");}}/>}
           {tab==="seance"&&(
             <div style={{padding:"16px 20px 0",maxWidth:600,margin:"0 auto"}}>
               {isRest?(
