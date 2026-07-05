@@ -1750,26 +1750,12 @@ function LoadChart({data,color=C.blue}){
     </div>
   </div>);
 }
-function StatsTab({sessions,weights,accent,onOpenPhotos}) {
-  const[selEx,setSelEx]=useState(null);
+function StatsTab({sessions,weights,accent,onOpenPhotos,pinnedPBs,onManagePBs}) {
   const total=sessions.length,totalKg=sessions.reduce((a,s)=>a+(s.totalKg||0),0);
   const avgScore=total?Math.round(sessions.reduce((a,s)=>a+(s.score||0),0)/total):0;
-  const PBCAT={bar:"Barre",db:"Haltères",kb:"Kettlebell",mc:"Machine",bw:"Poids du corps",cd:"Cardio"};
-  const PBCAT_ICON={
-    Barre:(<><rect x="9" y="10" width="6" height="4" rx="1"/><path d="M6 12h1"/><path d="M17 12h1"/><path d="M3 10v4"/><path d="M21 10v4"/></>),
-    Haltères:(<><circle cx="5" cy="12" r="2.5"/><circle cx="19" cy="12" r="2.5"/><path d="M8 12h8"/></>),
-    Kettlebell:(<><circle cx="12" cy="14" r="6"/><path d="M9 8a3 3 0 0 1 6 0"/></>),
-    Machine:(<><circle cx="12" cy="12" r="3"/><path d="M12 4v2"/><path d="M12 18v2"/><path d="M4 12h2"/><path d="M18 12h2"/></>),
-    "Poids du corps":(<><circle cx="12" cy="5" r="2"/><path d="M12 7v6"/><path d="M8 10h8"/><path d="M12 13l-3 6"/><path d="M12 13l3 6"/></>),
-    Cardio:(<><path d="M4 12h3l2-5 3 10 2-7 2 4h4"/></>),
-    Autre:(<><circle cx="12" cy="12" r="9"/></>),
-  };
-  const[showAllPB,setShowAllPB]=useState(false);
-  const pbs=useMemo(()=>{const m={};(sessions||[]).forEach(s=>{(s.exercises||[]).forEach(e=>{if(e&&e.id&&(e.completedSets>0)&&(e.weight>0)){if(!m[e.id]||e.weight>m[e.id])m[e.id]=e.weight;}});});return Object.entries(m).map(([id,kg])=>{const ex=DB.find(x=>x.id===id);if(!ex)return null;return{...ex,pbKg:kg,oneRM:orm(kg,ex.reps)};}).filter(Boolean).sort((a,b)=>(b.oneRM||0)-(a.oneRM||0));},[sessions]);
-  const progressData=useMemo(()=>{
-    if(!selEx) return [];
-    return (sessions||[]).filter(s=>(s.exercises||[]).some(e=>e.id===selEx&&e.weight>0)).map(s=>{const e=(s.exercises||[]).find(x=>x.id===selEx);return{date:(s.date||"").slice(5),v:e?e.weight:0};}).filter(d=>d.v>0).slice(-10);
-  },[selEx,sessions]);
+  const pbs=useMemo(()=>computePBs(sessions),[sessions]);
+  const pinnedSet=new Set(pinnedPBs||[]);
+  const displayedPBs=(pinnedPBs&&pinnedPBs.length)?pbs.filter(pb=>pinnedSet.has(pb.id)):pbs.slice(0,5);
   const volumeByWeek=useMemo(()=>{
     const weeks={};sessions.forEach(s=>{const w=s.date.slice(0,7);weeks[w]=(weeks[w]||0)+(s.totalKg||0);});
     return Object.entries(weeks).slice(-8).map(([w,v])=>({date:w.slice(5),v:Math.round(v/1000)}));
@@ -1814,40 +1800,74 @@ function StatsTab({sessions,weights,accent,onOpenPhotos}) {
           <ProgressLine data={volumeByWeek} color={accent||C.blue}/>
         </div>
       )}
-      {/* Progression par exercice */}
-      <div style={{background:C.s1,borderRadius:16,padding:"20px",marginBottom:16}}>
-        <div style={{fontSize:14,fontWeight:600,color:C.ink,marginBottom:4}}>Progression des charges</div>
-        <div style={{fontSize:12,color:C.ink4,marginBottom:16}}>Sélectionne un exercice</div>
-        <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:16}}>
-          {pbs.slice(0,6).map(pb=>(
-            <Tap key={pb.id} onTap={()=>setSelEx(selEx===pb.id?null:pb.id)} style={{padding:"6px 14px",borderRadius:980,border:`1.5px solid ${selEx===pb.id?C.blue:C.div}`,background:selEx===pb.id?C.blueDim:"transparent",transition:`all 150ms ${EO}`}}>
-              <span style={{fontSize:12,fontWeight:600,color:selEx===pb.id?C.blue:C.ink3}}>{pb.n.split(" ").slice(0,2).join(" ")}</span>
-            </Tap>
-          ))}
-        </div>
-        {selEx?<LoadChart data={progressData} color={C.green}/>:<div style={{height:56,display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,color:C.ink4}}>Sélectionne un exercice</div>}
+      {/* Personal Bests - vue compacte + gestion */}
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
+        <span style={{fontSize:12,fontWeight:600,color:C.ink4,textTransform:"uppercase",letterSpacing:".1em"}}>Personal Bests</span>
+        {pbs.length>0&&onManagePBs&&<Tap onTap={onManagePBs} style={{padding:"6px 12px",borderRadius:980,background:C.s2}}><span style={{fontSize:12,fontWeight:600,color:C.ink3}}>Gérer ({(pinnedPBs||[]).length}/5) ›</span></Tap>}
       </div>
-      {/* PBs */}
-      <div style={{fontSize:12,fontWeight:600,color:C.ink4,textTransform:"uppercase",letterSpacing:".1em",marginBottom:12}}>Personal Bests</div>
       {pbs.length===0?<div style={{textAlign:"center",padding:"32px 0",fontSize:15,color:C.ink4}}>Réalise des séances avec charges pour débloquer tes PB.</div>:
-        (()=>{
-          const Row=(pb,i)=>(<div key={pb.id||i} style={{background:C.s1,borderRadius:14,padding:"14px 18px",marginBottom:8,display:"flex",justifyContent:"space-between",alignItems:"center"}}><div><div style={{fontSize:15,fontWeight:600,color:C.ink}}>{pb.n}</div><div style={{fontSize:13,color:C.ink3}}>{pb.m}</div></div><div style={{textAlign:"right"}}><div style={{fontSize:20,fontWeight:700,color:C.ink}}>{pb.pbKg===0?"BW":pb.pbKg+"kg"}</div></div></div>);
-          if(!showAllPB){return(<>{pbs.slice(0,5).map(Row)}{pbs.length>5&&<Tap onTap={()=>setShowAllPB(true)} style={{textAlign:"center",padding:"12px 0",marginTop:2}}><span style={{fontSize:14,fontWeight:700,color:C.blue}}>Voir tous les PB ({pbs.length}) ›</span></Tap>}</>);}
-          const groups={};pbs.forEach(pb=>{const eqc=Array.isArray(pb.eq)?pb.eq[0]:pb.eq;const k=PBCAT[eqc]||"Autre";(groups[k]=groups[k]||[]).push(pb);});
-          return(<>{Object.keys(groups).map(cat=>(<div key={cat} style={{marginBottom:14}}>
-              <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:8}}>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={C.ink4} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">{PBCAT_ICON[cat]||PBCAT_ICON.Autre}</svg>
-                <span style={{fontSize:11,fontWeight:700,color:C.ink4,textTransform:"uppercase",letterSpacing:".1em"}}>{cat}</span>
-              </div>
-              {groups[cat].map(Row)}
-            </div>))}<Tap onTap={()=>setShowAllPB(false)} style={{textAlign:"center",padding:"12px 0"}}><span style={{fontSize:14,fontWeight:700,color:C.ink3}}>Réduire ‹</span></Tap></>);
-        })()}
-        {(()=>{const totalS=(sessions||[]).length;const maxW=(sessions||[]).reduce((m,s)=>Math.max(m,((s.exercises||[]).reduce((mm,e)=>Math.max(mm,e.weight||0),0))),0);const days=new Set((sessions||[]).map(s=>s.date)).size;const B=[{t:"Première séance",d:"Termine 1 séance",ok:totalS>=1},{t:"5 séances",d:"Atteins 5 séances",ok:totalS>=5},{t:"10 séances",d:"Atteins 10 séances",ok:totalS>=10},{t:"25 séances",d:"Atteins 25 séances",ok:totalS>=25},{t:"Club 100 kg",d:"Soulève 100 kg",ok:maxW>=100},{t:"Assidu",d:"7 jours actifs",ok:days>=7}];const earned=B.filter(b=>b.ok).length;return(<div style={{marginTop:24}}><div style={{display:"flex",alignItems:"baseline",justifyContent:"space-between",marginBottom:12}}><span style={{fontSize:11,fontWeight:700,color:C.ink3,textTransform:"uppercase",letterSpacing:".15em"}}>Récompenses</span><span style={{fontSize:12,fontWeight:600,color:C.ink4}}>{earned}/{B.length}</span></div><div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>{B.map((b,i)=>(<div key={i} style={{background:b.ok?C.blueDim:C.s1,border:`1.5px solid ${b.ok?C.blue:"transparent"}`,borderRadius:14,padding:"14px"}}><div style={{display:"flex",alignItems:"center",gap:8,marginBottom:4}}><div style={{width:22,height:22,borderRadius:"50%",background:b.ok?C.blue:C.s3,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}><span style={{fontSize:12,fontWeight:700,color:b.ok?"#000":C.ink4}}>{b.ok?"✓":"·"}</span></div><span style={{fontSize:14,fontWeight:700,color:b.ok?C.ink:C.ink3}}>{b.t}</span></div><div style={{fontSize:11,color:C.ink4,paddingLeft:30}}>{b.ok?"Débloqué":b.d}</div></div>))}</div></div>);})()}
+        displayedPBs.map((pb,i)=>(
+          <div key={pb.id||i} style={{background:C.s1,borderRadius:14,padding:"14px 18px",marginBottom:8,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+            <div style={{display:"flex",alignItems:"center",gap:10}}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={C.ink4} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">{PBCAT_ICON[PBCAT[Array.isArray(pb.eq)?pb.eq[0]:pb.eq]]||PBCAT_ICON.Autre}</svg>
+              <div><div style={{fontSize:15,fontWeight:600,color:C.ink}}>{pb.n}</div><div style={{fontSize:13,color:C.ink3}}>{pb.m}</div></div>
+            </div>
+            <div style={{fontSize:20,fontWeight:700,color:C.ink}}>{pb.pbKg===0?"BW":pb.pbKg+"kg"}</div>
+          </div>
+        ))}
+      {(()=>{const totalS=(sessions||[]).length;const maxW=(sessions||[]).reduce((m,s)=>Math.max(m,((s.exercises||[]).reduce((mm,e)=>Math.max(mm,e.weight||0),0))),0);const days=new Set((sessions||[]).map(s=>s.date)).size;const B=[{t:"Première séance",d:"Termine 1 séance",ok:totalS>=1},{t:"5 séances",d:"Atteins 5 séances",ok:totalS>=5},{t:"10 séances",d:"Atteins 10 séances",ok:totalS>=10},{t:"25 séances",d:"Atteins 25 séances",ok:totalS>=25},{t:"Club 100 kg",d:"Soulève 100 kg",ok:maxW>=100},{t:"Assidu",d:"7 jours actifs",ok:days>=7}];const earned=B.filter(b=>b.ok).length;return(<div style={{marginTop:24}}><div style={{display:"flex",alignItems:"baseline",justifyContent:"space-between",marginBottom:12}}><span style={{fontSize:11,fontWeight:700,color:C.ink3,textTransform:"uppercase",letterSpacing:".15em"}}>Récompenses</span><span style={{fontSize:12,fontWeight:600,color:C.ink4}}>{earned}/{B.length}</span></div><div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>{B.map((b,i)=>(<div key={i} style={{background:b.ok?C.blueDim:C.s1,border:`1.5px solid ${b.ok?C.blue:"transparent"}`,borderRadius:14,padding:"14px"}}><div style={{display:"flex",alignItems:"center",gap:8,marginBottom:4}}><div style={{width:22,height:22,borderRadius:"50%",background:b.ok?C.blue:C.s3,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}><span style={{fontSize:12,fontWeight:700,color:b.ok?"#000":C.ink4}}>{b.ok?"✓":"·"}</span></div><span style={{fontSize:14,fontWeight:700,color:b.ok?C.ink:C.ink3}}>{b.t}</span></div><div style={{fontSize:11,color:C.ink4,paddingLeft:30}}>{b.ok?"Débloqué":b.d}</div></div>))}</div></div>);})()}
     </div>
   );
 }
 
 // ─── HISTORY TAB ─────────────────────────────────────────────────────────────
+function PBManagerSheet({sessions,pinnedPBs,onSave,onClose}) {
+  const pbs=useMemo(()=>computePBs(sessions),[sessions]);
+  const [sel,setSel]=useState(pinnedPBs||[]);
+  const toggle=(id)=>{
+    setSel(prev=>{
+      if(prev.includes(id)) return prev.filter(x=>x!==id);
+      if(prev.length>=5) return prev;
+      return [...prev,id];
+    });
+  };
+  const groups={};pbs.forEach(pb=>{const eqc=Array.isArray(pb.eq)?pb.eq[0]:pb.eq;const k=PBCAT[eqc]||"Autre";(groups[k]=groups[k]||[]).push(pb);});
+  return(
+    <div style={{position:"fixed",top:0,left:0,right:0,height:"100dvh",maxHeight:"100dvh",background:C.bg,zIndex:Z.fullscreen,overflowY:"auto",WebkitOverflowScrolling:"touch",fontFamily:F,paddingTop:"env(safe-area-inset-top)",boxSizing:"border-box"}}>
+      <div style={{maxWidth:600,margin:"0 auto",padding:"20px 20px calc(20px + env(safe-area-inset-bottom))"}}>
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:6}}>
+          <span style={{fontSize:22,fontWeight:700,color:C.ink,letterSpacing:"-.02em"}}>Mes Personal Bests</span>
+          <Tap onTap={onClose} style={{width:36,height:36,borderRadius:10,background:C.s2,display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{fontSize:14,color:C.ink3}}>✕</span></Tap>
+        </div>
+        <div style={{fontSize:13,color:C.ink4,marginBottom:20}}>Choisis jusqu'à 5 PB à afficher sur ta page Stats. ({sel.length}/5)</div>
+        {Object.keys(groups).map(cat=>(
+          <div key={cat} style={{marginBottom:18}}>
+            <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:8}}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={C.ink4} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">{PBCAT_ICON[cat]||PBCAT_ICON.Autre}</svg>
+              <span style={{fontSize:11,fontWeight:700,color:C.ink4,textTransform:"uppercase",letterSpacing:".1em"}}>{cat}</span>
+            </div>
+            {groups[cat].map(pb=>{
+              const on=sel.includes(pb.id);
+              const disabled=!on&&sel.length>=5;
+              return(
+                <Tap key={pb.id} onTap={()=>!disabled&&toggle(pb.id)} style={{display:"flex",justifyContent:"space-between",alignItems:"center",background:C.s1,borderRadius:14,padding:"14px 16px",marginBottom:8,opacity:disabled?0.4:1}}>
+                  <div><div style={{fontSize:15,fontWeight:600,color:C.ink}}>{pb.n}</div><div style={{fontSize:13,color:C.ink3}}>{pb.pbKg===0?"BW":pb.pbKg+"kg"}</div></div>
+                  <div style={{width:44,height:26,borderRadius:980,background:on?C.blue:C.s3,position:"relative",transition:`background 150ms ${EO}`,flexShrink:0}}>
+                    <div style={{position:"absolute",top:2,left:on?20:2,width:22,height:22,borderRadius:"50%",background:"#fff",transition:`left 150ms ${EO}`}}/>
+                  </div>
+                </Tap>
+              );
+            })}
+          </div>
+        ))}
+        <Tap onTap={()=>{onSave(sel);onClose();}} style={{marginTop:8,padding:"16px",borderRadius:15,background:C.blue,display:"flex",alignItems:"center",justifyContent:"center"}}>
+          <span style={{fontSize:16,fontWeight:700,color:"#000"}}>Enregistrer</span>
+        </Tap>
+      </div>
+    </div>
+  );
+}
+
 function PhotoProgress({onClose,onSavePhotos}) {
   const [photos,setPhotos]=useState(()=>{try{return JSON.parse(localStorage.getItem("soma_photos")||"{}");}catch(_e){return {};}});
   const [date,setDate]=useState(todayKey());
@@ -2043,6 +2063,7 @@ function SettingsTab({user,excluded,onToggleExclude,onSignOut,onReset,onOpenLibr
   const[ag,setAg]=useState(profile?.age!=null?String(profile.age):"");
   const[saved,setSaved]=useState(false);
   const[saveErr,setSaveErr]=useState(false);
+  const hasChanges=(w?Number(w):null)!==(profile?.weight_kg??null)||(h?Number(h):null)!==(profile?.height_cm??null)||(ag?Number(ag):null)!==(profile?.age??null);
   const[avatar,setAvatar]=useState(()=>{try{return localStorage.getItem("soma_avatar_"+(user?.id||""))||"";}catch(_e){return"";}});
   const avatarRef=useRef(null);
   const onAvatar=e=>{const f=e.target.files&&e.target.files[0];if(!f)return;const r=new FileReader();r.onload=()=>{const d=r.result;setAvatar(d);try{localStorage.setItem("soma_avatar_"+(user?.id||""),d);}catch(_e){} onUpdateConfig&&onUpdateConfig({avatar:d});};r.readAsDataURL(f);};
@@ -2097,7 +2118,7 @@ function SettingsTab({user,excluded,onToggleExclude,onSignOut,onReset,onOpenLibr
           <input inputMode="numeric" value={ag} onChange={e=>setAg(e.target.value.replace(/[^0-9]/g,""))} onBlur={()=>onUpdateConfig({age:ag?Number(ag):null})} placeholder="ans" style={{width:120,height:46,borderRadius:12,border:`1px solid ${C.s4}`,background:C.s2,color:C.ink,fontSize:17,fontWeight:600,fontFamily:F,textAlign:"center",outline:"none",boxSizing:"border-box"}}/>
           <span style={{fontSize:15,color:C.ink4}}>ans</span>
         </div>
-        <Tap onTap={async()=>{const r=await onUpdateConfig({weight_kg:w?Number(w):null,height_cm:h?Number(h):null,age:ag?Number(ag):null});if(r&&r.error){setSaved(false);setSaveErr(true);setTimeout(()=>setSaveErr(false),2400);}else{setSaveErr(false);setSaved(true);setTimeout(()=>setSaved(false),1600);}}} style={{marginTop:18,height:48,borderRadius:12,background:saveErr?C.s4:(saved?C.blue:C.ink),display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{fontSize:14,fontWeight:700,color:saveErr?C.ink:(saved?"#000":"#fff"),letterSpacing:".02em"}}>{saveErr?"Erreur — réessayer":(saved?"Enregistré ✓":"Enregistrer")}</span></Tap>
+        {(hasChanges||saved||saveErr)&&<Tap onTap={async()=>{const r=await onUpdateConfig({weight_kg:w?Number(w):null,height_cm:h?Number(h):null,age:ag?Number(ag):null});if(r&&r.error){setSaved(false);setSaveErr(true);setTimeout(()=>setSaveErr(false),2400);}else{setSaveErr(false);setSaved(true);setTimeout(()=>setSaved(false),1600);}}} style={{marginTop:18,height:48,borderRadius:12,background:saveErr?C.s4:(saved?C.blue:C.ink),display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{fontSize:14,fontWeight:700,color:saveErr?C.ink:(saved?"#000":"#fff"),letterSpacing:".02em"}}>{saveErr?"Erreur — réessayer":(saved?"Enregistré ✓":"Enregistrer")}</span></Tap>}
         <div style={{marginTop:20,paddingTop:18,borderTop:`1px solid ${C.s3}`}}>
           <div style={{fontSize:12,fontWeight:600,color:C.ink4,textTransform:"uppercase",letterSpacing:".08em",marginBottom:8}}>Programme</div>
           {profile?.program_start?(
@@ -2150,7 +2171,7 @@ function SettingsTab({user,excluded,onToggleExclude,onSignOut,onReset,onOpenLibr
           <span style={{fontSize:17,color:C.red}}>›</span>
         </Tap>
       </div>
-      <div style={{fontSize:12,color:C.ink4,textAlign:"center",marginTop:28}}>SŌMA · {"S"+weekNumber()} · {DB.length} exercices · build 23.37a</div>
+      <div style={{fontSize:12,color:C.ink4,textAlign:"center",marginTop:28}}>SŌMA · {"S"+weekNumber()} · {DB.length} exercices · build 23.38a</div>
     </div>
   );
 }
@@ -2254,6 +2275,20 @@ const MUSCLE_GROUP_MAP={
   cardio:"cardio","full body":"full",
 };
 const muscleGroupOf=(ex)=>MUSCLE_GROUP_MAP[primaryMuscle(ex.m)]||"full";
+const computePBs=(sessions)=>{
+  const m={};(sessions||[]).forEach(s=>{(s.exercises||[]).forEach(e=>{if(e&&e.id&&(e.completedSets>0)&&(e.weight>0)){if(!m[e.id]||e.weight>m[e.id])m[e.id]=e.weight;}});});
+  return Object.entries(m).map(([id,kg])=>{const ex=DB.find(x=>x.id===id);if(!ex)return null;return{...ex,pbKg:kg,oneRM:orm(kg,ex.reps)};}).filter(Boolean).sort((a,b)=>(b.oneRM||0)-(a.oneRM||0));
+};
+const PBCAT={bar:"Barre",db:"Haltères",kb:"Kettlebell",mc:"Machine",bw:"Poids du corps",cd:"Cardio"};
+const PBCAT_ICON={
+  Barre:(<><rect x="9" y="10" width="6" height="4" rx="1"/><path d="M6 12h1"/><path d="M17 12h1"/><path d="M3 10v4"/><path d="M21 10v4"/></>),
+  "Haltères":(<><circle cx="5" cy="12" r="2.5"/><circle cx="19" cy="12" r="2.5"/><path d="M8 12h8"/></>),
+  Kettlebell:(<><circle cx="12" cy="14" r="6"/><path d="M9 8a3 3 0 0 1 6 0"/></>),
+  Machine:(<><circle cx="12" cy="12" r="3"/><path d="M12 4v2"/><path d="M12 18v2"/><path d="M4 12h2"/><path d="M18 12h2"/></>),
+  "Poids du corps":(<><circle cx="12" cy="5" r="2"/><path d="M12 7v6"/><path d="M8 10h8"/><path d="M12 13l-3 6"/><path d="M12 13l3 6"/></>),
+  Cardio:(<><path d="M4 12h3l2-5 3 10 2-7 2 4h4"/></>),
+  Autre:(<><circle cx="12" cy="12" r="9"/></>),
+};
 const LEGACY_GOALS_BY_EQ={bar:["force","performance"],kb:["seche","endurance","performance"],bw:["seche","endurance","hypertrophie","performance"],db:["hypertrophie","performance","force"],mc:["hypertrophie"],cd:["endurance","seche"]};
 const goalsOf=(ex)=>ex.goals||LEGACY_GOALS_BY_EQ[ex.eq]||[];
 const GOAL_PROFILES={
@@ -2418,6 +2453,7 @@ export default function SomaApp() {
   const[dataReady,setDataReady]=useState(false);
   const[profile,setProfile]=useState(null);
   const[showOnboardingRedo,setShowOnboardingRedo]=useState(false);
+  const[showPBManager,setShowPBManager]=useState(false);
   const[favorites,setFavorites]=useState([]);
   const[supersets,setSupersets]=useState([]);
   const toggleLink=(exId)=>{const key=dayIdx+"_"+exId;setSupersets(prev=>{const next=prev.includes(key)?prev.filter(x=>x!==key):[...prev,key];persist(user?.id,{supersets:next});return next;});};
@@ -2568,7 +2604,7 @@ export default function SomaApp() {
     else if(updates.frequency){ const days=FREQ_DAYS[updates.frequency]||FREQ_DAYS[4]; const sched=generateScheduleDays(days); setSchedule(sched); persist(user?.id,{schedule:sched}); if(!(profile?.session_index)) next.total_sessions=12*days.length; }
     setProfile(next);
     persist(user?.id,{profile:next});
-    return (async()=>{ try{ const{error}=await supabase.from("profiles").upsert({id:user?.id,goal:next.goal,level:next.level,equipment:next.equipment,frequency:next.frequency,weight_kg:next.weight_kg,sex:next.sex,height_cm:next.height_cm,age:next.age,program_start:next.program_start,rms:next.rms,avatar:next.avatar,photos:next.photos,session_index:next.session_index,total_sessions:next.total_sessions,updated_at:new Date().toISOString()},{onConflict:"id"}); if(error)console.error("profile save",error.message); return {error}; }catch(e){ console.error("profile save",e); return {error:e}; } })();
+    return (async()=>{ try{ const{error}=await supabase.from("profiles").upsert({id:user?.id,goal:next.goal,level:next.level,equipment:next.equipment,frequency:next.frequency,weight_kg:next.weight_kg,sex:next.sex,height_cm:next.height_cm,age:next.age,program_start:next.program_start,rms:next.rms,avatar:next.avatar,photos:next.photos,session_index:next.session_index,total_sessions:next.total_sessions,pinned_pbs:next.pinned_pbs,updated_at:new Date().toISOString()},{onConflict:"id"}); if(error)console.error("profile save",error.message); return {error}; }catch(e){ console.error("profile save",e); return {error:e}; } })();
   },[persist,user,profile]);
 
   const switchTab=useCallback(id=>{setPrevTab(tab);setTab(id);if(id==="seance"){const ti=todayIdx();setDayIdx(cur=>cur===ti?cur:ti);}try{window.scrollTo(0,0);}catch(_e){}},[tab]);
@@ -2758,21 +2794,24 @@ const NAV=[{id:"home",l:"Accueil"},{id:"seance",l:"Séances"},{id:"stats",l:"Sta
       `}</style>
 
       {/* TOP BAR */}
-      <div style={{background:"rgba(0,0,0,.92)",backdropFilter:"blur(24px)",WebkitBackdropFilter:"blur(24px)",borderBottom:`1px solid ${C.s3}`,padding:`calc(14px + env(safe-area-inset-top)) 20px 12px`,position:"sticky",top:0,zIndex:Z.sticky,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-        <div>
-          <div style={{fontSize:22,fontWeight:700,color:C.ink,letterSpacing:"-.04em"}}>SŌMA</div>
-          <div style={{fontSize:10,fontWeight:600,color:C.ink4,letterSpacing:".16em",textTransform:"uppercase"}}>{"S"+wk+" · "}{user?.user_metadata?.name||"Athlète"}</div>
-        </div>
-        <div style={{display:"flex",alignItems:"center",gap:12}}>
-          {sessionActive&&(clock.running||clock.sec>0)&&<span style={{fontSize:15,fontWeight:700,color:C.red}}>{fmtDur(clock.sec)}</span>}
-          {streak>0&&<span style={{fontSize:13,fontWeight:600,color:C.orange,padding:"4px 12px",borderRadius:980,background:C.orDim}}>{streak}j</span>}
-          {sbReady&&<div style={{width:6,height:6,borderRadius:"50%",background:C.green}}/>}
+      <div style={{background:"rgba(255,255,255,.92)",backdropFilter:"blur(24px)",WebkitBackdropFilter:"blur(24px)",borderBottom:`1px solid ${C.s3}`,position:"sticky",top:0,zIndex:Z.sticky}}>
+        <div style={{maxWidth:600,margin:"0 auto",padding:`calc(14px + env(safe-area-inset-top)) 20px 12px`,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+          <div>
+            <div style={{fontSize:22,fontWeight:700,color:C.ink,letterSpacing:"-.04em"}}>SŌMA</div>
+            <div style={{fontSize:10,fontWeight:600,color:C.ink4,letterSpacing:".16em",textTransform:"uppercase"}}>{"S"+wk+" · "}{user?.user_metadata?.name||"Athlète"}</div>
+          </div>
+          <div style={{display:"flex",alignItems:"center",gap:12}}>
+            {sessionActive&&(clock.running||clock.sec>0)&&<span style={{fontSize:15,fontWeight:700,color:C.red}}>{fmtDur(clock.sec)}</span>}
+            {streak>0&&<span style={{fontSize:13,fontWeight:600,color:C.ink,padding:"4px 12px",borderRadius:980,background:C.s2}}>{streak}j</span>}
+            {sbReady&&<div style={{width:6,height:6,borderRadius:"50%",background:C.green}}/>}
+          </div>
         </div>
       </div>
 
       {/* DAY STRIP */}
       {tab==="seance"&&(
-        <div style={{background:C.bg,borderBottom:`1px solid ${C.s3}`,display:"flex",overflowX:"auto",padding:"10px 16px",gap:6,scrollbarWidth:"none"}}>
+        <div style={{background:C.bg,borderBottom:`1px solid ${C.s3}`}}>
+        <div style={{maxWidth:600,margin:"0 auto",display:"flex",overflowX:"auto",padding:"10px 16px",gap:6,scrollbarWidth:"none"}}>
           {viewSchedule.map((d,i)=>{
             const exList=d.exercises||[];
             const done=exList.filter(e=>Array.from({length:typeof e.sets==="number"?e.sets:4},(_,si)=>si).every(si=>log[`d${i}_${e.id}_s${si}`]?.done)).length;
@@ -2788,6 +2827,7 @@ const NAV=[{id:"home",l:"Accueil"},{id:"seance",l:"Séances"},{id:"stats",l:"Sta
               </Tap>
             );
           })}
+        </div>
         </div>
       )}
 
@@ -2898,7 +2938,7 @@ const NAV=[{id:"home",l:"Accueil"},{id:"seance",l:"Séances"},{id:"stats",l:"Sta
               )}
             </div>
           )}
-          {tab==="stats"&&<><StatsTab sessions={sessions} weights={weights} accent={accent}/><HistoryTab sessions={sessions} onSelect={setShowReport} accent={accent} onOpenPhotos={()=>setShowPhotos(true)}/></>}
+          {tab==="stats"&&<><StatsTab sessions={sessions} weights={weights} accent={accent} pinnedPBs={profile?.pinned_pbs} onManagePBs={()=>setShowPBManager(true)}/><HistoryTab sessions={sessions} onSelect={setShowReport} accent={accent} onOpenPhotos={()=>setShowPhotos(true)}/></>}
           {tab==="settings"&&<SettingsTab user={user} excluded={excluded} onToggleExclude={toggleExclude} onOpenLibrary={()=>setShowLibrary(true)} profile={profile} schedule={schedule} onUpdateConfig={updateConfig} onOpenScheduleEditor={()=>setShowSched(true)} onRedoOnboarding={()=>setShowOnboardingRedo(true)}
             onSignOut={async()=>{await supabase.auth.signOut();setUser(null);setLog({});setWeights({});setSessions([]);setExcluded([]);setStreak(0);}}
             onReset={async()=>{
@@ -2922,6 +2962,7 @@ const NAV=[{id:"home",l:"Accueil"},{id:"seance",l:"Séances"},{id:"stats",l:"Sta
       </div>
 
       {showOnboardingRedo&&<OnboardingScreen user={user} onDone={redoOnboarding} onClose={()=>setShowOnboardingRedo(false)}/>}
+      {showPBManager&&<PBManagerSheet sessions={sessions} pinnedPBs={profile?.pinned_pbs} onSave={(sel)=>updateConfig({pinned_pbs:sel})} onClose={()=>setShowPBManager(false)}/>}
       {/* Overlays plein ecran sortis du wrapper anime (position:fixed casse sous un ancetre avec transform) */}
       {focusIdx!=null&&exos[focusIdx]&&(
         <ExerciseFocus key={exos[focusIdx].id} ex={exos[focusIdx]} idx={focusIdx} count={exos.length} dayIdx={dayIdx}
@@ -2934,7 +2975,8 @@ const NAV=[{id:"home",l:"Accueil"},{id:"seance",l:"Séances"},{id:"stats",l:"Sta
       )}
 
       {/* BOTTOM NAV */}
-      <div style={{position:"fixed",bottom:0,left:0,right:0,zIndex:Z.sticky+10,background:"rgba(255,255,255,.96)",backdropFilter:"blur(24px)",WebkitBackdropFilter:"blur(24px)",borderTop:`1px solid ${C.s3}`,display:"flex",paddingBottom:"env(safe-area-inset-bottom)"}}>
+      <div style={{position:"fixed",bottom:0,left:0,right:0,zIndex:Z.sticky+10,background:"rgba(255,255,255,.96)",backdropFilter:"blur(24px)",WebkitBackdropFilter:"blur(24px)",borderTop:`1px solid ${C.s3}`}}>
+        <div style={{maxWidth:600,margin:"0 auto",display:"flex",paddingBottom:"env(safe-area-inset-bottom)"}}>
         {NAV.map(({id,l})=>{
           const on=tab===id;
           const ic=NAV_ICONS[id]||NAV_ICONS.seance;
@@ -2944,6 +2986,7 @@ const NAV=[{id:"home",l:"Accueil"},{id:"seance",l:"Séances"},{id:"stats",l:"Sta
             <span style={{fontSize:11.5,fontWeight:on?700:500,color:on?C.ink:C.ink4,transition:`color 200ms ${EO}`}}>{l}</span>
           </Tap>);
         })}
+        </div>
       </div>
 
       {/* OVERLAYS — z-index ordering per semantic scale */}
