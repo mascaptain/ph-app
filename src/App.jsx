@@ -1113,6 +1113,32 @@ function HomeTab({profile,streak,sessions,weights,todaySession,onStartToday,acce
         <span style={{fontSize:14,fontWeight:700,color:C.ink}}>{Math.round(weekVol).toLocaleString("fr-FR")} kg {volDeltaPct!==null&&<span style={{color:volDeltaPct>=0?C.green:C.red}}>{volDeltaPct>=0?"▲+":"▼"}{Math.abs(volDeltaPct)}%</span>}</span>
       </div>
     </div>}
+    {progTotal>0&&(()=>{
+      const NAMES=["Départ","Ancrage","Élan","Rythme","Maîtrise","Accomplissement"];
+      const step=Math.ceil(progTotal/6);
+      const paliers=NAMES.map((nm,i)=>({label:nm,threshold:Math.min(progTotal,step*(i+1))}));
+      return(
+        <div style={{background:C.s1,borderRadius:16,padding:"16px",marginBottom:12}}>
+          <div style={{fontSize:11,fontWeight:700,color:C.ink4,textTransform:"uppercase",letterSpacing:".1em",marginBottom:14}}>Paliers du programme</div>
+          <div style={{display:"flex",alignItems:"flex-start"}}>
+            {paliers.map((p,i)=>{
+              const reached=progIndex>=p.threshold;
+              const isCurrent=!reached&&(i===0||progIndex>=paliers[i-1].threshold);
+              return(
+                <div key={i} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",position:"relative"}}>
+                  {i>0&&<div style={{position:"absolute",top:14,right:"50%",width:"100%",height:2,background:reached||isCurrent?C.blue:C.s3,zIndex:0}}/>}
+                  <div style={{width:28,height:28,borderRadius:"50%",background:reached?C.blue:(isCurrent?C.bg:C.s2),border:`2px solid ${reached||isCurrent?C.blue:C.s3}`,display:"flex",alignItems:"center",justifyContent:"center",zIndex:1,flexShrink:0}}>
+                    <span style={{fontSize:12,fontWeight:700,color:reached?"#000":(isCurrent?C.blue:C.ink4)}}>{reached?"✓":i+1}</span>
+                  </div>
+                  <span style={{fontSize:10,fontWeight:600,color:reached||isCurrent?C.ink3:C.ink4,marginTop:6,textAlign:"center"}}>{p.label}</span>
+                  <span style={{fontSize:9,color:C.ink4,marginTop:1}}>{p.threshold}</span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      );
+    })()}
     {bw>0&&<div style={{background:C.s1,borderRadius:16,padding:"14px 16px",display:"flex",alignItems:"center",justifyContent:"space-between"}}><span style={{fontSize:13,color:C.ink3,fontWeight:600}}>Poids de corps</span><span style={{fontSize:17,fontWeight:800,color:C.ink}}>{bw} kg</span></div>}
   </div>);
 }
@@ -1514,13 +1540,19 @@ function FeedbackSheet({onClose,onSave}) {
 }
 
 // ─── SESSION REPORT ───────────────────────────────────────────────────────────
-function SessionReport({session,onClose,onDelete}) {
+function SessionReport({session,sessions,onClose,onDelete}) {
   if(!session) return null;
   const{totalKg=0,totalSets=0,duration=0,exercises=[],date="",dayLabel="",score=0,feedback}=session;
   const photo=(()=>{try{return JSON.parse(localStorage.getItem("soma_photos")||"{}")[date]||null;}catch(_e){return null;}})();
   const animScore=useCountUp(score,1200);
   const animKg=useCountUp(Math.round(totalKg/1000*10)/10*10,1400);
   const animSets=useCountUp(totalSets,1000);
+  const newPBs=useMemo(()=>{
+    const prior=(sessions||[]).filter(s=>s.date<date);
+    const priorBest=computePBs(prior);
+    const priorMap={};priorBest.forEach(pb=>{priorMap[pb.id]=pb.pbKg;});
+    return (exercises||[]).filter(e=>e&&e.id&&e.completedSets>0&&e.weight>0&&e.weight>(priorMap[e.id]||0));
+  },[sessions,date,exercises]);
   return(
     <div style={{position:"fixed",inset:0,background:C.bg,zIndex:Z.fullscreen+100,overflowY:"auto",fontFamily:F,animation:`fadeIn 250ms ${EO} both`}}>
       <div style={{maxWidth:600,margin:"0 auto"}}>
@@ -1535,6 +1567,15 @@ function SessionReport({session,onClose,onDelete}) {
             <span style={{fontSize:12,fontWeight:600,color:C.ink4,letterSpacing:".1em"}}>SCORE</span>
           </div>}
         </div>
+        {newPBs.length>0&&(
+          <div style={{margin:"0 24px 20px",padding:"16px 18px",borderRadius:16,background:C.blueDim,border:`1px solid ${C.blue}`,animation:`fadeUp 500ms ${EO} both`}}>
+            <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={C.ink} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M8 21h8"/><path d="M12 17v4"/><path d="M7 4h10v5a5 5 0 0 1-10 0V4z"/><path d="M7 6H4a2 2 0 0 0 2 4"/><path d="M17 6h3a2 2 0 0 1-2 4"/></svg>
+              <span style={{fontSize:14,fontWeight:700,color:C.ink}}>{newPBs.length>1?`${newPBs.length} nouveaux records`:"Nouveau record"}} 🎉</span>
+            </div>
+            {newPBs.map((e,i)=>(<div key={e.id||i} style={{fontSize:13,color:C.ink2,padding:"3px 0"}}>{e.n} <span style={{fontWeight:700}}>{e.weight}kg</span></div>))}
+          </div>
+        )}
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",borderBottom:`1px solid ${C.s3}`}}>
           {[
             {l:"Volume",v:totalKg>0?`${animKg/10}t`:"—"},
@@ -2178,7 +2219,7 @@ function SettingsTab({user,excluded,onToggleExclude,onSignOut,onReset,onOpenLibr
           <span style={{fontSize:17,color:C.red}}>›</span>
         </Tap>
       </div>
-      <div style={{fontSize:12,color:C.ink4,textAlign:"center",marginTop:28}}>SŌMA · {"S"+weekNumber()} · {DB.length} exercices · build 23.39a</div>
+      <div style={{fontSize:12,color:C.ink4,textAlign:"center",marginTop:28}}>SŌMA · {"S"+weekNumber()} · {DB.length} exercices · build 23.40a</div>
     </div>
   );
 }
@@ -3011,7 +3052,7 @@ const NAV=[{id:"home",l:"Accueil"},{id:"seance",l:"Séances"},{id:"stats",l:"Sta
       {showTimer&&<IntervalTimer onClose={()=>setShowTimer(false)}/>}
       {showPicker&&<ExPicker onSelect={newEx=>handleReplaceEx(showPicker,newEx)} onClose={()=>setShowPicker(null)} currentId={showPicker.id} excluded={excluded}/>}
       {showLibrary&&<LibraryTab favorites={favorites} onToggleFav={toggleFav} onClose={()=>setShowLibrary(false)} sessions={sessions}/>}
-      {showReport&&<SessionReport session={showReport} onClose={()=>setShowReport(null)} onDelete={deleteSession}/>}
+      {showReport&&<SessionReport session={showReport} sessions={sessions} onClose={()=>setShowReport(null)} onDelete={deleteSession}/>}
       {showSched&&<ScheduleEditor schedule={schedule}
         onChange={ns=>{setSchedule(ns);persist(user?.id,{schedule:ns});}}
         onReset={()=>{setSchedule(PROGRAM);persist(user?.id,{schedule:PROGRAM});}}
