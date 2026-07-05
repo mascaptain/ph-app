@@ -1808,7 +1808,6 @@ function ScheduleEditor({schedule,onChange,onReset,onClose,autoRotate,onToggleAu
 
 function SettingsTab({user,excluded,onToggleExclude,onSignOut,onReset,onOpenLibrary,profile,schedule,onUpdateConfig,onOpenScheduleEditor,onRedoOnboarding}) {
   const[showLib,setShowLib]=useState(false);
-  const[confirmGoal,setConfirmGoal]=useState(null);
   const[w,setW]=useState(profile?.weight_kg!=null?String(profile.weight_kg):"");
   const[h,setH]=useState(profile?.height_cm!=null?String(profile.height_cm):"");
   const[ag,setAg]=useState(profile?.age!=null?String(profile.age):"");
@@ -1834,22 +1833,12 @@ function SettingsTab({user,excluded,onToggleExclude,onSignOut,onReset,onOpenLibr
       </div>
       {/* Mon programme */}
       {onUpdateConfig&&<div style={{background:C.s1,borderRadius:16,padding:"20px",marginBottom:12}}>
-        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:16,gap:8}}><span style={{fontSize:14,fontWeight:600,color:C.ink}}>Mon programme</span><div style={{display:"flex",gap:6}}>{onOpenScheduleEditor&&<Tap onTap={onOpenScheduleEditor} style={{padding:"6px 12px",borderRadius:980,background:C.s2}}><span style={{fontSize:12,fontWeight:600,color:C.ink3}}>Modifier les séances ›</span></Tap>}{onRedoOnboarding&&<Tap onTap={onRedoOnboarding} style={{padding:"6px 12px",borderRadius:980,background:C.s2}}><span style={{fontSize:12,fontWeight:600,color:C.ink3}}>Recréer ›</span></Tap>}</div></div>
-        <div style={{fontSize:12,fontWeight:600,color:C.ink4,textTransform:"uppercase",letterSpacing:".08em",marginBottom:8}}>Objectif</div>
-        <div style={{display:"flex",flexWrap:"wrap",gap:8,marginBottom:confirmGoal?10:18}}>
-          {GOALS.map(([k,l])=>(
-            <Tap key={k} onTap={()=>{if(k===profile?.goal)return;setConfirmGoal(k);}} style={{padding:"9px 16px",borderRadius:980,border:`1.5px solid ${profile?.goal===k?C.blue:C.div}`,background:profile?.goal===k?C.blueDim:"transparent"}}><span style={{fontSize:13,fontWeight:600,color:profile?.goal===k?C.blue:C.ink3}}>{l}</span></Tap>
-          ))}
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:16,gap:8}}><span style={{fontSize:14,fontWeight:600,color:C.ink}}>Mon programme</span>{onOpenScheduleEditor&&<Tap onTap={onOpenScheduleEditor} style={{padding:"6px 12px",borderRadius:980,background:C.s2}}><span style={{fontSize:12,fontWeight:600,color:C.ink3}}>Modifier les séances ›</span></Tap>}</div>
+        <div style={{fontSize:12,fontWeight:600,color:C.ink4,textTransform:"uppercase",letterSpacing:".08em",marginBottom:8}}>Objectif actuel</div>
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",background:C.s1,border:`1px solid ${C.s3}`,borderRadius:14,padding:"14px 16px",marginBottom:18}}>
+          <span style={{fontSize:15,fontWeight:700,color:C.ink}}>{(GOALS.find(g=>g[0]===profile?.goal)||[])[1]||"—"}</span>
+          {onRedoOnboarding&&<Tap onTap={onRedoOnboarding} style={{padding:"7px 14px",borderRadius:980,background:C.blueDim}}><span style={{fontSize:12,fontWeight:700,color:C.blue}}>Changer ‹</span></Tap>}
         </div>
-        {confirmGoal&&(()=>{const g=GOALS.find(x=>x[0]===confirmGoal);const tdpw=(schedule||[]).filter(d=>d&&d.salle).length||(profile?.frequency||4);return(
-          <div style={{background:C.orDim||C.s2,border:`1px solid ${C.orange||C.s4}`,borderRadius:14,padding:"14px",marginBottom:18}}>
-            <div style={{fontSize:13,fontWeight:700,color:C.ink,marginBottom:4}}>Passer à {g?g[1]:confirmGoal} ?</div>
-            <div style={{fontSize:12,color:C.ink3,marginBottom:12}}>Cela redémarre le programme à la séance 1.</div>
-            <div style={{display:"flex",gap:8}}>
-              <Tap onTap={()=>setConfirmGoal(null)} style={{flex:1,padding:"10px",borderRadius:10,background:C.s2,textAlign:"center"}}><span style={{fontSize:13,fontWeight:600,color:C.ink3}}>Annuler</span></Tap>
-              <Tap onTap={()=>{onUpdateConfig({goal:confirmGoal,session_index:0,total_sessions:12*tdpw,program_start:todayKey()});setConfirmGoal(null);}} style={{flex:1,padding:"10px",borderRadius:10,background:C.blue,textAlign:"center"}}><span style={{fontSize:13,fontWeight:700,color:"#000"}}>Confirmer</span></Tap>
-            </div>
-          </div>);})()}
         <div style={{fontSize:12,fontWeight:600,color:C.ink4,textTransform:"uppercase",letterSpacing:".08em",marginBottom:8}}>Jours de séance</div>
         <div style={{display:"flex",gap:6,marginBottom:18}}>
           {["LUN","MAR","MER","JEU","VEN","SAM","DIM"].map((lbl,i)=>{
@@ -1931,7 +1920,7 @@ function SettingsTab({user,excluded,onToggleExclude,onSignOut,onReset,onOpenLibr
           <span style={{fontSize:17,color:C.red}}>›</span>
         </Tap>
       </div>
-      <div style={{fontSize:12,color:C.ink4,textAlign:"center",marginTop:28}}>SŌMA · {"S"+weekNumber()} · {DB.length} exercices · build 23.31a</div>
+      <div style={{fontSize:12,color:C.ink4,textAlign:"center",marginTop:28}}>SŌMA · {"S"+weekNumber()} · {DB.length} exercices · build 23.32a</div>
     </div>
   );
 }
@@ -2408,8 +2397,10 @@ export default function SomaApp() {
   const programDone=sessionIndex>=totalSessions;
   const isViewingToday=dayIdx===todayIdx();
   const rawDay0=viewSchedule[dayIdx]||PROGRAM[dayIdx];
-  const pendingTemplate=(!programDone&&TRAIN_TEMPLATES.length)?TRAIN_TEMPLATES[sessionIndex%TRAIN_TEMPLATES.length]:null;
-  const day0=(isViewingToday&&rawDay0?.salle&&pendingTemplate)?(()=>{let c={...pendingTemplate,day:rawDay0.day};if(profile?.equipment?.length)c=adaptEquip(c,profile.equipment);if(profile?.goal&&profile.goal!=="hybride")c=adaptGoal(c,profile.goal);return c;})():rawDay0;
+  const tabDate=programDate(dayIdx);
+  const isBeforeProgramStart=!!(profile?.program_start&&tabDate<profile.program_start);
+  const pendingTemplate=(!programDone&&!isBeforeProgramStart&&TRAIN_TEMPLATES.length)?TRAIN_TEMPLATES[sessionIndex%TRAIN_TEMPLATES.length]:null;
+  const day0=isBeforeProgramStart?{...REST_TPL,day:rawDay0?.day}:(isViewingToday&&rawDay0?.salle&&pendingTemplate)?(()=>{let c={...pendingTemplate,day:rawDay0.day};if(profile?.equipment?.length)c=adaptEquip(c,profile.equipment);if(profile?.goal&&profile.goal!=="hybride")c=adaptGoal(c,profile.goal);return c;})():rawDay0;
   const effMode=modeOverride||day0?.recommendedMode||"classique";
   const sessionMode=effMode;
   const day=applyMode(day0,effMode,profile,sessionWeek,dayIdx,dayCons);
