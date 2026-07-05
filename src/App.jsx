@@ -1793,7 +1793,7 @@ function SkillsOctagon({sessions}) {
     <div style={{background:C.s1,borderRadius:16,padding:"20px",marginBottom:16}}>
       <div style={{fontSize:12,fontWeight:600,color:C.ink4,textTransform:"uppercase",letterSpacing:".1em",marginBottom:4}}>Octogone de compétences</div>
       <div style={{fontSize:13,color:C.ink4,marginBottom:4}}>Tes 8 qualités, calculées sur ton historique.</div>
-      <svg viewBox="0 0 300 320" style={{width:"100%",height:"auto",display:"block"}}>
+      <svg viewBox="0 0 300 268" style={{width:"100%",height:"auto",display:"block"}}>
         {grid.map((g,i)=>(<polygon key={"g"+i} points={g} fill="none" stroke={C.s3} strokeWidth="1"/>))}
         {axes.map((_,i)=>{const[x,y]=pt(i,R);return <line key={"l"+i} x1={cx} y1={cy} x2={x} y2={y} stroke={C.s3} strokeWidth="1"/>;})}
         <polygon points={poly} fill={C.blue} fillOpacity="0.25" stroke={C.blue} strokeWidth="2"/>
@@ -1833,7 +1833,7 @@ function LoadChart({data,color=C.blue}){
     </div>
   </div>);
 }
-function StatsTab({sessions,weights,accent,onOpenPhotos,pinnedPBs,onManagePBs,activeSkills,onManageSkills}) {
+function StatsTab({sessions,weights,accent,onOpenPhotos,pinnedPBs,onManagePBs,activeSkills,onManageSkills,onOpenRewards}) {
   const total=sessions.length,totalKg=sessions.reduce((a,s)=>a+(s.totalKg||0),0);
   const avgScore=total?Math.round(sessions.reduce((a,s)=>a+(s.score||0),0)/total):0;
   const pbs=useMemo(()=>computePBs(sessions),[sessions]);
@@ -1923,12 +1923,26 @@ function StatsTab({sessions,weights,accent,onOpenPhotos,pinnedPBs,onManagePBs,ac
             <div style={{fontSize:20,fontWeight:700,color:C.ink}}>{pb.pbKg===0?"BW":pb.pbKg+"kg"}</div>
           </div>
         ))}
-      {(()=>{const B=computeBadges(sessions);const earned=B.filter(b=>b.ok).length;return(
+      {(()=>{const B=computeBadges(sessions);const earned=B.filter(b=>b.ok).length;
+      const cats=[...new Set(B.map(b=>b.cat))];
+      return(
       <div style={{marginTop:24,background:C.s1,borderRadius:16,padding:"16px"}}>
-        <div style={{display:"flex",alignItems:"baseline",justifyContent:"space-between",marginBottom:12}}><span style={{fontSize:11,fontWeight:700,color:C.ink3,textTransform:"uppercase",letterSpacing:".15em"}}>Récompenses</span><span style={{fontSize:12,fontWeight:600,color:C.ink4}}>{earned}/{B.length}</span></div>
-        <div style={{display:"flex",flexWrap:"wrap",gap:8}}>
-          {B.map((b,i)=>(<span key={i} style={{padding:"7px 12px",borderRadius:980,background:b.ok?C.blue:C.s2,fontSize:12,fontWeight:600,color:b.ok?"#000":C.ink4}}>{b.t}</span>))}
+        <div style={{display:"flex",alignItems:"baseline",justifyContent:"space-between",marginBottom:12}}>
+          <span style={{fontSize:11,fontWeight:700,color:C.ink3,textTransform:"uppercase",letterSpacing:".15em"}}>Récompenses</span>
+          {onOpenRewards&&<Tap onTap={onOpenRewards} style={{padding:"6px 12px",borderRadius:980,background:C.s2}}><span style={{fontSize:12,fontWeight:600,color:C.ink3}}>Voir tout ({earned}/{B.length}) ›</span></Tap>}
         </div>
+        {cats.map(cat=>{
+          const list=B.filter(b=>b.cat===cat);
+          const earnedList=list.filter(b=>b.ok);
+          const current=earnedList[earnedList.length-1];
+          const next=list.find(b=>!b.ok);
+          return(
+            <div key={cat} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"9px 0",borderTop:`1px solid ${C.s2}`}}>
+              <span style={{fontSize:13,color:C.ink3}}>{cat}</span>
+              <span style={{fontSize:13,fontWeight:700,color:current?C.ink:C.ink4}}>{current?current.t:(next?`prochain : ${next.t}`:"—")}</span>
+            </div>
+          );
+        })}
       </div>
     );})()}
     </div>
@@ -1983,6 +1997,37 @@ function PBManagerSheet({sessions,pinnedPBs,onSave,onClose}) {
   );
 }
 
+function RewardsManagerSheet({sessions,onClose}) {
+  const B=useMemo(()=>computeBadges(sessions),[sessions]);
+  const earned=B.filter(b=>b.ok).length;
+  const cats=[...new Set(B.map(b=>b.cat))];
+  return(
+    <div style={{position:"fixed",top:0,left:0,right:0,height:"100dvh",maxHeight:"100dvh",background:C.bg,zIndex:Z.fullscreen,overflowY:"auto",WebkitOverflowScrolling:"touch",fontFamily:F,paddingTop:"env(safe-area-inset-top)",boxSizing:"border-box"}}>
+      <div style={{maxWidth:600,margin:"0 auto",padding:"20px 20px calc(20px + env(safe-area-inset-bottom))"}}>
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:6}}>
+          <span style={{fontSize:22,fontWeight:700,color:C.ink,letterSpacing:"-.02em"}}>Récompenses</span>
+          <Tap onTap={onClose} style={{width:36,height:36,borderRadius:10,background:C.s2,display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{fontSize:14,color:C.ink3}}>✕</span></Tap>
+        </div>
+        <div style={{fontSize:13,color:C.ink4,marginBottom:20}}>{earned}/{B.length} paliers débloqués.</div>
+        {cats.map(cat=>{
+          const list=B.filter(b=>b.cat===cat);
+          const catEarned=list.filter(b=>b.ok).length;
+          return(
+            <div key={cat} style={{marginBottom:20}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",marginBottom:8}}>
+                <span style={{fontSize:12,fontWeight:700,color:C.ink3,textTransform:"uppercase",letterSpacing:".1em"}}>{cat}</span>
+                <span style={{fontSize:12,color:C.ink4}}>{catEarned}/{list.length}</span>
+              </div>
+              <div style={{display:"flex",flexWrap:"wrap",gap:8}}>
+                {list.map((b,i)=>(<span key={i} style={{padding:"7px 12px",borderRadius:980,background:b.ok?C.blue:C.s2,fontSize:12,fontWeight:600,color:b.ok?"#000":C.ink4}}>{b.t}</span>))}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
 function SkillManagerSheet({activeSkills,onSave,onClose}) {
   const [sel,setSel]=useState((activeSkills||[]).map(s=>s.skillId));
   const toggle=(id)=>{
@@ -2339,7 +2384,7 @@ function SettingsTab({user,excluded,onToggleExclude,onSignOut,onReset,onOpenLibr
           <span style={{fontSize:17,color:C.red}}>›</span>
         </Tap>
       </div>
-      <div style={{fontSize:12,color:C.ink4,textAlign:"center",marginTop:28}}>SŌMA · {"S"+weekNumber()} · {DB.length} exercices · build 23.46a</div>
+      <div style={{fontSize:12,color:C.ink4,textAlign:"center",marginTop:28}}>SŌMA · {"S"+weekNumber()} · {DB.length} exercices · build 23.47a</div>
     </div>
   );
 }
@@ -2449,29 +2494,30 @@ const computePBs=(sessions)=>{
   const m={};(sessions||[]).forEach(s=>{(s.exercises||[]).forEach(e=>{if(e&&e.id&&(e.completedSets>0)&&(e.weight>0)){if(!m[e.id]||e.weight>m[e.id])m[e.id]=e.weight;}});});
   return Object.entries(m).map(([id,kg])=>{const ex=DB.find(x=>x.id===id);if(!ex)return null;return{...ex,pbKg:kg,oneRM:orm(kg,ex.reps)};}).filter(Boolean).sort((a,b)=>(b.oneRM||0)-(a.oneRM||0));
 };
+const BADGE_TIERS={
+  "Assiduité":[1,5,10,20,30,50,75,100,150,200],
+  Force:[40,60,80,100,120,140,160,180,200,220],
+  Volume:[0.5,1,2.5,5,10,15,25,50,75,100],
+  "Régularité":[3,7,14,30,60,90,120,180,270,365],
+  "Personal Bests":[1,3,5,10,15,20,25,30,40,50],
+};
 const computeBadges=(sessions)=>{
   const totalS=(sessions||[]).length;
   const maxW=(sessions||[]).reduce((m,s)=>Math.max(m,((s.exercises||[]).reduce((mm,e)=>Math.max(mm,e.weight||0),0))),0);
-  const totalVol=(sessions||[]).reduce((a,s)=>a+(s.totalKg||0),0);
+  const totalVol=(sessions||[]).reduce((a,s)=>a+(s.totalKg||0),0)/1000;
   const days=new Set((sessions||[]).map(s=>s.date)).size;
-  return [
-    {cat:"Assiduité",t:"Première séance",d:"1 séance",ok:totalS>=1},
-    {cat:"Assiduité",t:"10 séances",d:"10 séances",ok:totalS>=10},
-    {cat:"Assiduité",t:"25 séances",d:"25 séances",ok:totalS>=25},
-    {cat:"Assiduité",t:"50 séances",d:"50 séances",ok:totalS>=50},
-    {cat:"Assiduité",t:"100 séances",d:"100 séances",ok:totalS>=100},
-    {cat:"Force",t:"Club 60 kg",d:"Soulève 60 kg",ok:maxW>=60},
-    {cat:"Force",t:"Club 100 kg",d:"Soulève 100 kg",ok:maxW>=100},
-    {cat:"Force",t:"Club 140 kg",d:"Soulève 140 kg",ok:maxW>=140},
-    {cat:"Force",t:"Club 180 kg",d:"Soulève 180 kg",ok:maxW>=180},
-    {cat:"Régularité",t:"Assidu",d:"7 jours actifs",ok:days>=7},
-    {cat:"Régularité",t:"Très assidu",d:"30 jours actifs",ok:days>=30},
-    {cat:"Régularité",t:"Inébranlable",d:"90 jours actifs",ok:days>=90},
-    {cat:"Volume",t:"1 tonne",d:"1t soulevée au total",ok:totalVol>=1000},
-    {cat:"Volume",t:"5 tonnes",d:"5t soulevées au total",ok:totalVol>=5000},
-    {cat:"Volume",t:"15 tonnes",d:"15t soulevées au total",ok:totalVol>=15000},
-    {cat:"Volume",t:"30 tonnes",d:"30t soulevées au total",ok:totalVol>=30000},
-  ];
+  const nbPB=computePBs(sessions).length;
+  const VALS={"Assiduité":totalS,Force:maxW,Volume:totalVol,"Régularité":days,"Personal Bests":nbPB};
+  const UNIT={"Assiduité":"séances",Force:"kg",Volume:"t",Régularité:"jours actifs","Personal Bests":"PB"};
+  const out=[];
+  Object.keys(BADGE_TIERS).forEach(cat=>{
+    const val=VALS[cat];
+    BADGE_TIERS[cat].forEach(tier=>{
+      const unit=(cat==="Assiduité"&&tier===1)?"séance":(UNIT[cat]||"");
+      out.push({cat,t:`${tier} ${unit}`.trim(),d:`Atteins ${tier} ${unit}`.trim(),ok:val>=tier,tier});
+    });
+  });
+  return out;
 };
 const phaseBlocksList=()=>{
   const blocks=[];
@@ -2704,6 +2750,7 @@ export default function SomaApp() {
   const[showOnboardingRedo,setShowOnboardingRedo]=useState(false);
   const[showPBManager,setShowPBManager]=useState(false);
   const[showSkillManager,setShowSkillManager]=useState(false);
+  const[showRewardsManager,setShowRewardsManager]=useState(false);
   const[favorites,setFavorites]=useState([]);
   const[supersets,setSupersets]=useState([]);
   const toggleLink=(exId)=>{const key=dayIdx+"_"+exId;setSupersets(prev=>{const next=prev.includes(key)?prev.filter(x=>x!==key):[...prev,key];persist(user?.id,{supersets:next});return next;});};
@@ -3225,7 +3272,7 @@ const NAV=[{id:"home",l:"Accueil"},{id:"seance",l:"Séances"},{id:"stats",l:"Sta
               )}
             </div>
           )}
-          {tab==="stats"&&<><StatsTab sessions={sessions} weights={weights} accent={accent} pinnedPBs={profile?.pinned_pbs} onManagePBs={()=>setShowPBManager(true)} activeSkills={profile?.active_skills} onManageSkills={()=>setShowSkillManager(true)}/><HistoryTab sessions={sessions} onSelect={setShowReport} accent={accent} onOpenPhotos={()=>setShowPhotos(true)}/></>}
+          {tab==="stats"&&<><StatsTab sessions={sessions} weights={weights} accent={accent} pinnedPBs={profile?.pinned_pbs} onManagePBs={()=>setShowPBManager(true)} activeSkills={profile?.active_skills} onManageSkills={()=>setShowSkillManager(true)} onOpenRewards={()=>setShowRewardsManager(true)}/><HistoryTab sessions={sessions} onSelect={setShowReport} accent={accent} onOpenPhotos={()=>setShowPhotos(true)}/></>}
           {tab==="settings"&&<SettingsTab user={user} excluded={excluded} onToggleExclude={toggleExclude} onOpenLibrary={()=>setShowLibrary(true)} profile={profile} schedule={schedule} onUpdateConfig={updateConfig} onOpenScheduleEditor={()=>setShowSched(true)} onRedoOnboarding={()=>setShowOnboardingRedo(true)}
             onSignOut={async()=>{await supabase.auth.signOut();setUser(null);setLog({});setWeights({});setSessions([]);setExcluded([]);setStreak(0);}}
             onReset={async()=>{
@@ -3251,6 +3298,7 @@ const NAV=[{id:"home",l:"Accueil"},{id:"seance",l:"Séances"},{id:"stats",l:"Sta
       {showOnboardingRedo&&<OnboardingScreen user={user} onDone={redoOnboarding} onClose={()=>setShowOnboardingRedo(false)}/>}
       {showPBManager&&<PBManagerSheet sessions={sessions} pinnedPBs={profile?.pinned_pbs} onSave={(sel)=>updateConfig({pinned_pbs:sel})} onClose={()=>setShowPBManager(false)}/>}
       {showSkillManager&&<SkillManagerSheet activeSkills={profile?.active_skills} onSave={(sel)=>updateConfig({active_skills:sel})} onClose={()=>setShowSkillManager(false)}/>}
+      {showRewardsManager&&<RewardsManagerSheet sessions={sessions} onClose={()=>setShowRewardsManager(false)}/>}
       {/* Overlays plein ecran sortis du wrapper anime (position:fixed casse sous un ancetre avec transform) */}
       {focusIdx!=null&&exos[focusIdx]&&(
         <ExerciseFocus key={exos[focusIdx].id} ex={exos[focusIdx]} idx={focusIdx} count={exos.length} dayIdx={dayIdx} sDate={sDate}
