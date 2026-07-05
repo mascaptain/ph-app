@@ -1931,7 +1931,7 @@ function SettingsTab({user,excluded,onToggleExclude,onSignOut,onReset,onOpenLibr
           <span style={{fontSize:17,color:C.red}}>›</span>
         </Tap>
       </div>
-      <div style={{fontSize:12,color:C.ink4,textAlign:"center",marginTop:28}}>SŌMA · {"S"+weekNumber()} · {DB.length} exercices · build 23.28a</div>
+      <div style={{fontSize:12,color:C.ink4,textAlign:"center",marginTop:28}}>SŌMA · {"S"+weekNumber()} · {DB.length} exercices · build 23.29a</div>
     </div>
   );
 }
@@ -2352,6 +2352,13 @@ export default function SomaApp() {
     const map={};sessions.slice().reverse().forEach(s=>{(s.exercises||[]).forEach(ex=>{if(ex.weight&&!map[ex.id])map[ex.id]=ex.weight;});});return map;
   },[sessions]);
 
+  useEffect(()=>{
+    if(!profile) return;
+    const tdpw=(schedule||[]).filter(d=>d&&d.salle).length||(profile?.frequency||4);
+    const expected=12*tdpw;
+    if((profile.session_index||0)===0&&profile.total_sessions!==expected){ updateConfig({total_sessions:expected}); }
+  },[profile,schedule]);
+
   if(authLoading) return(
     <div style={{position:"fixed",inset:0,background:C.bg,display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",gap:16,fontFamily:F}}>
       <div style={{fontSize:32,fontWeight:700,color:C.ink,letterSpacing:"-.03em"}}>SŌMA</div>
@@ -2379,7 +2386,6 @@ export default function SomaApp() {
   const totalSessions=profile?.total_sessions||expectedTotalSessions;
   const sessionWeek=Math.min(PROG_WEEKS,Math.max(1,Math.floor(sessionIndex/trainingDaysPerWeek)+1));
   const programDone=sessionIndex>=totalSessions;
-  useEffect(()=>{ if(profile&&sessionIndex===0&&profile.total_sessions!==expectedTotalSessions){ updateConfig({total_sessions:expectedTotalSessions}); } },[expectedTotalSessions,profile?.total_sessions,sessionIndex]);
   const isViewingToday=dayIdx===todayIdx();
   const rawDay0=viewSchedule[dayIdx]||PROGRAM[dayIdx];
   const pendingTemplate=(!programDone&&TRAIN_TEMPLATES.length)?TRAIN_TEMPLATES[sessionIndex%TRAIN_TEMPLATES.length]:null;
