@@ -1799,7 +1799,7 @@ function LoadChart({data,color=C.blue}){
     </div>
   </div>);
 }
-function StatsTab({sessions,weights,accent,onOpenPhotos,pinnedPBs,onManagePBs}) {
+function StatsTab({sessions,weights,accent,onOpenPhotos,pinnedPBs,onManagePBs,activeSkills,onManageSkills}) {
   const total=sessions.length,totalKg=sessions.reduce((a,s)=>a+(s.totalKg||0),0);
   const avgScore=total?Math.round(sessions.reduce((a,s)=>a+(s.score||0),0)/total):0;
   const pbs=useMemo(()=>computePBs(sessions),[sessions]);
@@ -1849,6 +1849,31 @@ function StatsTab({sessions,weights,accent,onOpenPhotos,pinnedPBs,onManagePBs}) 
           <ProgressLine data={volumeByWeek} color={accent||C.blue}/>
         </div>
       )}
+      {/* Apprentissage */}
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
+        <span style={{fontSize:12,fontWeight:600,color:C.ink4,textTransform:"uppercase",letterSpacing:".1em"}}>Apprentissage</span>
+        {onManageSkills&&<Tap onTap={onManageSkills} style={{padding:"6px 12px",borderRadius:980,background:C.s2}}><span style={{fontSize:12,fontWeight:600,color:C.ink3}}>Gérer ({(activeSkills||[]).length}/2) ›</span></Tap>}
+      </div>
+      {(!activeSkills||activeSkills.length===0)?(
+        <div style={{textAlign:"center",padding:"24px 0",fontSize:14,color:C.ink4,marginBottom:16}}>Ajoute un mouvement à apprendre (muscle-up, pistol squat...).</div>
+      ):(activeSkills.map(as=>{
+        const sk=SKILLS_CATALOG.find(s=>s.id===as.skillId);
+        if(!sk) return null;
+        const step=sk.steps[as.stepIndex]||sk.steps[sk.steps.length-1];
+        const pct=Math.round(((as.stepIndex)/sk.steps.length)*100);
+        return(
+          <div key={as.skillId} style={{background:C.s1,borderRadius:16,padding:"16px",marginBottom:10}}>
+            <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:8}}>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={C.ink3} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">{sk.icon}</svg>
+              <div style={{flex:1}}>
+                <div style={{fontSize:15,fontWeight:700,color:C.ink}}>{sk.name}</div>
+                <div style={{fontSize:12,color:C.ink3}}>Étape {as.stepIndex+1}/{sk.steps.length} · {step.label}</div>
+              </div>
+            </div>
+            <div style={{height:4,borderRadius:2,background:C.s2,overflow:"hidden"}}><div style={{height:"100%",width:`${pct}%`,background:C.blue,borderRadius:2}}/></div>
+          </div>
+        );
+      }))}
       {/* Personal Bests - vue compacte + gestion */}
       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
         <span style={{fontSize:12,fontWeight:600,color:C.ink4,textTransform:"uppercase",letterSpacing:".1em"}}>Personal Bests</span>
@@ -1910,6 +1935,55 @@ function PBManagerSheet({sessions,pinnedPBs,onSave,onClose}) {
           </div>
         ))}
         <Tap onTap={()=>{onSave(sel);onClose();}} style={{marginTop:8,padding:"16px",borderRadius:15,background:C.blue,display:"flex",alignItems:"center",justifyContent:"center"}}>
+          <span style={{fontSize:16,fontWeight:700,color:"#000"}}>Enregistrer</span>
+        </Tap>
+      </div>
+    </div>
+  );
+}
+
+function SkillManagerSheet({activeSkills,onSave,onClose}) {
+  const [sel,setSel]=useState((activeSkills||[]).map(s=>s.skillId));
+  const toggle=(id)=>{
+    setSel(prev=>{
+      if(prev.includes(id)) return prev.filter(x=>x!==id);
+      if(prev.length>=2) return prev;
+      return [...prev,id];
+    });
+  };
+  const save=()=>{
+    const next=sel.map(id=>{
+      const existing=(activeSkills||[]).find(s=>s.skillId===id);
+      return existing||{skillId:id,stepIndex:0,successCount:0};
+    });
+    onSave(next);
+    onClose();
+  };
+  return(
+    <div style={{position:"fixed",top:0,left:0,right:0,height:"100dvh",maxHeight:"100dvh",background:C.bg,zIndex:Z.fullscreen,overflowY:"auto",WebkitOverflowScrolling:"touch",fontFamily:F,paddingTop:"env(safe-area-inset-top)",boxSizing:"border-box"}}>
+      <div style={{maxWidth:600,margin:"0 auto",padding:"20px 20px calc(20px + env(safe-area-inset-bottom))"}}>
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:6}}>
+          <span style={{fontSize:22,fontWeight:700,color:C.ink,letterSpacing:"-.02em"}}>Apprentissage</span>
+          <Tap onTap={onClose} style={{width:36,height:36,borderRadius:10,background:C.s2,display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{fontSize:14,color:C.ink3}}>✕</span></Tap>
+        </div>
+        <div style={{fontSize:13,color:C.ink4,marginBottom:20}}>Choisis jusqu'à 2 mouvements à travailler. Un mini-bloc apparaîtra après l'échauffement, environ une séance sur deux. ({sel.length}/2)</div>
+        {SKILLS_CATALOG.map(sk=>{
+          const on=sel.includes(sk.id);
+          const disabled=!on&&sel.length>=2;
+          const existing=(activeSkills||[]).find(s=>s.skillId===sk.id);
+          const stepIdx=existing?existing.stepIndex:0;
+          return(
+            <Tap key={sk.id} onTap={()=>!disabled&&toggle(sk.id)} style={{display:"flex",alignItems:"center",gap:12,background:C.s1,borderRadius:14,padding:"14px 16px",marginBottom:8,opacity:disabled?0.4:1,border:`1.5px solid ${on?C.blue:"transparent"}`}}>
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={C.ink3} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" style={{flexShrink:0}}>{sk.icon}</svg>
+              <div style={{flex:1}}>
+                <div style={{fontSize:15,fontWeight:600,color:C.ink}}>{sk.name}</div>
+                <div style={{fontSize:12,color:C.ink3}}>{existing?`Étape ${stepIdx+1}/${sk.steps.length}`:`${sk.steps.length} étapes`}</div>
+              </div>
+              <div style={{width:24,height:24,borderRadius:"50%",background:on?C.blue:C.s3,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>{on&&<span style={{fontSize:12,fontWeight:700,color:"#000"}}>✓</span>}</div>
+            </Tap>
+          );
+        })}
+        <Tap onTap={save} style={{marginTop:8,padding:"16px",borderRadius:15,background:C.blue,display:"flex",alignItems:"center",justifyContent:"center"}}>
           <span style={{fontSize:16,fontWeight:700,color:"#000"}}>Enregistrer</span>
         </Tap>
       </div>
@@ -2224,7 +2298,7 @@ function SettingsTab({user,excluded,onToggleExclude,onSignOut,onReset,onOpenLibr
           <span style={{fontSize:17,color:C.red}}>›</span>
         </Tap>
       </div>
-      <div style={{fontSize:12,color:C.ink4,textAlign:"center",marginTop:28}}>SŌMA · {"S"+weekNumber()} · {DB.length} exercices · build 23.41a</div>
+      <div style={{fontSize:12,color:C.ink4,textAlign:"center",marginTop:28}}>SŌMA · {"S"+weekNumber()} · {DB.length} exercices · build 23.42a</div>
     </div>
   );
 }
@@ -2344,6 +2418,50 @@ const PBCAT_ICON={
   Cardio:(<><path d="M4 12h3l2-5 3 10 2-7 2 4h4"/></>),
   Autre:(<><circle cx="12" cy="12" r="9"/></>),
 };
+
+// ─── APPRENTISSAGE DE MOUVEMENTS (skill progression) ───────────────────────────
+const SKILLS_CATALOG=[
+  {id:"muscleup",name:"Muscle-up",icon:(<><path d="M6 4v16"/><path d="M18 4v16"/><path d="M6 12h12"/></>),steps:[
+    {label:"Tractions strictes",exId:"bw01",target:"5×5 propres"},
+    {label:"Dips stricts",exId:"bw04",target:"5×5 propres"},
+    {label:"Tractions explosives (poitrine à la barre)",exId:"x072",target:"5×3 explosives"},
+    {label:"Transition au sol (jump to support)",exId:null,target:"5×5 assis en haut de dips"},
+    {label:"Muscle-up assisté (élastique)",exId:"bw15",target:"5×3 assistées"},
+    {label:"Muscle-up strict",exId:"bw21",target:"1 répétition propre"},
+  ]},
+  {id:"pistol",name:"Pistol Squat",icon:(<><circle cx="12" cy="5" r="2"/><path d="M12 7v6"/><path d="M12 13l-4 7"/><path d="M12 13l3-2"/></>),steps:[
+    {label:"Split squat bulgare",exId:"db41",target:"4×8/jambe"},
+    {label:"Pistol assisté (support)",exId:null,target:"4×5/jambe"},
+    {label:"Pistol négatif (descente lente)",exId:"bw11",target:"4×5/jambe"},
+    {label:"Pistol complet",exId:"bw16",target:"3×5/jambe"},
+  ]},
+  {id:"handstand",name:"Handstand Push-up",icon:(<><path d="M12 4v6"/><path d="M8 22l4-12 4 12"/><path d="M7 10h10"/></>),steps:[
+    {label:"Pike push-up",exId:"bw07",target:"4×8"},
+    {label:"Handstand hold (mur)",exId:"bw36",target:"3×20s"},
+    {label:"HSPU négatif (mur)",exId:"bw18",target:"4×5"},
+    {label:"HSPU complet (mur)",exId:"bw13",target:"3×5"},
+  ]},
+  {id:"frontlever",name:"Front Lever",icon:(<><circle cx="12" cy="5" r="2"/><path d="M12 7v3"/><path d="M12 10h9"/><path d="M12 10h-9"/></>),steps:[
+    {label:"Suspension active gainée",exId:null,target:"4×20s"},
+    {label:"Tuck front lever",exId:"x107",target:"4×10s"},
+    {label:"Front lever avancé (jambe tendue)",exId:"bw22",target:"4×8s"},
+    {label:"Front lever complet",exId:null,target:"3×5s"},
+  ]},
+  {id:"planche",name:"Planche",icon:(<><circle cx="5" cy="10" r="2"/><path d="M7 10h14"/></>),steps:[
+    {label:"Gainage planche (frog stand)",exId:"x096",target:"4×20s"},
+    {label:"Tuck planche",exId:"ab04",target:"4×10s"},
+    {label:"Planche avancée",exId:"ab05",target:"4×8s"},
+    {label:"Planche complète",exId:null,target:"3×5s"},
+  ]},
+  {id:"onearmpushup",name:"One-Arm Push-up",icon:(<><path d="M4 18l8-6 8 6"/><path d="M12 12V4"/></>),steps:[
+    {label:"Pompe archer",exId:"bw06",target:"4×8/côté"},
+    {label:"Pompe excentrique un bras",exId:null,target:"4×5/côté"},
+    {label:"One-arm push-up assisté",exId:null,target:"4×3/côté"},
+    {label:"One-arm push-up complet",exId:null,target:"1 répétition/côté"},
+  ]},
+];
+const SUCCESS_TO_ADVANCE=2;
+
 const LEGACY_GOALS_BY_EQ={bar:["force","performance"],kb:["seche","endurance","performance"],bw:["seche","endurance","hypertrophie","performance"],db:["hypertrophie","performance","force"],mc:["hypertrophie"],cd:["endurance","seche"]};
 const goalsOf=(ex)=>ex.goals||LEGACY_GOALS_BY_EQ[ex.eq]||[];
 const GOAL_PROFILES={
@@ -2511,6 +2629,7 @@ export default function SomaApp() {
   const[profile,setProfile]=useState(null);
   const[showOnboardingRedo,setShowOnboardingRedo]=useState(false);
   const[showPBManager,setShowPBManager]=useState(false);
+  const[showSkillManager,setShowSkillManager]=useState(false);
   const[favorites,setFavorites]=useState([]);
   const[supersets,setSupersets]=useState([]);
   const toggleLink=(exId)=>{const key=dayIdx+"_"+exId;setSupersets(prev=>{const next=prev.includes(key)?prev.filter(x=>x!==key):[...prev,key];persist(user?.id,{supersets:next});return next;});};
@@ -2661,7 +2780,7 @@ export default function SomaApp() {
     else if(updates.frequency){ const days=FREQ_DAYS[updates.frequency]||FREQ_DAYS[4]; const sched=generateScheduleDays(days); setSchedule(sched); persist(user?.id,{schedule:sched}); if(!(profile?.session_index)) next.total_sessions=12*days.length; }
     setProfile(next);
     persist(user?.id,{profile:next});
-    return (async()=>{ try{ const{error}=await supabase.from("profiles").upsert({id:user?.id,goal:next.goal,level:next.level,equipment:next.equipment,frequency:next.frequency,weight_kg:next.weight_kg,sex:next.sex,height_cm:next.height_cm,age:next.age,program_start:next.program_start,rms:next.rms,avatar:next.avatar,photos:next.photos,session_index:next.session_index,total_sessions:next.total_sessions,pinned_pbs:next.pinned_pbs,updated_at:new Date().toISOString()},{onConflict:"id"}); if(error)console.error("profile save",error.message); return {error}; }catch(e){ console.error("profile save",e); return {error:e}; } })();
+    return (async()=>{ try{ const{error}=await supabase.from("profiles").upsert({id:user?.id,goal:next.goal,level:next.level,equipment:next.equipment,frequency:next.frequency,weight_kg:next.weight_kg,sex:next.sex,height_cm:next.height_cm,age:next.age,program_start:next.program_start,rms:next.rms,avatar:next.avatar,photos:next.photos,session_index:next.session_index,total_sessions:next.total_sessions,pinned_pbs:next.pinned_pbs,active_skills:next.active_skills,updated_at:new Date().toISOString()},{onConflict:"id"}); if(error)console.error("profile save",error.message); return {error}; }catch(e){ console.error("profile save",e); return {error:e}; } })();
   },[persist,user,profile]);
 
   const switchTab=useCallback(id=>{setPrevTab(tab);setTab(id);if(id==="seance"){const ti=todayIdx();setDayIdx(cur=>cur===ti?cur:ti);}try{window.scrollTo(0,0);}catch(_e){}},[tab]);
@@ -2953,6 +3072,42 @@ const NAV=[{id:"home",l:"Accueil"},{id:"seance",l:"Séances"},{id:"stats",l:"Sta
                     <div style={{fontSize:11,fontWeight:600,color:C.ink4,textTransform:"uppercase",letterSpacing:".1em",marginBottom:6}}>Échauffement · 8 min</div>
                     <div style={{fontSize:14,color:C.ink3,lineHeight:1.75}}>{day.salle==="haut"?"Rotations épaules · Wall slide · Push-up to downdog · Mobilité thoracique":"Corde 3min · Hip circle · Leg swing · KB Swing léger ×10"}</div>
                   </div>
+                  {day.salle&&!locked&&(profile?.active_skills||[]).length>0&&sessionIndex%2===0&&(profile.active_skills.map(as=>{
+                    const sk=SKILLS_CATALOG.find(s=>s.id===as.skillId);
+                    if(!sk) return null;
+                    const step=sk.steps[as.stepIndex]||sk.steps[sk.steps.length-1];
+                    const doneToday=as.lastAssessedDate===sDate;
+                    const assess=(success)=>{
+                      const next=(profile.active_skills||[]).map(x=>{
+                        if(x.skillId!==as.skillId) return x;
+                        if(!success) return {...x,successCount:0,lastAssessedDate:sDate};
+                        const newCount=(x.successCount||0)+1;
+                        if(newCount>=SUCCESS_TO_ADVANCE&&x.stepIndex<sk.steps.length-1){
+                          return {...x,stepIndex:x.stepIndex+1,successCount:0,lastAssessedDate:sDate};
+                        }
+                        return {...x,successCount:newCount,lastAssessedDate:sDate};
+                      });
+                      updateConfig({active_skills:next});
+                    };
+                    return(
+                      <div key={as.skillId} style={{marginBottom:16,padding:"14px 16px",borderRadius:14,background:C.s1,border:`1px solid ${C.s3}`}}>
+                        <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:4}}>
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={C.ink3} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">{sk.icon}</svg>
+                          <span style={{fontSize:12,fontWeight:700,color:C.ink3,textTransform:"uppercase",letterSpacing:".08em"}}>Apprentissage · {sk.name} · Étape {as.stepIndex+1}/{sk.steps.length}</span>
+                        </div>
+                        <div style={{fontSize:16,fontWeight:700,color:C.ink,marginBottom:2}}>{step.label}</div>
+                        <div style={{fontSize:13,color:C.ink4,marginBottom:12}}>{step.target}</div>
+                        {doneToday?(
+                          <div style={{fontSize:13,fontWeight:600,color:C.blue}}>Validé aujourd'hui ✓</div>
+                        ):(
+                          <div style={{display:"flex",gap:8}}>
+                            <Tap onTap={()=>assess(false)} style={{flex:1,padding:"10px",borderRadius:10,background:C.s2,textAlign:"center"}}><span style={{fontSize:13,fontWeight:600,color:C.ink3}}>Pas encore</span></Tap>
+                            <Tap onTap={()=>assess(true)} style={{flex:1,padding:"10px",borderRadius:10,background:C.blue,textAlign:"center"}}><span style={{fontSize:13,fontWeight:700,color:"#000"}}>Ça passe</span></Tap>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  }))}
                   {day.salle&&<div style={{marginBottom:16}}>
                     <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:sessionMode==="classique"?0:10}}><span style={{fontSize:11,fontWeight:700,color:C.ink3,textTransform:"uppercase",letterSpacing:".1em"}}>Séance du jour</span><span style={{fontSize:11,fontWeight:800,color:"#000",background:C.blue,padding:"2px 9px",borderRadius:7,textTransform:"uppercase",letterSpacing:".06em"}}>{sessionMode==="amrap"?"AMRAP":sessionMode==="emom"?"EMOM":"Classique"}</span></div>
                     {sessionMode!=="classique"&&!locked&&<Tap onTap={()=>setShowCircuit(true)} style={{display:"flex",alignItems:"center",justifyContent:"center",gap:8,padding:"14px",borderRadius:12,background:C.blueDim,border:`1px solid ${C.blue}`}}><span style={{fontSize:15}}>⏱</span><span style={{fontSize:15,fontWeight:700,color:C.blue}}>Démarrer le circuit {sessionMode==="amrap"?"AMRAP":"EMOM"}</span></Tap>}
@@ -2995,7 +3150,7 @@ const NAV=[{id:"home",l:"Accueil"},{id:"seance",l:"Séances"},{id:"stats",l:"Sta
               )}
             </div>
           )}
-          {tab==="stats"&&<><StatsTab sessions={sessions} weights={weights} accent={accent} pinnedPBs={profile?.pinned_pbs} onManagePBs={()=>setShowPBManager(true)}/><HistoryTab sessions={sessions} onSelect={setShowReport} accent={accent} onOpenPhotos={()=>setShowPhotos(true)}/></>}
+          {tab==="stats"&&<><StatsTab sessions={sessions} weights={weights} accent={accent} pinnedPBs={profile?.pinned_pbs} onManagePBs={()=>setShowPBManager(true)} activeSkills={profile?.active_skills} onManageSkills={()=>setShowSkillManager(true)}/><HistoryTab sessions={sessions} onSelect={setShowReport} accent={accent} onOpenPhotos={()=>setShowPhotos(true)}/></>}
           {tab==="settings"&&<SettingsTab user={user} excluded={excluded} onToggleExclude={toggleExclude} onOpenLibrary={()=>setShowLibrary(true)} profile={profile} schedule={schedule} onUpdateConfig={updateConfig} onOpenScheduleEditor={()=>setShowSched(true)} onRedoOnboarding={()=>setShowOnboardingRedo(true)}
             onSignOut={async()=>{await supabase.auth.signOut();setUser(null);setLog({});setWeights({});setSessions([]);setExcluded([]);setStreak(0);}}
             onReset={async()=>{
@@ -3020,6 +3175,7 @@ const NAV=[{id:"home",l:"Accueil"},{id:"seance",l:"Séances"},{id:"stats",l:"Sta
 
       {showOnboardingRedo&&<OnboardingScreen user={user} onDone={redoOnboarding} onClose={()=>setShowOnboardingRedo(false)}/>}
       {showPBManager&&<PBManagerSheet sessions={sessions} pinnedPBs={profile?.pinned_pbs} onSave={(sel)=>updateConfig({pinned_pbs:sel})} onClose={()=>setShowPBManager(false)}/>}
+      {showSkillManager&&<SkillManagerSheet activeSkills={profile?.active_skills} onSave={(sel)=>updateConfig({active_skills:sel})} onClose={()=>setShowSkillManager(false)}/>}
       {/* Overlays plein ecran sortis du wrapper anime (position:fixed casse sous un ancetre avec transform) */}
       {focusIdx!=null&&exos[focusIdx]&&(
         <ExerciseFocus key={exos[focusIdx].id} ex={exos[focusIdx]} idx={focusIdx} count={exos.length} dayIdx={dayIdx}
