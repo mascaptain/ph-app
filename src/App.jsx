@@ -1806,7 +1806,7 @@ function ScheduleEditor({schedule,onChange,onReset,onClose,autoRotate,onToggleAu
   );
 }
 
-function SettingsTab({user,excluded,onToggleExclude,onSignOut,onReset,onOpenLibrary,profile,schedule,onUpdateConfig,onOpenScheduleEditor}) {
+function SettingsTab({user,excluded,onToggleExclude,onSignOut,onReset,onOpenLibrary,profile,schedule,onUpdateConfig,onOpenScheduleEditor,onRedoOnboarding}) {
   const[showLib,setShowLib]=useState(false);
   const[confirmGoal,setConfirmGoal]=useState(null);
   const[w,setW]=useState(profile?.weight_kg!=null?String(profile.weight_kg):"");
@@ -1834,7 +1834,7 @@ function SettingsTab({user,excluded,onToggleExclude,onSignOut,onReset,onOpenLibr
       </div>
       {/* Mon programme */}
       {onUpdateConfig&&<div style={{background:C.s1,borderRadius:16,padding:"20px",marginBottom:12}}>
-        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:16}}><span style={{fontSize:14,fontWeight:600,color:C.ink}}>Mon programme</span>{onOpenScheduleEditor&&<Tap onTap={onOpenScheduleEditor} style={{padding:"6px 12px",borderRadius:980,background:C.s2}}><span style={{fontSize:12,fontWeight:600,color:C.ink3}}>Modifier les séances ›</span></Tap>}</div>
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:16,gap:8}}><span style={{fontSize:14,fontWeight:600,color:C.ink}}>Mon programme</span><div style={{display:"flex",gap:6}}>{onOpenScheduleEditor&&<Tap onTap={onOpenScheduleEditor} style={{padding:"6px 12px",borderRadius:980,background:C.s2}}><span style={{fontSize:12,fontWeight:600,color:C.ink3}}>Modifier les séances ›</span></Tap>}{onRedoOnboarding&&<Tap onTap={onRedoOnboarding} style={{padding:"6px 12px",borderRadius:980,background:C.s2}}><span style={{fontSize:12,fontWeight:600,color:C.ink3}}>Recréer ›</span></Tap>}</div></div>
         <div style={{fontSize:12,fontWeight:600,color:C.ink4,textTransform:"uppercase",letterSpacing:".08em",marginBottom:8}}>Objectif</div>
         <div style={{display:"flex",flexWrap:"wrap",gap:8,marginBottom:confirmGoal?10:18}}>
           {GOALS.map(([k,l])=>(
@@ -1931,7 +1931,7 @@ function SettingsTab({user,excluded,onToggleExclude,onSignOut,onReset,onOpenLibr
           <span style={{fontSize:17,color:C.red}}>›</span>
         </Tap>
       </div>
-      <div style={{fontSize:12,color:C.ink4,textAlign:"center",marginTop:28}}>SŌMA · {"S"+weekNumber()} · {DB.length} exercices · build 23.29a</div>
+      <div style={{fontSize:12,color:C.ink4,textAlign:"center",marginTop:28}}>SŌMA · {"S"+weekNumber()} · {DB.length} exercices · build 23.30a</div>
     </div>
   );
 }
@@ -2044,20 +2044,21 @@ const generateScheduleDays = (dayIdxArr) => {
   });
 };
 
-function OnboardingScreen({user,onDone}) {
+function OnboardingScreen({user,onDone,onClose}) {
   const [step,setStep]=useState(0);
   const [goal,setGoal]=useState(null);
   const [level,setLevel]=useState(null);
   const [equip,setEquip]=useState([]);
   const [freq,setFreq]=useState(4);
   const [weight,setWeight]=useState("");
+  const [startDate,setStartDate]=useState(todayKey());
   const [saving,setSaving]=useState(false);
   const LEVELS=[["debutant","Debutant","Je debute"],["inter","Intermediaire","Quelques mois ou annees"],["avance","Avance","Entraine et regulier"],["athlete","Athlete","Niveau competition"]];
   const EQUIP=[["bw","Poids du corps"],["kb","Kettlebell"],["db","Halteres"],["bar","Barre"],["mc","Machine / salle"],["cd","Cardio"]];
   const FREQS=[3,4,5,6];
   const toggleEq=(k)=>setEquip(pr=>pr.includes(k)?pr.filter(x=>x!==k):[...pr,k]);
-  const canNext = step===0?!!goal : step===1?!!level : step===2?equip.length>0 : true;
-  const last = step===4;
+  const canNext = step===0?!!goal : step===1?!!level : step===2?equip.length>0 : step===5?!!startDate : true;
+  const last = step===5;
   const card=(sel)=>({display:"flex",justifyContent:"space-between",alignItems:"center",padding:"18px 20px",borderRadius:16,background:sel?C.blue:C.s1,border:`1px solid ${sel?C.blue:C.s3}`,marginBottom:12,cursor:"pointer"});
   const ttl=(sel)=>({fontSize:17,fontWeight:600,color:sel?"#000":C.ink});
   const dsc=(sel)=>({fontSize:13,color:sel?"rgba(0,0,0,.6)":C.ink4,marginTop:3});
@@ -2065,15 +2066,16 @@ function OnboardingScreen({user,onDone}) {
   const next = async () => {
     if(!last){ setStep(step+1); return; }
     setSaving(true);
-    await onDone({goal,level,equipment:equip,frequency:freq,weight_kg:weight?Number(weight):null});
+    await onDone({goal,level,equipment:equip,frequency:freq,weight_kg:weight?Number(weight):null,programStart:startDate});
   };
-  const titles=["Ton objectif","Ton niveau","Ton equipement","Jours par semaine","Ton poids (optionnel)"];
-  const subs=["Pour orienter ton programme","On calibre l'intensite","On choisit les exercices adaptes","On repartit tes seances","Pour suivre ta progression"];
+  const titles=["Ton objectif","Ton niveau","Ton equipement","Jours par semaine","Ton poids (optionnel)","Date de debut"];
+  const subs=["Pour orienter ton programme","On calibre l'intensite","On choisit les exercices adaptes","On repartit tes seances","Pour suivre ta progression","Quand veux-tu commencer ?"];
   return (
     <div style={{position:"fixed",inset:0,zIndex:Z.fullscreen,background:C.bg,display:"flex",flexDirection:"column",fontFamily:F}}>
       <div style={{padding:`calc(22px + env(safe-area-inset-top)) 24px 8px`}}>
+        {onClose&&<div style={{display:"flex",justifyContent:"flex-end",marginBottom:10}}><Tap onTap={onClose} style={{width:36,height:36,borderRadius:10,background:C.s2,display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{fontSize:14,color:C.ink3}}>✕</span></Tap></div>}
         <div style={{display:"flex",gap:6,marginBottom:28}}>
-          {[0,1,2,3,4].map(i=>(<div key={i} style={{flex:1,height:4,borderRadius:980,background:i<=step?C.blue:C.s3,transition:`background 250ms ${EO}`}}/>))}
+          {[0,1,2,3,4,5].map(i=>(<div key={i} style={{flex:1,height:4,borderRadius:980,background:i<=step?C.blue:C.s3,transition:`background 250ms ${EO}`}}/>))}
         </div>
         <div style={{fontSize:28,fontWeight:700,color:C.ink,letterSpacing:"-.03em",lineHeight:1.1}}>{titles[step]}</div>
         <div style={{fontSize:15,color:C.ink4,marginTop:6}}>{subs[step]}</div>
@@ -2084,6 +2086,13 @@ function OnboardingScreen({user,onDone}) {
         {step===2 && EQUIP.map(([k,tt])=>(<Tap key={k} onTap={()=>toggleEq(k)} style={card(equip.includes(k))}><div style={ttl(equip.includes(k))}>{tt}</div>{chk(equip.includes(k))}</Tap>))}
         {step===3 && FREQS.map(f=>(<Tap key={f} onTap={()=>setFreq(f)} style={card(freq===f)}><div style={ttl(freq===f)}>{f} jours / semaine</div>{chk(freq===f)}</Tap>))}
         {step===4 && (<div style={{display:"flex",alignItems:"center",gap:14,background:C.s1,borderRadius:16,padding:"20px",border:`1px solid ${C.s3}`}}><input value={weight} onChange={e=>setWeight(e.target.value.replace(/[^0-9.]/g,""))} inputMode="decimal" placeholder="75" style={{flex:1,background:"transparent",border:"none",outline:"none",color:C.ink,fontSize:32,fontWeight:700,fontFamily:F,width:"100%"}}/><span style={{fontSize:18,color:C.ink4}}>kg</span></div>)}
+        {step===5 && (<div>
+          <div style={{background:C.s1,borderRadius:16,padding:"20px",border:`1px solid ${C.s3}`,marginBottom:12}}>
+            <input type="date" value={startDate} onChange={e=>setStartDate(e.target.value)} style={{width:"100%",background:"transparent",border:"none",outline:"none",color:C.ink,fontSize:20,fontWeight:700,fontFamily:F}}/>
+          </div>
+          <Tap onTap={()=>setStartDate(todayKey())} style={{padding:"12px 16px",borderRadius:12,background:startDate===todayKey()?C.blueDim:C.s1,border:`1px solid ${startDate===todayKey()?C.blue:C.s3}`,display:"inline-flex"}}><span style={{fontSize:13,fontWeight:600,color:startDate===todayKey()?C.blue:C.ink3}}>Aujourd'hui</span></Tap>
+          <div style={{fontSize:13,color:C.ink4,marginTop:14,lineHeight:1.5}}>Tu peux choisir une date future pour préparer ton programme à l'avance.</div>
+        </div>)}
       </div>
       <div style={{padding:`14px 24px calc(20px + env(safe-area-inset-bottom))`,display:"flex",gap:10}}>
         {step>0&&<Tap onTap={()=>setStep(step-1)} style={{padding:"17px 22px",borderRadius:15,background:C.s2,display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{fontSize:17,fontWeight:600,color:C.ink3}}>Retour</span></Tap>}
@@ -2100,6 +2109,7 @@ export default function SomaApp() {
   const[showWelcome,setShowWelcome]=useState(false);
   const[dataReady,setDataReady]=useState(false);
   const[profile,setProfile]=useState(null);
+  const[showOnboardingRedo,setShowOnboardingRedo]=useState(false);
   const[favorites,setFavorites]=useState([]);
   const[supersets,setSupersets]=useState([]);
   const toggleLink=(exId)=>{const key=dayIdx+"_"+exId;setSupersets(prev=>{const next=prev.includes(key)?prev.filter(x=>x!==key):[...prev,key];persist(user?.id,{supersets:next});return next;});};
@@ -2373,11 +2383,21 @@ export default function SomaApp() {
     const uid=user.id;
     const sched=generateSchedule(data.frequency);
     setSchedule(sched);
-    const prof={id:uid,name:user?.user_metadata?.name||null,goal:data.goal,level:data.level,equipment:data.equipment,frequency:data.frequency,weight_kg:data.weight_kg,program_start:todayKey(),session_index:0,total_sessions:12*(data.frequency||4),updated_at:new Date().toISOString()};
+    const prof={id:uid,name:user?.user_metadata?.name||null,goal:data.goal,level:data.level,equipment:data.equipment,frequency:data.frequency,weight_kg:data.weight_kg,program_start:data.programStart||todayKey(),session_index:0,total_sessions:12*(data.frequency||4),updated_at:new Date().toISOString()};
     setProfile(prof);
     persist(uid,{schedule:sched,profile:prof});
     try{await supabase.from("profiles").upsert(prof,{onConflict:"id"});}catch(e){console.error("profile",e);}
   }}/>;
+  const redoOnboarding=async(data)=>{
+    const uid=user.id;
+    const sched=generateSchedule(data.frequency);
+    setSchedule(sched);
+    const next={...profile,goal:data.goal,level:data.level,equipment:data.equipment,frequency:data.frequency,weight_kg:data.weight_kg,program_start:data.programStart||todayKey(),session_index:0,total_sessions:12*(data.frequency||4),updated_at:new Date().toISOString()};
+    setProfile(next);
+    persist(uid,{schedule:sched,profile:next});
+    try{await supabase.from("profiles").upsert({id:uid,goal:next.goal,level:next.level,equipment:next.equipment,frequency:next.frequency,weight_kg:next.weight_kg,program_start:next.program_start,session_index:0,total_sessions:next.total_sessions,updated_at:next.updated_at},{onConflict:"id"});}catch(e){console.error("profile redo",e);}
+    setShowOnboardingRedo(false);
+  };
   if(false&&showWelcome) return(<WelcomeScreen user={user} todaySession={viewSchedule[todayIdx()]||PROGRAM[todayIdx()]} streak={streak} onStart={()=>{setShowWelcome(false);setDayIdx(todayIdx());}} onSkip={()=>setShowWelcome(false)}/>);
 
   const sessionIndex=profile?.session_index||0;
@@ -2567,7 +2587,7 @@ const NAV=[{id:"home",l:"Accueil"},{id:"seance",l:"Séances"},{id:"stats",l:"Sta
             </div>
           )}
           {tab==="stats"&&<><StatsTab sessions={sessions} weights={weights} accent={accent}/><HistoryTab sessions={sessions} onSelect={setShowReport} accent={accent} onOpenPhotos={()=>setShowPhotos(true)}/></>}
-          {tab==="settings"&&<SettingsTab user={user} excluded={excluded} onToggleExclude={toggleExclude} onOpenLibrary={()=>setShowLibrary(true)} profile={profile} schedule={schedule} onUpdateConfig={updateConfig} onOpenScheduleEditor={()=>setShowSched(true)}
+          {tab==="settings"&&<SettingsTab user={user} excluded={excluded} onToggleExclude={toggleExclude} onOpenLibrary={()=>setShowLibrary(true)} profile={profile} schedule={schedule} onUpdateConfig={updateConfig} onOpenScheduleEditor={()=>setShowSched(true)} onRedoOnboarding={()=>setShowOnboardingRedo(true)}
             onSignOut={async()=>{await supabase.auth.signOut();setUser(null);setLog({});setWeights({});setSessions([]);setExcluded([]);setStreak(0);}}
             onReset={async()=>{
               const uid=user?.id;
@@ -2589,6 +2609,7 @@ const NAV=[{id:"home",l:"Accueil"},{id:"seance",l:"Séances"},{id:"stats",l:"Sta
         </TabContent>
       </div>
 
+      {showOnboardingRedo&&<OnboardingScreen user={user} onDone={redoOnboarding} onClose={()=>setShowOnboardingRedo(false)}/>}
       {/* Overlays plein ecran sortis du wrapper anime (position:fixed casse sous un ancetre avec transform) */}
       {focusIdx!=null&&exos[focusIdx]&&(
         <ExerciseFocus key={exos[focusIdx].id} ex={exos[focusIdx]} idx={focusIdx} count={exos.length} dayIdx={dayIdx}
