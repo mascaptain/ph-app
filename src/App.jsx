@@ -1270,7 +1270,14 @@ function ExerciseRowCollapsed({ex,dayIdx,sDate,log,idx,onOpen,onReplace}) {
     <div style={{display:"flex",alignItems:"center",gap:12,background:C.s1,borderRadius:14,padding:"12px 14px",marginBottom:10,border:`1px solid ${allDone?C.green:C.s3}`,animation:`fadeSlideIn 280ms ${EO} ${idx*35}ms both`}}>
       <Tap onTap={onOpen} style={{flex:1,minWidth:0,display:"flex",alignItems:"center",gap:12}}>
         <div style={{width:44,height:44,borderRadius:12,background:allDone?C.greenDim:C.s2,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
-          <span style={{fontSize:allDone?18:14,fontWeight:700,color:allDone?C.green:C.ink3}}>{allDone?"✓":`${completed}/${n}`}</span>
+          {allDone?(
+            <span style={{fontSize:18,fontWeight:700,color:C.green}}>✓</span>
+          ):(
+            <svg width="22" height="22" viewBox="0 0 22 22">
+              <circle cx="11" cy="11" r="9" fill="none" stroke={C.s3} strokeWidth="2.5"/>
+              {completed>0&&<circle cx="11" cy="11" r="9" fill="none" stroke={C.ink3} strokeWidth="2.5" strokeDasharray={`${(completed/n)*56.5} 56.5`} strokeLinecap="round" transform="rotate(-90 11 11)"/>}
+            </svg>
+          )}
         </div>
         <div style={{flex:1,minWidth:0}}>
           <div style={{fontSize:16,fontWeight:600,color:allDone?C.ink4:C.ink,textDecoration:allDone?"line-through":"none",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{ex.n}</div>
@@ -1841,7 +1848,7 @@ function StatsTab({sessions,weights,accent,onOpenPhotos,pinnedPBs,onManagePBs,ac
     <div style={{padding:"20px 20px 16px",maxWidth:600,margin:"0 auto",fontFamily:F}}>
       
       <WeekSummary sessions={sessions} accent={accent}/>
-      <div style={{maxWidth:220,margin:"0 auto 12px"}}><SkillsOctagon sessions={sessions}/></div>
+      <div style={{maxWidth:300,margin:"0 auto 12px"}}><SkillsOctagon sessions={sessions}/></div>
       {/* Hero card: volume total, mise en avant */}
       <div style={{background:C.blueDim,border:`1px solid ${C.blue}`,borderRadius:18,padding:"20px",marginBottom:10,display:"flex",alignItems:"center",gap:16}}>
         <div style={{width:44,height:44,borderRadius:12,background:C.bg,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
@@ -1916,7 +1923,35 @@ function StatsTab({sessions,weights,accent,onOpenPhotos,pinnedPBs,onManagePBs,ac
             <div style={{fontSize:20,fontWeight:700,color:C.ink}}>{pb.pbKg===0?"BW":pb.pbKg+"kg"}</div>
           </div>
         ))}
-      {(()=>{const B=computeBadges(sessions);const earned=B.filter(b=>b.ok).length;return(<div style={{marginTop:24}}><div style={{display:"flex",alignItems:"baseline",justifyContent:"space-between",marginBottom:12}}><span style={{fontSize:11,fontWeight:700,color:C.ink3,textTransform:"uppercase",letterSpacing:".15em"}}>Récompenses</span><span style={{fontSize:12,fontWeight:600,color:C.ink4}}>{earned}/{B.length}</span></div><div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>{B.map((b,i)=>(<div key={i} style={{background:b.ok?C.blueDim:C.s1,border:`1.5px solid ${b.ok?C.blue:"transparent"}`,borderRadius:14,padding:"14px"}}><div style={{display:"flex",alignItems:"center",gap:8,marginBottom:4}}><div style={{width:22,height:22,borderRadius:"50%",background:b.ok?C.blue:C.s3,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}><span style={{fontSize:12,fontWeight:700,color:b.ok?"#000":C.ink4}}>{b.ok?"✓":"·"}</span></div><span style={{fontSize:14,fontWeight:700,color:b.ok?C.ink:C.ink3}}>{b.t}</span></div><div style={{fontSize:11,color:C.ink4,paddingLeft:30}}>{b.ok?"Débloqué":b.d}</div></div>))}</div></div>);})()}
+      {(()=>{const B=computeBadges(sessions);const earned=B.filter(b=>b.ok).length;
+      const REWARD_CAT_ICON={
+        "Assiduité":(<><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18"/><path d="M9 15l2 2 4-4"/></>),
+        Force:(<><rect x="9" y="10" width="6" height="4" rx="1"/><path d="M6 12h1"/><path d="M17 12h1"/><path d="M3 10v4"/><path d="M21 10v4"/></>),
+        "Régularité":(<><path d="M12 3c1.5 4-2 6-2 10a4 4 0 0 0 8 0c0-2.5-1.5-4-2.5-5 .5 2.5-1 3.5-2 3.5a2.5 2.5 0 0 1-2.5-2.5c0-2 1.5-3 1-6z"/></>),
+        Volume:(<><path d="M6 7v10"/><path d="M18 7v10"/><path d="M4 10v4"/><path d="M20 10v4"/><path d="M6 12h12"/></>),
+      };
+      const cats={};B.forEach(b=>{(cats[b.cat]=cats[b.cat]||[]).push(b);});
+      return(<div style={{marginTop:24}}>
+        <div style={{display:"flex",alignItems:"baseline",justifyContent:"space-between",marginBottom:14}}><span style={{fontSize:11,fontWeight:700,color:C.ink3,textTransform:"uppercase",letterSpacing:".15em"}}>Récompenses</span><span style={{fontSize:12,fontWeight:600,color:C.ink4}}>{earned}/{B.length}</span></div>
+        {Object.keys(cats).map(cat=>{const list=cats[cat];const catEarned=list.filter(b=>b.ok).length;return(
+          <div key={cat} style={{marginBottom:16}}>
+            <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:8}}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={C.ink4} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">{REWARD_CAT_ICON[cat]}</svg>
+              <span style={{fontSize:11,fontWeight:700,color:C.ink4,textTransform:"uppercase",letterSpacing:".1em"}}>{cat}</span>
+              <span style={{fontSize:11,color:C.ink5,marginLeft:"auto"}}>{catEarned}/{list.length}</span>
+            </div>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+              {list.map((b,i)=>(<div key={i} style={{background:b.ok?C.blueDim:C.s1,border:`1.5px solid ${b.ok?C.blue:"transparent"}`,borderRadius:14,padding:"14px"}}>
+                <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:4}}>
+                  <div style={{width:22,height:22,borderRadius:"50%",background:b.ok?C.blue:C.s3,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}><span style={{fontSize:12,fontWeight:700,color:b.ok?"#000":C.ink4}}>{b.ok?"✓":"·"}</span></div>
+                  <span style={{fontSize:14,fontWeight:700,color:b.ok?C.ink:C.ink3}}>{b.t}</span>
+                </div>
+                <div style={{fontSize:11,color:C.ink4,paddingLeft:30}}>{b.ok?"Débloqué":b.d}</div>
+              </div>))}
+            </div>
+          </div>
+        );})}
+      </div>);})()}
     </div>
   );
 }
@@ -2325,7 +2360,7 @@ function SettingsTab({user,excluded,onToggleExclude,onSignOut,onReset,onOpenLibr
           <span style={{fontSize:17,color:C.red}}>›</span>
         </Tap>
       </div>
-      <div style={{fontSize:12,color:C.ink4,textAlign:"center",marginTop:28}}>SŌMA · {"S"+weekNumber()} · {DB.length} exercices · build 23.44a</div>
+      <div style={{fontSize:12,color:C.ink4,textAlign:"center",marginTop:28}}>SŌMA · {"S"+weekNumber()} · {DB.length} exercices · build 23.45a</div>
     </div>
   );
 }
@@ -2438,14 +2473,25 @@ const computePBs=(sessions)=>{
 const computeBadges=(sessions)=>{
   const totalS=(sessions||[]).length;
   const maxW=(sessions||[]).reduce((m,s)=>Math.max(m,((s.exercises||[]).reduce((mm,e)=>Math.max(mm,e.weight||0),0))),0);
+  const totalVol=(sessions||[]).reduce((a,s)=>a+(s.totalKg||0),0);
   const days=new Set((sessions||[]).map(s=>s.date)).size;
   return [
-    {t:"Première séance",d:"Termine 1 séance",ok:totalS>=1},
-    {t:"5 séances",d:"Atteins 5 séances",ok:totalS>=5},
-    {t:"10 séances",d:"Atteins 10 séances",ok:totalS>=10},
-    {t:"25 séances",d:"Atteins 25 séances",ok:totalS>=25},
-    {t:"Club 100 kg",d:"Soulève 100 kg",ok:maxW>=100},
-    {t:"Assidu",d:"7 jours actifs",ok:days>=7},
+    {cat:"Assiduité",t:"Première séance",d:"1 séance",ok:totalS>=1},
+    {cat:"Assiduité",t:"10 séances",d:"10 séances",ok:totalS>=10},
+    {cat:"Assiduité",t:"25 séances",d:"25 séances",ok:totalS>=25},
+    {cat:"Assiduité",t:"50 séances",d:"50 séances",ok:totalS>=50},
+    {cat:"Assiduité",t:"100 séances",d:"100 séances",ok:totalS>=100},
+    {cat:"Force",t:"Club 60 kg",d:"Soulève 60 kg",ok:maxW>=60},
+    {cat:"Force",t:"Club 100 kg",d:"Soulève 100 kg",ok:maxW>=100},
+    {cat:"Force",t:"Club 140 kg",d:"Soulève 140 kg",ok:maxW>=140},
+    {cat:"Force",t:"Club 180 kg",d:"Soulève 180 kg",ok:maxW>=180},
+    {cat:"Régularité",t:"Assidu",d:"7 jours actifs",ok:days>=7},
+    {cat:"Régularité",t:"Très assidu",d:"30 jours actifs",ok:days>=30},
+    {cat:"Régularité",t:"Inébranlable",d:"90 jours actifs",ok:days>=90},
+    {cat:"Volume",t:"1 tonne",d:"1t soulevée au total",ok:totalVol>=1000},
+    {cat:"Volume",t:"5 tonnes",d:"5t soulevées au total",ok:totalVol>=5000},
+    {cat:"Volume",t:"15 tonnes",d:"15t soulevées au total",ok:totalVol>=15000},
+    {cat:"Volume",t:"30 tonnes",d:"30t soulevées au total",ok:totalVol>=30000},
   ];
 };
 const phaseBlocksList=()=>{
