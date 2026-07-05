@@ -491,6 +491,72 @@ const DB = [
   {id:"ab18",n:"V-Up",m:"Abdos",eq:"bw",kg:0,reps:"12",rest:60,rpe:6,cue:"Mains et pieds se rejoignent au sommet.",goals:["seche","endurance"]},
   {id:"ab19",n:"Landmine Rotation",m:"Obliques · Core",eq:"bar",kg:10,reps:"10",rest:75,rpe:6,cue:"Rotation contrôlée de la barre en landmine.",goals:["performance","hypertrophie"]},
   {id:"ab20",n:"Suitcase Crunch",m:"Abdos · Hanches",eq:"bw",kg:0,reps:"12",rest:60,rpe:6,cue:"Genou et coude opposé se rejoignent au centre.",goals:["seche","hypertrophie"]},
+
+  // NOUVEAUX EXERCICES (S4 batch 2 - pile 500)
+  {id:"kb51",n:"KB Snatch Alterné Lourd",m:"Full body",eq:"kb",kg:16,reps:"6",rest:120,rpe:8,cue:"Alterne les bras sans reposer le KB au sol.",goals:["performance","endurance"]},
+  {id:"kb52",n:"KB Double Front Rack Carry",m:"Core · Avant-bras",eq:"kb",kg:16,reps:"20m",rest:90,rpe:7,cue:"Deux KB en rack, marche stable et droite.",goals:["seche","performance"]},
+  {id:"kb53",n:"KB Deck Squat",m:"Full body",eq:"kb",kg:12,reps:"8",rest:90,rpe:7,cue:"S'allonge puis se relève avec le KB en un mouvement.",goals:["endurance","seche"]},
+  {id:"kb54",n:"KB Bottoms-Up Carry",m:"Avant-bras · Core",eq:"kb",kg:8,reps:"20m",rest:90,rpe:8,cue:"KB tête en bas, exige un grip strict en marchant.",goals:["performance","endurance"]},
+  {id:"kb55",n:"KB Single Arm Push Press",m:"Épaules · Jambes",eq:"kb",kg:16,reps:"6",rest:90,rpe:7,cue:"Légère impulsion jambes, verrouille au-dessus.",goals:["performance","seche"]},
+  {id:"kb56",n:"KB Plank Drag",m:"Core · Full body",eq:"kb",kg:10,reps:"10",rest:75,rpe:7,cue:"Position planche, tire le KB sous le corps.",goals:["seche","endurance"]},
+  {id:"kb57",n:"KB Rotational Swing",m:"Fessiers · Obliques",eq:"kb",kg:14,reps:"10",rest:60,rpe:7,cue:"Swing avec rotation de la hanche en fin de mouvement.",goals:["seche","endurance"]},
+  {id:"kb58",n:"KB Single Leg Deadlift Lourd",m:"Ischios · Fessiers",eq:"kb",kg:18,reps:"6",rest:90,rpe:8,cue:"Charge lourde, équilibre strict sur une jambe.",goals:["force","hypertrophie"]},
+  {id:"kb59",n:"KB Waiter Carry",m:"Épaules · Core",eq:"kb",kg:12,reps:"20m",rest:90,rpe:7,cue:"KB verrouillé au-dessus d'une main, marche stable.",goals:["performance","seche"]},
+  {id:"kb60",n:"KB Around the World Lourd",m:"Core · Avant-bras",eq:"kb",kg:14,reps:"10",rest:60,rpe:7,cue:"Passe le KB autour de la taille, sens alterné.",goals:["seche","endurance"]},
+  {id:"bb44",n:"Deadlift Sumo Déficit",m:"Fessiers · Ischios",eq:"bar",kg:70,reps:"5",rest:180,rpe:8,cue:"Amplitude augmentée, prise sumo, dos plat.",goals:["force"]},
+  {id:"bb45",n:"Barbell Overhead Lunge",m:"Full body",eq:"bar",kg:30,reps:"8",rest:90,rpe:7,cue:"Barre verrouillée au-dessus, fentes contrôlées.",goals:["performance"]},
+  {id:"bb46",n:"Pin Press",m:"Pecs · Triceps",eq:"bar",kg:55,reps:"5",rest:150,rpe:8,cue:"Démarre depuis les pins, aucune élasticité.",goals:["force"]},
+  {id:"bb47",n:"Barbell Glute Bridge",m:"Fessiers",eq:"bar",kg:50,reps:"10",rest:90,rpe:7,cue:"Version légère du hip thrust, dos au sol.",goals:["hypertrophie"]},
+  {id:"bb48",n:"Barbell Reverse Lunge",m:"Quads · Fessiers",eq:"bar",kg:40,reps:"8",rest:90,rpe:7,cue:"Fente arrière, barre sur les trapèzes.",goals:["hypertrophie","performance"]},
+  {id:"bb49",n:"Snatch Complet",m:"Full body",eq:"bar",kg:40,reps:"3",rest:180,rpe:9,cue:"Du sol au verrouillage au-dessus en un mouvement.",goals:["performance"]},
+  {id:"bb50",n:"Barbell Skull Crusher",m:"Triceps",eq:"bar",kg:25,reps:"10",rest:75,rpe:6,cue:"Coudes fixes, descend vers le front.",goals:["hypertrophie"]},
+  {id:"bb51",n:"Barbell Walking Lunge",m:"Quads · Fessiers",eq:"bar",kg:35,reps:"10",rest:90,rpe:7,cue:"Fentes en marchant, barre sur les trapèzes.",goals:["hypertrophie","performance"]},
+  {id:"bb52",n:"Deadlift Prise Mixte",m:"Dos · Ischios",eq:"bar",kg:90,reps:"5",rest:180,rpe:8,cue:"Une main pronation, une supination pour tenir la charge.",goals:["force"]},
+  {id:"bb53",n:"Barbell Thruster",m:"Full body",eq:"bar",kg:35,reps:"8",rest:120,rpe:8,cue:"Squat puis press explosif.",goals:["performance","seche"]},
+  {id:"bb54",n:"Behind the Neck Press",m:"Épaules",eq:"bar",kg:30,reps:"8",rest:120,rpe:7,cue:"Presse derrière la nuque, mobilité requise.",goals:["force","performance"]},
+  {id:"bb55",n:"Barbell Good Morning Lourd",m:"Ischios · Lombaires",eq:"bar",kg:50,reps:"8",rest:120,rpe:7,cue:"Bascule hanches reculées, dos plat rigide.",goals:["force","hypertrophie"]},
+  {id:"bb56",n:"Rack Pull",m:"Dos · Trapèzes",eq:"bar",kg:100,reps:"5",rest:150,rpe:8,cue:"Barre à hauteur de genou, tire fort en haut.",goals:["force"]},
+  {id:"bb57",n:"Barbell Complex Squat+Press",m:"Full body",eq:"bar",kg:30,reps:"5",rest:150,rpe:8,cue:"Squat puis press militaire enchâînés.",goals:["performance"]},
+  {id:"bb58",n:"Spoto Press",m:"Pecs · Triceps",eq:"bar",kg:50,reps:"6",rest:120,rpe:7,cue:"Pause quelques cm au-dessus de la poitrine.",goals:["force","hypertrophie"]},
+  {id:"db46",n:"DB Bench Press Tempo",m:"Pecs",eq:"db",kg:20,reps:"8",rest:90,rpe:7,cue:"Descente lente 3s, pousse explosif.",goals:["hypertrophie"]},
+  {id:"db47",n:"DB Sumo Deadlift",m:"Fessiers · Ischios",eq:"db",kg:24,reps:"8",rest:90,rpe:7,cue:"Pieds larges, haltère entre les jambes.",goals:["hypertrophie","force"]},
+  {id:"db48",n:"DB Push Press",m:"Épaules · Jambes",eq:"db",kg:16,reps:"8",rest:90,rpe:7,cue:"Légère impulsion jambes, verrouille en haut.",goals:["performance","seche"]},
+  {id:"db49",n:"DB Curl 21s",m:"Biceps",eq:"db",kg:8,reps:"21",rest:75,rpe:7,cue:"7 reps basses, 7 hautes, 7 complètes.",goals:["hypertrophie"]},
+  {id:"db50",n:"DB Incline Row",m:"Dos",eq:"db",kg:18,reps:"10",rest:90,rpe:7,cue:"Poitrine sur banc incliné, tire vers les hanches.",goals:["hypertrophie"]},
+  {id:"db51",n:"DB Deadlift",m:"Ischios · Fessiers",eq:"db",kg:20,reps:"10",rest:90,rpe:7,cue:"Haltères le long du corps, dos plat.",goals:["hypertrophie","force"]},
+  {id:"db52",n:"DB Overhead Triceps Extension",m:"Triceps",eq:"db",kg:12,reps:"12",rest:75,rpe:6,cue:"Deux mains sur un haltère, coudes fixes.",goals:["hypertrophie"]},
+  {id:"db53",n:"DB Single Arm Row Lourd",m:"Dos",eq:"db",kg:26,reps:"8",rest:90,rpe:7,cue:"Charge lourde, dos plat, tire vers la hanche.",goals:["hypertrophie","force"]},
+  {id:"db54",n:"DB Squat to Press",m:"Full body",eq:"db",kg:14,reps:"10",rest:90,rpe:7,cue:"Squat puis press, enchâîne fluide.",goals:["seche","performance"]},
+  {id:"db55",n:"DB Rear Delt Row",m:"Deltoïdes lat.",eq:"db",kg:10,reps:"12",rest:75,rpe:6,cue:"Coudes hauts, tire vers les épaules.",goals:["hypertrophie"]},
+  {id:"db56",n:"DB Waiter Carry",m:"Épaules · Core",eq:"db",kg:14,reps:"20m",rest:90,rpe:7,cue:"Haltère verrouillé au-dessus, marche stable.",goals:["performance","seche"]},
+  {id:"db57",n:"DB Preacher Curl",m:"Biceps",eq:"db",kg:10,reps:"12",rest:75,rpe:6,cue:"Bras appuyé sur le pupitre, isole le biceps.",goals:["hypertrophie"]},
+  {id:"db58",n:"DB Decline Press",m:"Pecs inf",eq:"db",kg:20,reps:"10",rest:90,rpe:7,cue:"Banc décliné, cible le bas des pecs.",goals:["hypertrophie"]},
+  {id:"db59",n:"DB Suitcase Squat",m:"Quads · Core",eq:"db",kg:16,reps:"10",rest:75,rpe:7,cue:"Un haltère sur le côté, anti-flexion latérale.",goals:["hypertrophie","seche"]},
+  {id:"db60",n:"DB Cuban Press",m:"Épaules · Rotateurs",eq:"db",kg:6,reps:"12",rest:75,rpe:6,cue:"Rotation externe puis press, contrôle total.",goals:["hypertrophie","performance"]},
+  {id:"bw36",n:"Handstand Hold Mur",m:"Épaules · Core",eq:"bw",kg:0,reps:"20s",rest:90,rpe:7,cue:"Dos ou face au mur, gaine tout le corps.",goals:["performance","hypertrophie"]},
+  {id:"bw37",n:"Single Leg Glute Bridge",m:"Fessiers",eq:"bw",kg:0,reps:"12",rest:60,rpe:6,cue:"Une jambe tendue, pousse avec le talon au sol.",goals:["hypertrophie","seche"]},
+  {id:"bw38",n:"Skater Jump",m:"Quads · Fessiers",eq:"bw",kg:0,reps:"10",rest:75,rpe:7,cue:"Saut latéral, réception sur une jambe.",goals:["seche","endurance","performance"]},
+  {id:"bw39",n:"Wall Sit",m:"Quads",eq:"bw",kg:0,reps:"30s",rest:60,rpe:6,cue:"Dos au mur, cuisses parallèles au sol.",goals:["seche","endurance"]},
+  {id:"bw40",n:"Diamond Push-up",m:"Triceps · Pecs",eq:"bw",kg:0,reps:"12",rest:75,rpe:7,cue:"Mains en losange sous la poitrine.",goals:["hypertrophie"]},
+  {id:"bw41",n:"Reverse Snow Angel",m:"Dos · Épaules",eq:"bw",kg:0,reps:"12",rest:60,rpe:6,cue:"Allongé face au sol, bras dessinent un arc.",goals:["hypertrophie","seche"]},
+  {id:"bw42",n:"Step-Up Explosif",m:"Quads · Fessiers",eq:"bw",kg:0,reps:"10",rest:75,rpe:7,cue:"Monte sur banc puis saute en haut.",goals:["seche","endurance","performance"]},
+  {id:"bw43",n:"Plank Shoulder Tap",m:"Core · Épaules",eq:"bw",kg:0,reps:"20",rest:60,rpe:6,cue:"Planche haute, touche l'épaule opposée sans bouger le bassin.",goals:["seche","endurance"]},
+  {id:"bw44",n:"Tuck Jump",m:"Quads · Fessiers",eq:"bw",kg:0,reps:"10",rest:75,rpe:7,cue:"Genoux vers la poitrine en l'air, réception souple.",goals:["performance","seche"]},
+  {id:"bw45",n:"Side Plank Rotation",m:"Obliques · Core",eq:"bw",kg:0,reps:"10",rest:60,rpe:6,cue:"Planche latérale, passe le bras sous le corps en rotation.",goals:["seche","hypertrophie"]},
+  {id:"mc28",n:"Assisted Pull-up Machine",m:"Dos · Biceps",eq:"mc",kg:30,reps:"10",rest:90,rpe:7,cue:"Assistance dégressive, travaille l'amplitude complète.",goals:["hypertrophie"]},
+  {id:"mc29",n:"Glute Kickback Machine",m:"Fessiers",eq:"mc",kg:25,reps:"12",rest:75,rpe:6,cue:"Pousse la jambe en arrière, contracte le fessier.",goals:["hypertrophie"]},
+  {id:"mc30",n:"Seated Calf Raise",m:"Mollets",eq:"mc",kg:30,reps:"15",rest:60,rpe:6,cue:"Genoux plies, amplitude complète.",goals:["hypertrophie"]},
+  {id:"mc31",n:"Torso Rotation Machine",m:"Obliques · Core",eq:"mc",kg:20,reps:"12",rest:60,rpe:6,cue:"Rotation contrôlée du buste, hanches fixes.",goals:["hypertrophie"]},
+  {id:"mc32",n:"Shoulder Press Machine",m:"Épaules",eq:"mc",kg:35,reps:"10",rest:90,rpe:7,cue:"Presse verticale guidée, contrôle la descente.",goals:["hypertrophie"]},
+  {id:"cd19",n:"Bike Erg Intervals",m:"Cardio",eq:"cd",kg:0,reps:"40s",rest:60,rpe:7,cue:"Effort soutenu puis récup courte, répète.",goals:["endurance","seche"]},
+  {id:"cd20",n:"Farmer Carry Sprint",m:"Cardio · Avant-bras",eq:"cd",kg:0,reps:"20m",rest:75,rpe:7,cue:"Charge dans chaque main, marche rapide.",goals:["endurance","performance"]},
+  {id:"cd21",n:"Suicide Sprint",m:"Cardio",eq:"cd",kg:0,reps:"5x10m",rest:90,rpe:8,cue:"Sprint navette avec distances croissantes.",goals:["endurance","performance"]},
+  {id:"cd22",n:"Stair Sprint",m:"Cardio · Jambes",eq:"cd",kg:0,reps:"30s",rest:75,rpe:8,cue:"Monte les marches deux à deux si possible.",goals:["endurance","seche"]},
+  {id:"cd23",n:"Air Bike Calories",m:"Cardio",eq:"cd",kg:0,reps:"15cal",rest:75,rpe:7,cue:"Objectif calories plutôt que temps, rythme régulier.",goals:["endurance","seche"]},
+  {id:"ab21",n:"Reverse Crunch",m:"Abdos bas",eq:"bw",kg:0,reps:"15",rest:60,rpe:6,cue:"Genoux vers la poitrine, bas du dos au sol.",goals:["seche","hypertrophie"]},
+  {id:"ab22",n:"Standing Cable Crunch",m:"Abdos",eq:"mc",kg:20,reps:"12",rest:60,rpe:6,cue:"Debout, enroule le buste contre la résistance.",goals:["hypertrophie"]},
+  {id:"ab23",n:"Weighted Plank",m:"Core",eq:"db",kg:10,reps:"30s",rest:75,rpe:6,cue:"Disque sur le dos, planche stable.",goals:["seche","hypertrophie"]},
+  {id:"ab24",n:"Toes to Bar",m:"Abdos · Grip",eq:"bw",kg:0,reps:"8",rest:90,rpe:8,cue:"Suspendu, pieds touchent la barre sans balancer.",goals:["performance","seche"]},
 ];
 
 const EQ_LABELS = {kb:"KB",bar:"Barre",db:"Haltères",bw:"Corps",mc:"Machine",cd:"Cardio"};
@@ -1689,6 +1755,15 @@ function StatsTab({sessions,weights,accent,onOpenPhotos}) {
   const total=sessions.length,totalKg=sessions.reduce((a,s)=>a+(s.totalKg||0),0);
   const avgScore=total?Math.round(sessions.reduce((a,s)=>a+(s.score||0),0)/total):0;
   const PBCAT={bar:"Barre",db:"Haltères",kb:"Kettlebell",mc:"Machine",bw:"Poids du corps",cd:"Cardio"};
+  const PBCAT_ICON={
+    Barre:(<><rect x="9" y="10" width="6" height="4" rx="1"/><path d="M6 12h1"/><path d="M17 12h1"/><path d="M3 10v4"/><path d="M21 10v4"/></>),
+    Haltères:(<><circle cx="5" cy="12" r="2.5"/><circle cx="19" cy="12" r="2.5"/><path d="M8 12h8"/></>),
+    Kettlebell:(<><circle cx="12" cy="14" r="6"/><path d="M9 8a3 3 0 0 1 6 0"/></>),
+    Machine:(<><circle cx="12" cy="12" r="3"/><path d="M12 4v2"/><path d="M12 18v2"/><path d="M4 12h2"/><path d="M18 12h2"/></>),
+    "Poids du corps":(<><circle cx="12" cy="5" r="2"/><path d="M12 7v6"/><path d="M8 10h8"/><path d="M12 13l-3 6"/><path d="M12 13l3 6"/></>),
+    Cardio:(<><path d="M4 12h3l2-5 3 10 2-7 2 4h4"/></>),
+    Autre:(<><circle cx="12" cy="12" r="9"/></>),
+  };
   const[showAllPB,setShowAllPB]=useState(false);
   const pbs=useMemo(()=>{const m={};(sessions||[]).forEach(s=>{(s.exercises||[]).forEach(e=>{if(e&&e.id&&(e.completedSets>0)&&(e.weight>0)){if(!m[e.id]||e.weight>m[e.id])m[e.id]=e.weight;}});});return Object.entries(m).map(([id,kg])=>{const ex=DB.find(x=>x.id===id);if(!ex)return null;return{...ex,pbKg:kg,oneRM:orm(kg,ex.reps)};}).filter(Boolean).sort((a,b)=>(b.oneRM||0)-(a.oneRM||0));},[sessions]);
   const progressData=useMemo(()=>{
@@ -1705,12 +1780,29 @@ function StatsTab({sessions,weights,accent,onOpenPhotos}) {
       
       <WeekSummary sessions={sessions} accent={accent}/>
       <SkillsOctagon sessions={sessions}/>
-      {/* Metrics grid */}
-      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:16}}>
-        {[{l:"Séances",v:total},{l:"Volume total",v:totalKg>0?`${(totalKg/1000).toFixed(1)}t`:"—"},{l:"Score moyen",v:avgScore||"—"},{l:"Semaine",v:`${sessions.filter(s=>{const d=new Date();const dow=d.getDay()===0?6:d.getDay()-1;const wd=new Date(d);wd.setDate(d.getDate()-dow);return s.date>=localDateKey(wd);}).length}/5`}].map(({l,v})=>(
-          <div key={l} style={{background:C.s1,borderRadius:16,padding:"18px 16px"}}>
-            <div style={{fontSize:11,fontWeight:600,color:C.ink4,textTransform:"uppercase",letterSpacing:".1em",marginBottom:8}}>{l}</div>
-            <div style={{fontSize:32,fontWeight:700,color:C.ink,letterSpacing:"-.02em"}}>{v}</div>
+      {/* Hero card: volume total, mise en avant */}
+      <div style={{background:C.blueDim,border:`1px solid ${C.blue}`,borderRadius:18,padding:"20px",marginBottom:10,display:"flex",alignItems:"center",gap:16}}>
+        <div style={{width:44,height:44,borderRadius:12,background:C.bg,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={C.ink} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M6 7v10"/><path d="M18 7v10"/><path d="M4 10v4"/><path d="M20 10v4"/><path d="M6 12h12"/></svg>
+        </div>
+        <div>
+          <div style={{fontSize:11,fontWeight:700,color:C.ink3,textTransform:"uppercase",letterSpacing:".1em",marginBottom:2}}>Volume total soulevé</div>
+          <div style={{fontSize:30,fontWeight:800,color:C.ink,letterSpacing:"-.02em"}}>{totalKg>0?`${(totalKg/1000).toFixed(1)} tonnes`:"—"}</div>
+        </div>
+      </div>
+      {/* Metrics grid avec icones */}
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,marginBottom:16}}>
+        {[
+          {l:"Séances",v:total,icon:(<><path d="M3 17l6-6 4 4 8-8"/><path d="M15 7h6v6"/></>)},
+          {l:"Score moy.",v:avgScore||"—",icon:(<><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></>)},
+          {l:"Cette semaine",v:`${sessions.filter(s=>{const d=new Date();const dow=d.getDay()===0?6:d.getDay()-1;const wd=new Date(d);wd.setDate(d.getDate()-dow);return s.date>=localDateKey(wd);}).length}`,icon:(<><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18"/><path d="M8 3v4"/><path d="M16 3v4"/><path d="M9 15l2 2 4-4"/></>)},
+        ].map(({l,v,icon})=>(
+          <div key={l} style={{background:C.s1,borderRadius:16,padding:"14px 10px",display:"flex",flexDirection:"column",alignItems:"flex-start",gap:8}}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={C.ink4} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">{icon}</svg>
+            <div>
+              <div style={{fontSize:20,fontWeight:800,color:C.ink,letterSpacing:"-.02em"}}>{v}</div>
+              <div style={{fontSize:10,fontWeight:600,color:C.ink4,textTransform:"uppercase",letterSpacing:".06em",marginTop:2}}>{l}</div>
+            </div>
           </div>
         ))}
       </div>
@@ -1742,7 +1834,13 @@ function StatsTab({sessions,weights,accent,onOpenPhotos}) {
           const Row=(pb,i)=>(<div key={pb.id||i} style={{background:C.s1,borderRadius:14,padding:"14px 18px",marginBottom:8,display:"flex",justifyContent:"space-between",alignItems:"center"}}><div><div style={{fontSize:15,fontWeight:600,color:C.ink}}>{pb.n}</div><div style={{fontSize:13,color:C.ink3}}>{pb.m}</div></div><div style={{textAlign:"right"}}><div style={{fontSize:20,fontWeight:700,color:C.ink}}>{pb.pbKg===0?"BW":pb.pbKg+"kg"}</div></div></div>);
           if(!showAllPB){return(<>{pbs.slice(0,5).map(Row)}{pbs.length>5&&<Tap onTap={()=>setShowAllPB(true)} style={{textAlign:"center",padding:"12px 0",marginTop:2}}><span style={{fontSize:14,fontWeight:700,color:C.blue}}>Voir tous les PB ({pbs.length}) ›</span></Tap>}</>);}
           const groups={};pbs.forEach(pb=>{const eqc=Array.isArray(pb.eq)?pb.eq[0]:pb.eq;const k=PBCAT[eqc]||"Autre";(groups[k]=groups[k]||[]).push(pb);});
-          return(<>{Object.keys(groups).map(cat=>(<div key={cat} style={{marginBottom:14}}><div style={{fontSize:11,fontWeight:700,color:C.ink4,textTransform:"uppercase",letterSpacing:".1em",marginBottom:8}}>{cat}</div>{groups[cat].map(Row)}</div>))}<Tap onTap={()=>setShowAllPB(false)} style={{textAlign:"center",padding:"12px 0"}}><span style={{fontSize:14,fontWeight:700,color:C.ink3}}>Réduire ‹</span></Tap></>);
+          return(<>{Object.keys(groups).map(cat=>(<div key={cat} style={{marginBottom:14}}>
+              <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:8}}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={C.ink4} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">{PBCAT_ICON[cat]||PBCAT_ICON.Autre}</svg>
+                <span style={{fontSize:11,fontWeight:700,color:C.ink4,textTransform:"uppercase",letterSpacing:".1em"}}>{cat}</span>
+              </div>
+              {groups[cat].map(Row)}
+            </div>))}<Tap onTap={()=>setShowAllPB(false)} style={{textAlign:"center",padding:"12px 0"}}><span style={{fontSize:14,fontWeight:700,color:C.ink3}}>Réduire ‹</span></Tap></>);
         })()}
         {(()=>{const totalS=(sessions||[]).length;const maxW=(sessions||[]).reduce((m,s)=>Math.max(m,((s.exercises||[]).reduce((mm,e)=>Math.max(mm,e.weight||0),0))),0);const days=new Set((sessions||[]).map(s=>s.date)).size;const B=[{t:"Première séance",d:"Termine 1 séance",ok:totalS>=1},{t:"5 séances",d:"Atteins 5 séances",ok:totalS>=5},{t:"10 séances",d:"Atteins 10 séances",ok:totalS>=10},{t:"25 séances",d:"Atteins 25 séances",ok:totalS>=25},{t:"Club 100 kg",d:"Soulève 100 kg",ok:maxW>=100},{t:"Assidu",d:"7 jours actifs",ok:days>=7}];const earned=B.filter(b=>b.ok).length;return(<div style={{marginTop:24}}><div style={{display:"flex",alignItems:"baseline",justifyContent:"space-between",marginBottom:12}}><span style={{fontSize:11,fontWeight:700,color:C.ink3,textTransform:"uppercase",letterSpacing:".15em"}}>Récompenses</span><span style={{fontSize:12,fontWeight:600,color:C.ink4}}>{earned}/{B.length}</span></div><div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>{B.map((b,i)=>(<div key={i} style={{background:b.ok?C.blueDim:C.s1,border:`1.5px solid ${b.ok?C.blue:"transparent"}`,borderRadius:14,padding:"14px"}}><div style={{display:"flex",alignItems:"center",gap:8,marginBottom:4}}><div style={{width:22,height:22,borderRadius:"50%",background:b.ok?C.blue:C.s3,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}><span style={{fontSize:12,fontWeight:700,color:b.ok?"#000":C.ink4}}>{b.ok?"✓":"·"}</span></div><span style={{fontSize:14,fontWeight:700,color:b.ok?C.ink:C.ink3}}>{b.t}</span></div><div style={{fontSize:11,color:C.ink4,paddingLeft:30}}>{b.ok?"Débloqué":b.d}</div></div>))}</div></div>);})()}
     </div>
@@ -2052,7 +2150,7 @@ function SettingsTab({user,excluded,onToggleExclude,onSignOut,onReset,onOpenLibr
           <span style={{fontSize:17,color:C.red}}>›</span>
         </Tap>
       </div>
-      <div style={{fontSize:12,color:C.ink4,textAlign:"center",marginTop:28}}>SŌMA · {"S"+weekNumber()} · {DB.length} exercices · build 23.36a</div>
+      <div style={{fontSize:12,color:C.ink4,textAlign:"center",marginTop:28}}>SŌMA · {"S"+weekNumber()} · {DB.length} exercices · build 23.37a</div>
     </div>
   );
 }
