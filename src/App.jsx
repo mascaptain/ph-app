@@ -1115,13 +1115,7 @@ function HomeTab({profile,streak,sessions,weights,todaySession,onStartToday,acce
     </div>}
     {progTotal>0&&(()=>{
       const tdpw=trainingDaysPerWeek||5;
-      const phaseBlocks=[];
-      PHASES12.forEach((ph,i)=>{
-        const last=phaseBlocks[phaseBlocks.length-1];
-        if(last&&last.name===ph.n) last.endWeek=i+1;
-        else phaseBlocks.push({name:ph.n,endWeek:i+1});
-      });
-      const paliers=phaseBlocks.map(b=>({label:b.name,threshold:Math.min(progTotal,b.endWeek*tdpw)}));
+      const paliers=phaseBlocksList().map(b=>({label:b.name,threshold:Math.min(progTotal,b.endWeek*tdpw)}));
       return(
         <div style={{background:C.s1,borderRadius:16,padding:"16px",marginBottom:12}}>
           <div style={{fontSize:11,fontWeight:700,color:C.ink4,textTransform:"uppercase",letterSpacing:".1em",marginBottom:14}}>Paliers du programme</div>
@@ -1545,9 +1539,9 @@ function FeedbackSheet({onClose,onSave}) {
 }
 
 // ─── SESSION REPORT ───────────────────────────────────────────────────────────
-function SessionReport({session,sessions,onClose,onDelete}) {
+function SessionReport({session,sessions,trainingDaysPerWeek,onClose,onDelete}) {
   if(!session) return null;
-  const{totalKg=0,totalSets=0,duration=0,exercises=[],date="",dayLabel="",score=0,feedback}=session;
+  const{totalKg=0,totalSets=0,duration=0,exercises=[],date="",dayLabel="",score=0,feedback,sessionIndex=0}=session;
   const photo=(()=>{try{return JSON.parse(localStorage.getItem("soma_photos")||"{}")[date]||null;}catch(_e){return null;}})();
   const animScore=useCountUp(score,1200);
   const animKg=useCountUp(Math.round(totalKg/1000*10)/10*10,1400);
@@ -1558,6 +1552,22 @@ function SessionReport({session,sessions,onClose,onDelete}) {
     const priorMap={};priorBest.forEach(pb=>{priorMap[pb.id]=pb.pbKg;});
     return (exercises||[]).filter(e=>e&&e.id&&e.completedSets>0&&e.weight>0&&e.weight>(priorMap[e.id]||0));
   },[sessions,date,exercises]);
+  const newBadges=useMemo(()=>{
+    const prior=(sessions||[]).filter(s=>s.date<date);
+    const before=computeBadges(prior);
+    const after=computeBadges([...prior,session]);
+    return after.filter((b,i)=>b.ok&&!before[i].ok);
+  },[sessions,date,session]);
+  const milestoneReached=useMemo(()=>{
+    if(!sessionIndex) return null;
+    const tdpw=trainingDaysPerWeek||5;
+    const blocks=phaseBlocksList();
+    const weekBefore=Math.floor((sessionIndex-1)/tdpw)+1;
+    const weekAfter=Math.floor(sessionIndex/tdpw)+1;
+    const phaseOfWeek=(w)=>{const b=blocks.find(bl=>w<=bl.endWeek);return b?b.name:blocks[blocks.length-1].name;};
+    const before=phaseOfWeek(weekBefore),after=phaseOfWeek(weekAfter);
+    return before!==after?after:null;
+  },[sessionIndex,trainingDaysPerWeek]);
   return(
     <div style={{position:"fixed",inset:0,background:C.bg,zIndex:Z.fullscreen+100,overflowY:"auto",fontFamily:F,animation:`fadeIn 250ms ${EO} both`}}>
       <div style={{maxWidth:600,margin:"0 auto"}}>
@@ -1576,9 +1586,26 @@ function SessionReport({session,sessions,onClose,onDelete}) {
           <div style={{margin:"0 24px 20px",padding:"16px 18px",borderRadius:16,background:C.blueDim,border:`1px solid ${C.blue}`,animation:`fadeUp 500ms ${EO} both`}}>
             <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={C.ink} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M8 21h8"/><path d="M12 17v4"/><path d="M7 4h10v5a5 5 0 0 1-10 0V4z"/><path d="M7 6H4a2 2 0 0 0 2 4"/><path d="M17 6h3a2 2 0 0 1-2 4"/></svg>
-              <span style={{fontSize:14,fontWeight:700,color:C.ink}}>{newPBs.length>1?`${newPBs.length} nouveaux records`:"Nouveau record"}} 🎉</span>
+              <span style={{fontSize:14,fontWeight:700,color:C.ink}}>{newPBs.length>1?`${newPBs.length} nouveaux records`:"Nouveau record"} 🎉</span>
             </div>
             {newPBs.map((e,i)=>(<div key={e.id||i} style={{fontSize:13,color:C.ink2,padding:"3px 0"}}>{e.n} <span style={{fontWeight:700}}>{e.weight}kg</span></div>))}
+          </div>
+        )}
+        {newBadges.length>0&&(
+          <div style={{margin:"0 24px 20px",padding:"16px 18px",borderRadius:16,background:C.s1,border:`1px solid ${C.s3}`,animation:`fadeUp 550ms ${EO} both`}}>
+            <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={C.ink} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="8" r="5"/><path d="M8.5 13 7 21l5-3 5 3-1.5-8"/></svg>
+              <span style={{fontSize:14,fontWeight:700,color:C.ink}}>{newBadges.length>1?`${newBadges.length} nouveaux badges`:"Nouveau badge"} 🎉</span>
+            </div>
+            {newBadges.map((b,i)=>(<div key={i} style={{fontSize:13,color:C.ink2,padding:"3px 0"}}><span style={{fontWeight:700}}>{b.t}</span> · {b.d}</div>))}
+          </div>
+        )}
+        {milestoneReached&&(
+          <div style={{margin:"0 24px 20px",padding:"16px 18px",borderRadius:16,background:C.blueDim,border:`1px solid ${C.blue}`,animation:`fadeUp 600ms ${EO} both`}}>
+            <div style={{display:"flex",alignItems:"center",gap:8}}>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={C.ink} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 21V4"/><path d="M5 4h13l-3 4 3 4H5"/></svg>
+              <span style={{fontSize:14,fontWeight:700,color:C.ink}}>Nouveau palier : {milestoneReached} 🎉</span>
+            </div>
           </div>
         )}
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",borderBottom:`1px solid ${C.s3}`}}>
@@ -1814,7 +1841,7 @@ function StatsTab({sessions,weights,accent,onOpenPhotos,pinnedPBs,onManagePBs,ac
     <div style={{padding:"20px 20px 16px",maxWidth:600,margin:"0 auto",fontFamily:F}}>
       
       <WeekSummary sessions={sessions} accent={accent}/>
-      <SkillsOctagon sessions={sessions}/>
+      <div style={{maxWidth:220,margin:"0 auto 12px"}}><SkillsOctagon sessions={sessions}/></div>
       {/* Hero card: volume total, mise en avant */}
       <div style={{background:C.blueDim,border:`1px solid ${C.blue}`,borderRadius:18,padding:"20px",marginBottom:10,display:"flex",alignItems:"center",gap:16}}>
         <div style={{width:44,height:44,borderRadius:12,background:C.bg,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
@@ -1889,7 +1916,7 @@ function StatsTab({sessions,weights,accent,onOpenPhotos,pinnedPBs,onManagePBs,ac
             <div style={{fontSize:20,fontWeight:700,color:C.ink}}>{pb.pbKg===0?"BW":pb.pbKg+"kg"}</div>
           </div>
         ))}
-      {(()=>{const totalS=(sessions||[]).length;const maxW=(sessions||[]).reduce((m,s)=>Math.max(m,((s.exercises||[]).reduce((mm,e)=>Math.max(mm,e.weight||0),0))),0);const days=new Set((sessions||[]).map(s=>s.date)).size;const B=[{t:"Première séance",d:"Termine 1 séance",ok:totalS>=1},{t:"5 séances",d:"Atteins 5 séances",ok:totalS>=5},{t:"10 séances",d:"Atteins 10 séances",ok:totalS>=10},{t:"25 séances",d:"Atteins 25 séances",ok:totalS>=25},{t:"Club 100 kg",d:"Soulève 100 kg",ok:maxW>=100},{t:"Assidu",d:"7 jours actifs",ok:days>=7}];const earned=B.filter(b=>b.ok).length;return(<div style={{marginTop:24}}><div style={{display:"flex",alignItems:"baseline",justifyContent:"space-between",marginBottom:12}}><span style={{fontSize:11,fontWeight:700,color:C.ink3,textTransform:"uppercase",letterSpacing:".15em"}}>Récompenses</span><span style={{fontSize:12,fontWeight:600,color:C.ink4}}>{earned}/{B.length}</span></div><div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>{B.map((b,i)=>(<div key={i} style={{background:b.ok?C.blueDim:C.s1,border:`1.5px solid ${b.ok?C.blue:"transparent"}`,borderRadius:14,padding:"14px"}}><div style={{display:"flex",alignItems:"center",gap:8,marginBottom:4}}><div style={{width:22,height:22,borderRadius:"50%",background:b.ok?C.blue:C.s3,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}><span style={{fontSize:12,fontWeight:700,color:b.ok?"#000":C.ink4}}>{b.ok?"✓":"·"}</span></div><span style={{fontSize:14,fontWeight:700,color:b.ok?C.ink:C.ink3}}>{b.t}</span></div><div style={{fontSize:11,color:C.ink4,paddingLeft:30}}>{b.ok?"Débloqué":b.d}</div></div>))}</div></div>);})()}
+      {(()=>{const B=computeBadges(sessions);const earned=B.filter(b=>b.ok).length;return(<div style={{marginTop:24}}><div style={{display:"flex",alignItems:"baseline",justifyContent:"space-between",marginBottom:12}}><span style={{fontSize:11,fontWeight:700,color:C.ink3,textTransform:"uppercase",letterSpacing:".15em"}}>Récompenses</span><span style={{fontSize:12,fontWeight:600,color:C.ink4}}>{earned}/{B.length}</span></div><div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>{B.map((b,i)=>(<div key={i} style={{background:b.ok?C.blueDim:C.s1,border:`1.5px solid ${b.ok?C.blue:"transparent"}`,borderRadius:14,padding:"14px"}}><div style={{display:"flex",alignItems:"center",gap:8,marginBottom:4}}><div style={{width:22,height:22,borderRadius:"50%",background:b.ok?C.blue:C.s3,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}><span style={{fontSize:12,fontWeight:700,color:b.ok?"#000":C.ink4}}>{b.ok?"✓":"·"}</span></div><span style={{fontSize:14,fontWeight:700,color:b.ok?C.ink:C.ink3}}>{b.t}</span></div><div style={{fontSize:11,color:C.ink4,paddingLeft:30}}>{b.ok?"Débloqué":b.d}</div></div>))}</div></div>);})()}
     </div>
   );
 }
@@ -2298,7 +2325,7 @@ function SettingsTab({user,excluded,onToggleExclude,onSignOut,onReset,onOpenLibr
           <span style={{fontSize:17,color:C.red}}>›</span>
         </Tap>
       </div>
-      <div style={{fontSize:12,color:C.ink4,textAlign:"center",marginTop:28}}>SŌMA · {"S"+weekNumber()} · {DB.length} exercices · build 23.43a</div>
+      <div style={{fontSize:12,color:C.ink4,textAlign:"center",marginTop:28}}>SŌMA · {"S"+weekNumber()} · {DB.length} exercices · build 23.44a</div>
     </div>
   );
 }
@@ -2407,6 +2434,28 @@ const muscleGroupOf=(ex)=>MUSCLE_GROUP_MAP[primaryMuscle(ex.m)]||"full";
 const computePBs=(sessions)=>{
   const m={};(sessions||[]).forEach(s=>{(s.exercises||[]).forEach(e=>{if(e&&e.id&&(e.completedSets>0)&&(e.weight>0)){if(!m[e.id]||e.weight>m[e.id])m[e.id]=e.weight;}});});
   return Object.entries(m).map(([id,kg])=>{const ex=DB.find(x=>x.id===id);if(!ex)return null;return{...ex,pbKg:kg,oneRM:orm(kg,ex.reps)};}).filter(Boolean).sort((a,b)=>(b.oneRM||0)-(a.oneRM||0));
+};
+const computeBadges=(sessions)=>{
+  const totalS=(sessions||[]).length;
+  const maxW=(sessions||[]).reduce((m,s)=>Math.max(m,((s.exercises||[]).reduce((mm,e)=>Math.max(mm,e.weight||0),0))),0);
+  const days=new Set((sessions||[]).map(s=>s.date)).size;
+  return [
+    {t:"Première séance",d:"Termine 1 séance",ok:totalS>=1},
+    {t:"5 séances",d:"Atteins 5 séances",ok:totalS>=5},
+    {t:"10 séances",d:"Atteins 10 séances",ok:totalS>=10},
+    {t:"25 séances",d:"Atteins 25 séances",ok:totalS>=25},
+    {t:"Club 100 kg",d:"Soulève 100 kg",ok:maxW>=100},
+    {t:"Assidu",d:"7 jours actifs",ok:days>=7},
+  ];
+};
+const phaseBlocksList=()=>{
+  const blocks=[];
+  PHASES12.forEach((ph,i)=>{
+    const last=blocks[blocks.length-1];
+    if(last&&last.name===ph.n) last.endWeek=i+1;
+    else blocks.push({name:ph.n,endWeek:i+1});
+  });
+  return blocks;
 };
 const PBCAT={bar:"Barre",db:"Haltères",kb:"Kettlebell",mc:"Machine",bw:"Poids du corps",cd:"Cardio"};
 const PBCAT_ICON={
@@ -2719,6 +2768,7 @@ export default function SomaApp() {
         dayLabel:s.day_label||s.dayLabel||s.day||"",
         totalKg:Number(s.total_kg||s.totalKg||0),
         totalSets:Number(s.total_sets||s.totalSets||0),
+        sessionIndex:Number(s.session_index||s.sessionIndex||0),
         duration:Number(s.duration_seconds||s.duration||0),
         exercises:typeof s.exercises==="string"?JSON.parse(s.exercises||"[]"):(s.exercises||[]),
         feedback:typeof s.feedback==="string"?JSON.parse(s.feedback||"null"):s.feedback,
@@ -3024,7 +3074,7 @@ const NAV=[{id:"home",l:"Accueil"},{id:"seance",l:"Séances"},{id:"stats",l:"Sta
               ):(
                 <>
                   <div style={{marginBottom:20}}>
-                    <div style={{fontSize:11,fontWeight:600,color:C.ink4,textTransform:"uppercase",letterSpacing:".14em",marginBottom:8}}>{day.day} · {"S"+wk} · {day.salle==="haut"?"Salle Haute":"Salle Basse"}</div>
+                    <div style={{fontSize:11,fontWeight:600,color:C.ink4,textTransform:"uppercase",letterSpacing:".14em",marginBottom:8}}>{day.day} · {"S"+wk} · {day.salle==="haut"?"Salle Haute":"Salle Basse"}{totalSessions>0&&day.salle&&` · Séance ${Math.min(sessionIndex+1,totalSessions)}/${totalSessions}`}</div>
                     <div style={{fontSize:34,fontWeight:700,color:C.ink,letterSpacing:"-.02em",lineHeight:1.1,marginBottom:8}}>{aiOverride?.titre||day.label}</div>
                     <div style={{fontSize:17,color:C.ink3}}>{day.muscle}</div>
                     {day.salle&&(()=>{const pw=sessionWeek;const ph12=PHASES12[pw-1];const pend=progEndDate(profile?.program_start);return(
@@ -3213,7 +3263,7 @@ const NAV=[{id:"home",l:"Accueil"},{id:"seance",l:"Séances"},{id:"stats",l:"Sta
       {showTimer&&<IntervalTimer onClose={()=>setShowTimer(false)}/>}
       {showPicker&&<ExPicker onSelect={newEx=>handleReplaceEx(showPicker,newEx)} onClose={()=>setShowPicker(null)} currentId={showPicker.id} excluded={excluded}/>}
       {showLibrary&&<LibraryTab favorites={favorites} onToggleFav={toggleFav} onClose={()=>setShowLibrary(false)} sessions={sessions}/>}
-      {showReport&&<SessionReport session={showReport} sessions={sessions} onClose={()=>setShowReport(null)} onDelete={deleteSession}/>}
+      {showReport&&<SessionReport session={showReport} sessions={sessions} trainingDaysPerWeek={trainingDaysPerWeek} onClose={()=>setShowReport(null)} onDelete={deleteSession}/>}
       {showSched&&<ScheduleEditor schedule={schedule}
         onChange={ns=>{setSchedule(ns);persist(user?.id,{schedule:ns});}}
         onReset={()=>{setSchedule(PROGRAM);persist(user?.id,{schedule:PROGRAM});}}
