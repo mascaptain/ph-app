@@ -1920,7 +1920,7 @@ function SettingsTab({user,excluded,onToggleExclude,onSignOut,onReset,onOpenLibr
           <span style={{fontSize:17,color:C.red}}>›</span>
         </Tap>
       </div>
-      <div style={{fontSize:12,color:C.ink4,textAlign:"center",marginTop:28}}>SŌMA · {"S"+weekNumber()} · {DB.length} exercices · build 23.32a</div>
+      <div style={{fontSize:12,color:C.ink4,textAlign:"center",marginTop:28}}>SŌMA · {"S"+weekNumber()} · {DB.length} exercices · build 23.33a</div>
     </div>
   );
 }
@@ -2013,6 +2013,87 @@ const FREQ_DAYS = {3:[0,2,4],4:[0,1,3,4],5:[0,1,2,3,4],6:[0,1,2,3,4,5]};
 const DAY_LBL = ["LUN","MAR","MER","JEU","VEN","SAM","DIM"];
 const GOALS=[["force","Force","Force maximale & puissance"],["hypertrophie","Hypertrophie","Prise de muscle & volume"],["seche","Sèche","Perdre du gras, garder le muscle"],["hybride","Hybride","Force + conditionnement"],["endurance","Endurance","Cardio & endurance"],["performance","Performance","Athlétique complet"]];
 const TRAIN_TEMPLATES = PROGRAM.filter(d=>d.salle);
+
+// ─── MOTEUR DE PROGRAMMES DIFFERENCIES PAR OBJECTIF ────────────────────────────
+const MUSCLE_GROUP_MAP={
+  pecs:"push","pecs inf":"push","pecs sup":"push","épaules":"push","épaules ant":"push","épaules complet":"push","deltoïdes lat.":"push",triceps:"push","rear delt":"push",bras:"push",
+  dos:"pull","dos large":"pull","dos épais":"pull","grand dorsal":"pull",biceps:"pull","biceps long":"pull","avant-bras":"pull",trapèzes:"pull",lombaires:"pull",grip:"pull",
+  quads:"legs",fessiers:"legs","fessiers moyens":"legs",ischios:"legs",mollets:"legs",adducteurs:"legs",jambes:"legs",
+  abdos:"core","abdos bas":"core",core:"core","core anti-rotation":"core","core bas":"core","core complet":"core","core oblique":"core","core obliques":"core","core postérieur":"core",obliques:"core",
+  "mobilité":"core","mobilité dos":"core","mobilité hanche":"core","mobilité quad":"core","mobilité épaule":"core",
+  cardio:"cardio","full body":"full",
+};
+const muscleGroupOf=(ex)=>MUSCLE_GROUP_MAP[primaryMuscle(ex.m)]||"full";
+const GOAL_PROFILES={
+  force:{splits:[
+    {label:"Force — Bas (Squat)",groups:["legs","core"],mode:"classique",circuit:false},
+    {label:"Force — Haut (Push)",groups:["push"],mode:"classique",circuit:false},
+    {label:"Force — Haut (Pull)",groups:["pull"],mode:"classique",circuit:false},
+    {label:"Force — Bas (Hinge)",groups:["legs","pull"],mode:"classique",circuit:false},
+  ],eqBias:["bar","mc","db"],sets:5,repRange:[3,6],restSec:150,exCount:5},
+  hypertrophie:{splits:[
+    {label:"Hypertrophie — Push",groups:["push"],mode:"classique",circuit:true},
+    {label:"Hypertrophie — Pull",groups:["pull"],mode:"classique",circuit:true},
+    {label:"Hypertrophie — Jambes",groups:["legs"],mode:"classique",circuit:true},
+    {label:"Hypertrophie — Push B",groups:["push","core"],mode:"classique",circuit:true},
+    {label:"Hypertrophie — Pull B",groups:["pull","core"],mode:"classique",circuit:true},
+  ],eqBias:["db","mc","bar"],sets:4,repRange:[8,12],restSec:75,exCount:6},
+  seche:{splits:[
+    {label:"Sèche — Full Body",groups:["full","legs","push","pull"],mode:"classique",circuit:true},
+    {label:"Sèche — Haut + Cardio",groups:["push","pull","cardio"],mode:"amrap",circuit:false},
+    {label:"Sèche — Bas + Core",groups:["legs","core"],mode:"classique",circuit:true},
+    {label:"Sèche — Metcon",groups:["full","cardio","core"],mode:"emom",circuit:false},
+  ],eqBias:["kb","bw","cd","db"],sets:3,repRange:[12,20],restSec:35,exCount:6},
+  endurance:{splits:[
+    {label:"Endurance — EMOM Full Body A",groups:["full","legs","push"],mode:"emom",circuit:false},
+    {label:"Endurance — AMRAP Circuit",groups:["full","pull","core"],mode:"amrap",circuit:false},
+    {label:"Endurance — EMOM Full Body B",groups:["full","legs","pull"],mode:"emom",circuit:false},
+    {label:"Endurance — Cardio + Core",groups:["cardio","core"],mode:"amrap",circuit:false},
+  ],eqBias:["kb","bw","cd"],sets:1,repRange:[10,15],restSec:0,exCount:5},
+  performance:{splits:[
+    {label:"Performance — Power Bas",groups:["legs"],mode:"classique",circuit:false},
+    {label:"Performance — Push Athlétique",groups:["push"],mode:"classique",circuit:true},
+    {label:"Performance — Pull Athlétique",groups:["pull"],mode:"classique",circuit:true},
+    {label:"Performance — Power + Metcon",groups:["full","legs","push"],mode:"emom",circuit:false},
+    {label:"Performance — Conditioning",groups:["cardio","core","full"],mode:"amrap",circuit:false},
+  ],eqBias:["bar","kb","db","bw"],sets:4,repRange:[5,10],restSec:90,exCount:5},
+};
+const buildGoalSession=(goal,sessionIndex)=>{
+  const gp=GOAL_PROFILES[goal];
+  if(!gp) return null;
+  const splitIdx=sessionIndex%gp.splits.length;
+  const split=gp.splits[splitIdx];
+  const pool=DB.filter(e=>split.groups.includes(muscleGroupOf(e))).slice().sort((a,b)=>{
+    const pa=gp.eqBias.indexOf(a.eq),pb=gp.eqBias.indexOf(b.eq);
+    const wa=pa<0?99:pa,wb=pb<0?99:pb;
+    if(wa!==wb) return wa-wb;
+    return a.id.localeCompare(b.id);
+  });
+  if(!pool.length) return null;
+  const n=Math.min(gp.exCount,pool.length);
+  const cycle=Math.floor(sessionIndex/gp.splits.length);
+  const used=new Set();
+  const exercises=[];
+  const reps=String(Math.round((gp.repRange[0]+gp.repRange[1])/2));
+  for(let i=0;i<n;i++){
+    let idx=(cycle*n+i*5)%pool.length,tries=0;
+    while(used.has(pool[idx].id)&&tries<pool.length){idx=(idx+1)%pool.length;tries++;}
+    used.add(pool[idx].id);
+    const ex=pool[idx];
+    exercises.push({...ex,sets:gp.sets,reps,rest:gp.restSec});
+  }
+  return {label:split.label,salle:"full",muscle:split.groups.join(" · "),exercises,abs:[],recommendedMode:split.mode,circuit:!!split.circuit};
+};
+const HYBRID_MODES={"Push Force":{mode:"classique",circuit:true},"KB Power":{mode:"emom",circuit:false},"Pull & Legs":{mode:"classique",circuit:true},"KB Endurance":{mode:"amrap",circuit:false},"Full Power":{mode:"classique",circuit:true}};
+const pendingSessionFor=(goal,sessionIndex)=>{
+  const generated=buildGoalSession(goal,sessionIndex);
+  if(generated) return generated;
+  const tpl=TRAIN_TEMPLATES.length?TRAIN_TEMPLATES[sessionIndex%TRAIN_TEMPLATES.length]:null;
+  if(!tpl) return null;
+  const hm=HYBRID_MODES[tpl.label]||{mode:"classique",circuit:false};
+  return {...tpl,recommendedMode:hm.mode,circuit:hm.circuit};
+};
+
 const generateSchedule = (freq) => {
   const trainIdx = FREQ_DAYS[freq] || FREQ_DAYS[4];
   const train = PROGRAM.filter(d=>d.salle);
@@ -2399,8 +2480,8 @@ export default function SomaApp() {
   const rawDay0=viewSchedule[dayIdx]||PROGRAM[dayIdx];
   const tabDate=programDate(dayIdx);
   const isBeforeProgramStart=!!(profile?.program_start&&tabDate<profile.program_start);
-  const pendingTemplate=(!programDone&&!isBeforeProgramStart&&TRAIN_TEMPLATES.length)?TRAIN_TEMPLATES[sessionIndex%TRAIN_TEMPLATES.length]:null;
-  const day0=isBeforeProgramStart?{...REST_TPL,day:rawDay0?.day}:(isViewingToday&&rawDay0?.salle&&pendingTemplate)?(()=>{let c={...pendingTemplate,day:rawDay0.day};if(profile?.equipment?.length)c=adaptEquip(c,profile.equipment);if(profile?.goal&&profile.goal!=="hybride")c=adaptGoal(c,profile.goal);return c;})():rawDay0;
+  const pendingTemplate=(!programDone&&!isBeforeProgramStart)?pendingSessionFor(profile?.goal||"hybride",sessionIndex):null;
+  const day0=isBeforeProgramStart?{...REST_TPL,day:rawDay0?.day}:(isViewingToday&&rawDay0?.salle&&pendingTemplate)?(()=>{let c={...pendingTemplate,day:rawDay0.day};if(profile?.equipment?.length)c=adaptEquip(c,profile.equipment);return c;})():rawDay0;
   const effMode=modeOverride||day0?.recommendedMode||"classique";
   const sessionMode=effMode;
   const day=applyMode(day0,effMode,profile,sessionWeek,dayIdx,dayCons);
