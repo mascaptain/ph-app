@@ -1265,9 +1265,9 @@ function CircuitPlayer({mode,exos,onClose,defMin,blocks,onAllDone,startBlock}) {
       </div>
     </div>);
 }
-function ExerciseRowCollapsed({ex,dayIdx,log,idx,onOpen,onReplace}) {
+function ExerciseRowCollapsed({ex,dayIdx,sDate,log,idx,onOpen,onReplace}) {
   const plan=setPlanFor(ex);const n=plan.length;
-  const completed=plan.filter((_,i)=>log[`d${dayIdx}_${ex.id}_s${i}`]&&log[`d${dayIdx}_${ex.id}_s${i}`].done).length;
+  const completed=plan.filter((_,i)=>log[`${sDate}_${ex.id}_s${i}`]&&log[`${sDate}_${ex.id}_s${i}`].done).length;
   const allDone=completed===n;
   const w0=plan[0].w,wn=plan[n-1].w;
   const wlabel=w0>0?(w0===wn?`${w0} kg`:`${w0}→${wn} kg`):"PdC";
@@ -1289,9 +1289,9 @@ function ExerciseRowCollapsed({ex,dayIdx,log,idx,onOpen,onReplace}) {
   );
 }
 
-function ExerciseFocus({ex,dayIdx,log,onLogSet,onClose,onNext,hasNext,idx,count,onDetail}) {
+function ExerciseFocus({ex,dayIdx,sDate,log,onLogSet,onClose,onNext,hasNext,idx,count,onDetail}) {
   const plan=setPlanFor(ex);const n=plan.length;
-  const lk=`d${dayIdx}_${ex.id}`;
+  const lk=`${sDate}_${ex.id}`;
   const [done,setDone]=useState(()=>plan.map((_,i)=>!!(log[`${lk}_s${i}`]&&log[`${lk}_s${i}`].done)));
   const [resting,setResting]=useState(0);
   const restRef=useRef(null);
@@ -2298,7 +2298,7 @@ function SettingsTab({user,excluded,onToggleExclude,onSignOut,onReset,onOpenLibr
           <span style={{fontSize:17,color:C.red}}>›</span>
         </Tap>
       </div>
-      <div style={{fontSize:12,color:C.ink4,textAlign:"center",marginTop:28}}>SŌMA · {"S"+weekNumber()} · {DB.length} exercices · build 23.42a</div>
+      <div style={{fontSize:12,color:C.ink4,textAlign:"center",marginTop:28}}>SŌMA · {"S"+weekNumber()} · {DB.length} exercices · build 23.43a</div>
     </div>
   );
 }
@@ -2806,7 +2806,7 @@ export default function SomaApp() {
       const s=typeof ex.sets==="number"?ex.sets:4;
       let completedSets=0,lastWeight=0,topWeight=0;
       Array.from({length:s},(_,i)=>{
-        const e=log[`d${dayIdx}_${ex.id}_s${i}`];
+        const e=log[`${sDate}_${ex.id}_s${i}`];
         if(e?.done){completedSets++;lastWeight=e.weight||0;if(lastWeight>topWeight)topWeight=lastWeight;const r=Number(e.reps)||parseFloat(String(ex.reps||"8").split("–")[0])||8;totalKg+=lastWeight*r;totalSets++;}
       });
       return{id:ex.id,n:ex.n||ex.name,m:ex.m||ex.muscle,weight:topWeight,completedSets};
@@ -3123,7 +3123,7 @@ const NAV=[{id:"home",l:"Accueil"},{id:"seance",l:"Séances"},{id:"stats",l:"Sta
                         {blk.groupType&&!locked&&<Tap onTap={()=>setSupBlock({label:blk.muscle,kind:blk.groupType==="circuit"?"circuit":"superset",exercises:blk.items.map(x=>x.ex),restSec:90,tours:(blk.items[0]&&blk.items[0].ex&&blk.items[0].ex.sets)||4})} style={{display:"flex",alignItems:"center",justifyContent:"center",gap:8,padding:"12px",borderRadius:12,background:C.blueDim,border:`1px solid ${C.blue}`,marginBottom:10}}><span style={{fontSize:14,fontWeight:700,color:C.blue}}>Démarrer le {blk.groupType==="circuit"?"circuit":"superset"}</span></Tap>}
                         <div style={{paddingLeft:12,borderLeft:`2px solid ${C.s3}`}}>
                           {blk.items.map(({ex,idx})=>(
-                            <ExerciseRowCollapsed key={ex.id} ex={ex} idx={idx} dayIdx={dayIdx} log={log}
+                            <ExerciseRowCollapsed key={ex.id} ex={ex} idx={idx} dayIdx={dayIdx} sDate={sDate} log={log}
                               onOpen={()=>{if(locked)return;if(sessionMode!=="classique"){setShowCircuit(true);return;}const _e=exos[idx];if(_e&&_e.circuitId){const _g=exos.filter(e=>e.circuitId===_e.circuitId);setSupBlock({label:_e.m||"Superset",kind:_g.length>=3?"circuit":"superset",exercises:_g,restSec:90,tours:(_g[0]&&_g[0].sets)||4});}else{setFocusIdx(idx);}}} onReplace={e=>setShowPicker(e)}/>
                           ))}
                         </div>
@@ -3178,7 +3178,7 @@ const NAV=[{id:"home",l:"Accueil"},{id:"seance",l:"Séances"},{id:"stats",l:"Sta
       {showSkillManager&&<SkillManagerSheet activeSkills={profile?.active_skills} onSave={(sel)=>updateConfig({active_skills:sel})} onClose={()=>setShowSkillManager(false)}/>}
       {/* Overlays plein ecran sortis du wrapper anime (position:fixed casse sous un ancetre avec transform) */}
       {focusIdx!=null&&exos[focusIdx]&&(
-        <ExerciseFocus key={exos[focusIdx].id} ex={exos[focusIdx]} idx={focusIdx} count={exos.length} dayIdx={dayIdx}
+        <ExerciseFocus key={exos[focusIdx].id} ex={exos[focusIdx]} idx={focusIdx} count={exos.length} dayIdx={dayIdx} sDate={sDate}
           log={log} onLogSet={saveLog} onDetail={e=>setDetailEx(e)}
           onClose={()=>setFocusIdx(null)} hasNext={focusIdx<exos.length-1} onNext={()=>setFocusIdx(focusIdx+1)}/>
       )}
