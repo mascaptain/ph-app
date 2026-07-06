@@ -2384,7 +2384,7 @@ function SettingsTab({user,excluded,onToggleExclude,onSignOut,onReset,onOpenLibr
           <span style={{fontSize:17,color:C.red}}>›</span>
         </Tap>
       </div>
-      <div style={{fontSize:12,color:C.ink4,textAlign:"center",marginTop:28}}>SŌMA · {"S"+weekNumber()} · {DB.length} exercices · build 23.48a</div>
+      <div style={{fontSize:12,color:C.ink4,textAlign:"center",marginTop:28}}>SŌMA · {"S"+weekNumber()} · {DB.length} exercices · build 23.49a</div>
     </div>
   );
 }
@@ -2911,18 +2911,19 @@ export default function SomaApp() {
   const handleStartRest=(s,n)=>{setRestLabel(n);rest.start(s);setShowRestFull(true);};
 
   const handleReplaceEx=(replaced,newEx)=>{
-    const day=viewSchedule[dayIdx]||PROGRAM[dayIdx];
-    const src=aiOverride?.exercises||day.exercises||[];
+    // reutilise le "day"/"exos" du rendu principal (pilotes par la sequence session_index) - meme regle que handleFeedbackSave.
+    const src=aiOverride?.exercises||day?.exercises||[];
     const newExos=src.map(ex=>ex.id===replaced.id?{...newEx,sets:ex.sets}:ex);
     setAiOverride(prev=>({...(prev||{titre:day.label,abs:day.abs}),exercises:newExos}));
     setShowPicker(null);setFullScreenEx(null);setFocusIdx(null);setShowCircuit(false);setSessionMode("classique");
   };
 
   const handleFeedbackSave=(fb)=>{
-    const day=viewSchedule[dayIdx]||PROGRAM[dayIdx];
-    const sDate=programDate(dayIdx);
-    if(fb&&fb.photo){try{const pm=JSON.parse(localStorage.getItem("soma_photos")||"{}");pm[sDate]=fb.photo;localStorage.setItem("soma_photos",JSON.stringify(pm));}catch(_e){} delete fb.photo;}
-    const exos=aiOverride?.exercises||day.exercises||[];
+    // IMPORTANT: reutilise le "day"/"exos" du rendu principal (pilotes par la sequence session_index),
+    // ne JAMAIS recalculer une version independante basee sur le jour de la semaine (bug precedent:
+    // divergence entre la seance reellement affichee/jouee et celle enregistree/comptee comme faite).
+    const sDateLocal=programDate(dayIdx);
+    if(fb&&fb.photo){try{const pm=JSON.parse(localStorage.getItem("soma_photos")||"{}");pm[sDateLocal]=fb.photo;localStorage.setItem("soma_photos",JSON.stringify(pm));}catch(_e){} delete fb.photo;}
     let totalKg=0,totalSets=0;
     const exercisesData=exos.map(ex=>{
       const s=typeof ex.sets==="number"?ex.sets:4;
@@ -3054,6 +3055,20 @@ export default function SomaApp() {
   const isBeforeProgramStart=!!(profile?.program_start&&tabDate<profile.program_start);
   const pendingTemplate=(!programDone&&!isBeforeProgramStart)?pendingSessionFor(profile?.goal||"hybride",sessionIndex,profile?.equipment):null;
   const day0=isBeforeProgramStart?{...REST_TPL,day:rawDay0?.day}:(isViewingToday&&rawDay0?.salle&&pendingTemplate)?(()=>{let c={...pendingTemplate,day:rawDay0.day};if(profile?.equipment?.length)c=adaptEquip(c,profile.equipment);c=personalizeDay(c,profile,sessionWeek);return c;})():rawDay0;
+  // Seance "aujourd'hui" pour la page Accueil : DOIT utiliser la meme logique de sequence que day0 ci-dessus,
+  // independamment de l'onglet jour actuellement affiche (dayIdx peut pointer vers un autre jour que aujourd'hui).
+  const todaySessionForHome=(()=>{
+    const trIdx=todayIdx();
+    const trRaw=viewSchedule[trIdx]||PROGRAM[trIdx];
+    const trDate=programDate(trIdx);
+    const trBeforeStart=!!(profile?.program_start&&trDate<profile.program_start);
+    if(trBeforeStart) return {...REST_TPL,day:trRaw?.day};
+    if(!trRaw?.salle||programDone||!pendingTemplate) return trRaw;
+    let c={...pendingTemplate,day:trRaw.day};
+    if(profile?.equipment?.length) c=adaptEquip(c,profile.equipment);
+    c=personalizeDay(c,profile,sessionWeek);
+    return c;
+  })();
   const effMode=modeOverride||day0?.recommendedMode||"classique";
   const sessionMode=effMode;
   const day=applyMode(day0,effMode,profile,sessionWeek,dayIdx,dayCons);
@@ -3133,7 +3148,7 @@ const NAV=[{id:"home",l:"Accueil"},{id:"seance",l:"Séances"},{id:"stats",l:"Sta
       {/* CONTENT */}
       <div style={{paddingBottom:80}}>
         <TabContent tab={tab} prevTab={prevTab}>
-          {tab==="home"&&<HomeTab profile={profile} streak={streak} sessions={sessions} weights={weights} todaySession={viewSchedule[todayIdx()]||PROGRAM[todayIdx()]} accent={accent} trainingDaysPerWeek={trainingDaysPerWeek} onStartToday={()=>{setDayIdx(todayIdx());switchTab("seance");}}/>}
+          {tab==="home"&&<HomeTab profile={profile} streak={streak} sessions={sessions} weights={weights} todaySession={todaySessionForHome} accent={accent} trainingDaysPerWeek={trainingDaysPerWeek} onStartToday={()=>{setDayIdx(todayIdx());switchTab("seance");}}/>}
           {tab==="seance"&&(
             <div style={{padding:"16px 20px 0",maxWidth:600,margin:"0 auto"}}>
               {isRest?(
