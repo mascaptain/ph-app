@@ -1266,10 +1266,13 @@ function CircuitPlayer({mode,exos,onClose,defMin,blocks,onAllDone,startBlock,log
       </div>
     </div>);
 }
-function ExerciseRowCollapsed({ex,dayIdx,sDate,log,idx,onOpen,onReplace}) {
+function ExerciseRowCollapsed({ex,dayIdx,sDate,log,idx,onOpen,onReplace,doneSession}) {
   const plan=setPlanFor(ex);const n=plan.length;
-  const completed=plan.filter((_,i)=>log[`${sDate}_${ex.id}_s${i}`]&&log[`${sDate}_${ex.id}_s${i}`].done).length;
-  const allDone=completed===n;
+  // Si la journee est deja enregistree (doneSession), c'est la SOURCE DE VERITE - ne jamais se fier
+  // au log local qui peut etre incomplet/absent (ex: seance corrigee manuellement en base).
+  const savedEx=doneSession?(doneSession.exercises||[]).find(e=>e.id===ex.id):null;
+  const completed=savedEx?Math.min(savedEx.completedSets||0,n):plan.filter((_,i)=>log[`${sDate}_${ex.id}_s${i}`]&&log[`${sDate}_${ex.id}_s${i}`].done).length;
+  const allDone=savedEx?(savedEx.completedSets||0)>=n:completed===n;
   const w0=plan[0].w,wn=plan[n-1].w;
   const wlabel=w0>0?(w0===wn?`${w0} kg`:`${w0}→${wn} kg`):"PdC";
   const restLbl=ex.rest>0?(ex.rest>=60?fmtMSS(ex.rest):`${ex.rest}s`):null;
@@ -2391,7 +2394,7 @@ function SettingsTab({user,excluded,onToggleExclude,onSignOut,onReset,onOpenLibr
           <span style={{fontSize:17,color:C.red}}>›</span>
         </Tap>
       </div>
-      <div style={{fontSize:12,color:C.ink4,textAlign:"center",marginTop:28}}>SŌMA · {"S"+weekNumber()} · {DB.length} exercices · build 23.51a</div>
+      <div style={{fontSize:12,color:C.ink4,textAlign:"center",marginTop:28}}>SŌMA · {"S"+weekNumber()} · {DB.length} exercices · build 23.52a</div>
     </div>
   );
 }
@@ -3273,7 +3276,7 @@ const NAV=[{id:"home",l:"Accueil"},{id:"seance",l:"Séances"},{id:"stats",l:"Sta
                         {blk.groupType&&!locked&&<Tap onTap={()=>setSupBlock({label:blk.muscle,kind:blk.groupType==="circuit"?"circuit":"superset",exercises:blk.items.map(x=>x.ex),restSec:90,tours:(blk.items[0]&&blk.items[0].ex&&blk.items[0].ex.sets)||4})} style={{display:"flex",alignItems:"center",justifyContent:"center",gap:8,padding:"12px",borderRadius:12,background:C.blueDim,border:`1px solid ${C.blue}`,marginBottom:10}}><span style={{fontSize:14,fontWeight:700,color:C.blue}}>Démarrer le {blk.groupType==="circuit"?"circuit":"superset"}</span></Tap>}
                         <div style={{paddingLeft:12,borderLeft:`2px solid ${C.s3}`}}>
                           {blk.items.map(({ex,idx})=>(
-                            <ExerciseRowCollapsed key={ex.id} ex={ex} idx={idx} dayIdx={dayIdx} sDate={sDate} log={log}
+                            <ExerciseRowCollapsed key={ex.id} ex={ex} idx={idx} dayIdx={dayIdx} sDate={sDate} log={log} doneSession={doneSession}
                               onOpen={()=>{if(locked)return;if(sessionMode!=="classique"){setShowCircuit(true);return;}const _e=exos[idx];if(_e&&_e.circuitId){const _g=exos.filter(e=>e.circuitId===_e.circuitId);setSupBlock({label:_e.m||"Superset",kind:_g.length>=3?"circuit":"superset",exercises:_g,restSec:90,tours:(_g[0]&&_g[0].sets)||4});}else{setFocusIdx(idx);}}} onReplace={e=>setShowPicker(e)}/>
                           ))}
                         </div>
