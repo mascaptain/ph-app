@@ -2391,7 +2391,7 @@ function SettingsTab({user,excluded,onToggleExclude,onSignOut,onReset,onOpenLibr
           <span style={{fontSize:17,color:C.red}}>›</span>
         </Tap>
       </div>
-      <div style={{fontSize:12,color:C.ink4,textAlign:"center",marginTop:28}}>SŌMA · {"S"+weekNumber()} · {DB.length} exercices · build 23.50a</div>
+      <div style={{fontSize:12,color:C.ink4,textAlign:"center",marginTop:28}}>SŌMA · {"S"+weekNumber()} · {DB.length} exercices · build 23.51a</div>
     </div>
   );
 }
@@ -2955,6 +2955,7 @@ export default function SomaApp() {
       feedback:fb,
       user_id:user?.id,
       sessionIndex:sessionIndex+1,
+      mode:sessionMode,
       weights:{...weights,...Object.fromEntries(exercisesData.filter(e=>e.weight>0).map(e=>[e.id,e.weight]))}
     };
     // avance la sequence du programme (uniquement si ce jour est un jour d'entrainement pris en compte dans la file)
@@ -2991,6 +2992,7 @@ export default function SomaApp() {
         day:day.day,day_label:entry.dayLabel,
         session_type:entry.dayLabel,
         session_index:entry.sessionIndex,
+        mode:sessionMode,
         total_kg:Math.round(totalKg),total_sets:totalSets,
         duration_seconds:clock.sec,score,
         exercises:JSON.stringify(exercisesData),
@@ -3059,6 +3061,8 @@ export default function SomaApp() {
   const isViewingToday=dayIdx===todayIdx();
   const rawDay0=viewSchedule[dayIdx]||PROGRAM[dayIdx];
   const tabDate=programDate(dayIdx);
+  const isDayDone=sessions.some(s=>s.date===tabDate);
+  const doneSession=isDayDone?sessions.find(s=>s.date===tabDate):null;
   const isBeforeProgramStart=!!(profile?.program_start&&tabDate<profile.program_start);
   const pendingTemplate=(!programDone&&!isBeforeProgramStart)?pendingSessionFor(profile?.goal||"hybride",sessionIndex,profile?.equipment):null;
   const day0=isBeforeProgramStart?{...REST_TPL,day:rawDay0?.day}:(isViewingToday&&rawDay0?.salle&&pendingTemplate)?(()=>{let c={...pendingTemplate,day:rawDay0.day};if(profile?.equipment?.length)c=adaptEquip(c,profile.equipment);c=personalizeDay(c,profile,sessionWeek);return c;})():rawDay0;
@@ -3076,12 +3080,10 @@ export default function SomaApp() {
     c=personalizeDay(c,profile,sessionWeek);
     return c;
   })();
-  const effMode=modeOverride||day0?.recommendedMode||"classique";
+  const effMode=isDayDone?(doneSession?.mode||"classique"):(modeOverride||day0?.recommendedMode||"classique");
   const sessionMode=effMode;
   const day=applyMode(day0,effMode,profile,sessionWeek,dayIdx,dayCons);
-  const sDate=programDate(dayIdx);
-  const isDayDone=sessions.some(s=>s.date===sDate);
-  const doneSession=isDayDone?sessions.find(s=>s.date===sDate):null;
+  const sDate=tabDate;
   const isPastMissed=!!(day?.salle&&!isDayDone&&new Date(sDate+"T00:00:00")<new Date(new Date().toDateString()));
   const locked=isDayDone||isPastMissed;
   const isRest=!day?.salle;
@@ -3137,14 +3139,17 @@ const NAV=[{id:"home",l:"Accueil"},{id:"seance",l:"Séances"},{id:"stats",l:"Sta
             const dStrDate=programDate(i);
             const done=exList.filter(e=>Array.from({length:typeof e.sets==="number"?e.sets:4},(_,si)=>si).every(si=>log[`${dStrDate}_${e.id}_s${si}`]?.done)).length;
             const pct=exList.length?done/exList.length:0;
+            const dayFullyDone=sessions.some(s=>s.date===dStrDate);
             const isSel=i===dayIdx,isToday=i===todayIdx();
             return(
               <Tap key={i} onTap={()=>{setDayIdx(i);setAiOverride(null);setDayCons(null);setModeOverride(null);setCircuitStart(0);setSupBlock(null);}} style={{flexShrink:0,minWidth:52,padding:"10px 6px",textAlign:"center",borderRadius:12,background:isSel?C.s2:"transparent",border:`1px solid ${isSel?C.s4:"transparent"}`,transition:`all 200ms ${EO}`}}>
                 <div style={{fontSize:10,fontWeight:600,color:isSel?C.ink2:C.ink4,letterSpacing:".06em",marginBottom:4}}>{d.day}</div>
-                {isToday&&<div style={{width:6,height:6,borderRadius:"50%",background:C.lime,margin:"0 auto 4px"}}/>}
-                {d.salle&&pct>0&&<div style={{width:"70%",height:2,background:C.s4,borderRadius:1,margin:"0 auto"}}>
+                {isToday&&!dayFullyDone&&<div style={{width:6,height:6,borderRadius:"50%",background:C.lime,margin:"0 auto 4px"}}/>}
+                {dayFullyDone?(
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={accent||C.green} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" style={{margin:"0 auto",display:"block"}}><path d="M20 6L9 17l-5-5"/></svg>
+                ):(d.salle&&pct>0&&<div style={{width:"70%",height:2,background:C.s4,borderRadius:1,margin:"0 auto"}}>
                   <div style={{width:`${pct*100}%`,height:2,background:accent,borderRadius:1,transition:`width 400ms ${EO}`}}/>
-                </div>}
+                </div>)}
               </Tap>
             );
           })}
