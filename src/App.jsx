@@ -1558,7 +1558,8 @@ function FeedbackSheet({onClose,onSave}) {
 // ─── SESSION REPORT ───────────────────────────────────────────────────────────
 function SessionReport({session,sessions,trainingDaysPerWeek,onClose,onDelete}) {
   if(!session) return null;
-  const{totalKg=0,totalSets=0,duration=0,exercises=[],date="",dayLabel="",score=0,feedback,sessionIndex=0}=session;
+  const{totalKg=0,totalSets=0,duration=0,exercises=[],date="",dayLabel="",feedback,sessionIndex=0}=session;
+  const score=computeScore(totalKg,totalSets,feedback);
   const photo=(()=>{try{return JSON.parse(localStorage.getItem("soma_photos")||"{}")[date]||null;}catch(_e){return null;}})();
   const animScore=useCountUp(score,1200);
   const animKg=useCountUp(Math.round(totalKg/1000*10)/10*10,1400);
@@ -1845,7 +1846,7 @@ function LoadChart({data,color=C.blue}){
 }
 function StatsTab({sessions,weights,accent,onOpenPhotos,pinnedPBs,onManagePBs,activeSkills,onManageSkills,onOpenRewards}) {
   const total=sessions.length,totalKg=sessions.reduce((a,s)=>a+(s.totalKg||0),0);
-  const avgScore=total?Math.round(sessions.reduce((a,s)=>a+(s.score||0),0)/total):0;
+  const avgScore=total?Math.round(sessions.reduce((a,s)=>a+computeScore(s.totalKg,s.totalSets,s.feedback),0)/total):0;
   const pbs=useMemo(()=>computePBs(sessions),[sessions]);
   const pinnedSet=new Set(pinnedPBs||[]);
   const displayedPBs=(pinnedPBs&&pinnedPBs.length)?pbs.filter(pb=>pinnedSet.has(pb.id)):pbs.slice(0,5);
@@ -2219,7 +2220,7 @@ function HistoryTab({sessions,onSelect,accent,onOpenPhotos}) {
                 <div style={{fontSize:17,fontWeight:600,color:C.ink}}>{label}</div>
                 <div style={{fontSize:13,color:C.ink4,marginTop:2}}>{s.day} · {s.date}</div>
               </div>
-              {s.score>0&&<span style={{fontSize:15,fontWeight:700,color:accent||C.blue,padding:"4px 12px",background:C.s3,borderRadius:8}}>{s.score}</span>}
+              {computeScore(s.totalKg,s.totalSets,s.feedback)>0&&<span style={{fontSize:15,fontWeight:700,color:accent||C.blue,padding:"4px 12px",background:C.s3,borderRadius:8}}>{computeScore(s.totalKg,s.totalSets,s.feedback)}</span>}
             </div>
             <div style={{display:"flex",gap:14,flexWrap:"wrap"}}>
               {s.totalKg>0&&<span style={{fontSize:13,color:C.ink3}}>{s.totalKg.toLocaleString()}kg</span>}
@@ -2394,7 +2395,7 @@ function SettingsTab({user,excluded,onToggleExclude,onSignOut,onReset,onOpenLibr
           <span style={{fontSize:17,color:C.red}}>›</span>
         </Tap>
       </div>
-      <div style={{fontSize:12,color:C.ink4,textAlign:"center",marginTop:28}}>SŌMA · {"S"+weekNumber()} · {DB.length} exercices · build 23.52a</div>
+      <div style={{fontSize:12,color:C.ink4,textAlign:"center",marginTop:28}}>SŌMA · {"S"+weekNumber()} · {DB.length} exercices · build 23.53a</div>
     </div>
   );
 }
@@ -2500,6 +2501,11 @@ const MUSCLE_GROUP_MAP={
   cardio:"cardio","full body":"full",
 };
 const muscleGroupOf=(ex)=>MUSCLE_GROUP_MAP[primaryMuscle(ex.m)]||"full";
+const computeScore=(totalKg,totalSets,feedback)=>{
+  const fb=feedback||{};
+  const g=Number(fb.global)||0,en=Number(fb.energy)||0;
+  return Math.round(Math.min((totalKg||0)/5000*40,40)+Math.min((totalSets||0)/25*30,30)+((g+en)/10*30));
+};
 const computePBs=(sessions)=>{
   const m={};(sessions||[]).forEach(s=>{(s.exercises||[]).forEach(e=>{if(e&&e.id&&(e.completedSets>0)&&(e.weight>0)){if(!m[e.id]||e.weight>m[e.id])m[e.id]=e.weight;}});});
   return Object.entries(m).map(([id,kg])=>{const ex=DB.find(x=>x.id===id);if(!ex)return null;return{...ex,pbKg:kg,oneRM:orm(kg,ex.reps)};}).filter(Boolean).sort((a,b)=>(b.oneRM||0)-(a.oneRM||0));
@@ -2944,7 +2950,7 @@ export default function SomaApp() {
       });
       return{id:ex.id,n:ex.n||ex.name,m:ex.m||ex.muscle,weight:topWeight,completedSets};
     });
-    const score=Math.round(Math.min(totalKg/5000*40,40)+Math.min(totalSets/25*30,30)+((fb.global+fb.energy)/10*30));
+    const score=computeScore(totalKg,totalSets,fb);
     // Date = jour du programme (ex: LUN = date du lundi de cette semaine)
     const entry={
       day:day.day,
