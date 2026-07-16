@@ -1271,8 +1271,11 @@ function ExerciseRowCollapsed({ex,dayIdx,sDate,log,idx,onOpen,onReplace,doneSess
   // Si la journee est deja enregistree (doneSession), c'est la SOURCE DE VERITE - ne jamais se fier
   // au log local qui peut etre incomplet/absent (ex: seance corrigee manuellement en base).
   const savedEx=doneSession?(doneSession.exercises||[]).find(e=>e.id===ex.id):null;
-  const completed=savedEx?Math.min(savedEx.completedSets||0,n):plan.filter((_,i)=>log[`${sDate}_${ex.id}_s${i}`]&&log[`${sDate}_${ex.id}_s${i}`].done).length;
-  const allDone=savedEx?(savedEx.completedSets||0)>=n:completed===n;
+  // Une journee deja enregistree (doneSession) est CLOSE: on ne compare plus le nombre de series
+  // fait a un "n" devine (setPlanFor n'a pas le vrai nombre prescrit pour un objet resume) - la
+  // presence dans le compte-rendu final = termine, point final. Evite un faux "incomplet" permanent.
+  const completed=savedEx?n:plan.filter((_,i)=>log[`${sDate}_${ex.id}_s${i}`]&&log[`${sDate}_${ex.id}_s${i}`].done).length;
+  const allDone=savedEx?true:completed===n;
   const w0=plan[0].w,wn=plan[n-1].w;
   const wlabel=w0>0?(w0===wn?`${w0} kg`:`${w0}→${wn} kg`):"PdC";
   const restLbl=ex.rest>0?(ex.rest>=60?fmtMSS(ex.rest):`${ex.rest}s`):null;
@@ -2395,7 +2398,7 @@ function SettingsTab({user,excluded,onToggleExclude,onSignOut,onReset,onOpenLibr
           <span style={{fontSize:17,color:C.red}}>›</span>
         </Tap>
       </div>
-      <div style={{fontSize:12,color:C.ink4,textAlign:"center",marginTop:28}}>SŌMA · {"S"+weekNumber()} · {DB.length} exercices · build 23.53a</div>
+      <div style={{fontSize:12,color:C.ink4,textAlign:"center",marginTop:28}}>SŌMA · {"S"+weekNumber()} · {DB.length} exercices · build 23.54a</div>
     </div>
   );
 }
