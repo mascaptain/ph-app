@@ -1166,7 +1166,7 @@ function SessionSettingsSheet({day,curMode,onClose,onApply}) {
     </div>
   </div>);
 }
-function CircuitPlayer({mode,exos,onClose,defMin,blocks,onAllDone,startBlock}) {
+function CircuitPlayer({mode,exos,onClose,defMin,blocks,onAllDone,startBlock,log,onLogSet,sDate}) {
   const BLK=(blocks&&blocks.length)?blocks:[{label:mode==="amrap"?"AMRAP":"EMOM",kind:mode,exercises:exos||[],durationMin:defMin||(mode==="amrap"?12:Math.max((exos||[]).length,8))}];
   const [bi,setBi]=useState(startBlock||0);
   const cur=BLK[Math.min(bi,BLK.length-1)]||{exercises:[]};
@@ -1181,13 +1181,20 @@ function CircuitPlayer({mode,exos,onClose,defMin,blocks,onAllDone,startBlock}) {
   const [stour,setStour]=useState(1);
   const [resting,setResting]=useState(0);
   const ref=useRef(null); const lastMin=useRef(0); const restRef=useRef(null);
+  const occRef=useRef({});
+  const logOccurrence=(ex)=>{
+    if(!ex||!onLogSet||!sDate) return;
+    const cnt=occRef.current[ex.id]||0;
+    occRef.current[ex.id]=cnt+1;
+    onLogSet(`${sDate}_${ex.id}_s${cnt}`,{done:true,weight:ex.kg||0,reps:Number(String(ex.reps||"0").replace(/\D+/g,""))||0,date:sDate});
+  };
   const durMin=cur.durationMin||defMin||(kind==="amrap"?12:Math.max(cexos.length,8));
   const total=durMin*60;
   const supTours=cur.tours||(cexos[0]&&cexos[0].sets)||4;
   useEffect(()=>()=>{clearInterval(ref.current);clearInterval(restRef.current);},[]);
-  useEffect(()=>{clearInterval(ref.current);clearInterval(restRef.current);setRunning(false);setElapsed(0);setRounds(0);setChecked({});setSi(0);setStour(1);setResting(0);lastMin.current=0;},[bi]);
+  useEffect(()=>{clearInterval(ref.current);clearInterval(restRef.current);setRunning(false);setElapsed(0);setRounds(0);setChecked({});setSi(0);setStour(1);setResting(0);lastMin.current=0;occRef.current={};},[bi]);
   const goNext=()=>{clearInterval(ref.current);clearInterval(restRef.current);if(lastBlock){onAllDone&&onAllDone();onClose&&onClose();}else{setBi(b=>b+1);}};
-  const startTimer=()=>{if(running||total<=0)return;setRunning(true);lastMin.current=Math.floor(elapsed/60);const tt=total;const isEmom=kind==="emom";ref.current=setInterval(()=>{setElapsed(p=>{const n=p+1;if(isEmom){const cm=Math.floor(n/60);if(cm!==lastMin.current&&n<tt){lastMin.current=cm;beep();}}if(n>=tt){clearInterval(ref.current);beep();setRunning(false);setTimeout(()=>goNext(),900);return tt;}return n;});},1000);};
+  const startTimer=()=>{if(running||total<=0)return;setRunning(true);lastMin.current=Math.floor(elapsed/60);const tt=total;const isEmom=kind==="emom";ref.current=setInterval(()=>{setElapsed(p=>{const n=p+1;if(isEmom){const cm=Math.floor(n/60);if(cm!==lastMin.current&&n<tt){const finishedEx=cexos.length?cexos[lastMin.current%cexos.length]:null;logOccurrence(finishedEx);lastMin.current=cm;beep();}}if(n>=tt){clearInterval(ref.current);if(isEmom&&cexos.length){logOccurrence(cexos[lastMin.current%cexos.length]);}beep();setRunning(false);setTimeout(()=>goNext(),900);return tt;}return n;});},1000);};
   const pause=()=>{clearInterval(ref.current);setRunning(false);};
   const reset=()=>{clearInterval(ref.current);setRunning(false);setElapsed(0);setRounds(0);lastMin.current=0;};
   const remaining=Math.max(0,total-elapsed);
@@ -1196,7 +1203,7 @@ function CircuitPlayer({mode,exos,onClose,defMin,blocks,onAllDone,startBlock}) {
   const secInMin=done?0:60-(elapsed%60);
   const emomEx=cexos.length?cexos[(curMin-1)%cexos.length]:null;
   const startRest=()=>{const rs=cur.restSec||90;setResting(rs);clearInterval(restRef.current);restRef.current=setInterval(()=>{setResting(pp=>{if(pp<=1){clearInterval(restRef.current);beep();return 0;}return pp-1;});},1000);};
-  const validateSup=()=>{if(resting>0)return;if(si<cexos.length-1){setSi(si+1);}else{setSi(0);if(stour>=supTours){goNext();}else{setStour(stour+1);startRest();}}};
+  const validateSup=()=>{if(resting>0)return;logOccurrence(cexos[si]);if(si<cexos.length-1){setSi(si+1);}else{setSi(0);if(stour>=supTours){goNext();}else{setStour(stour+1);startRest();}}};
   const HEAD=(
     <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"16px 20px",flexShrink:0}}>
       <div><div style={{fontSize:20,fontWeight:700,color:C.ink}}>{cur.label||(kind==="amrap"?"AMRAP":kind==="emom"?"EMOM":kind==="circuit"?"Circuit":"Superset")}</div><div style={{fontSize:12,color:C.ink4,marginTop:2}}>Bloc {bi+1}/{BLK.length} · {cexos.length} exercices</div></div>
@@ -1246,7 +1253,7 @@ function CircuitPlayer({mode,exos,onClose,defMin,blocks,onAllDone,startBlock}) {
     FOOT=(<div style={{display:"flex",gap:10,padding:"12px 20px calc(12px + env(safe-area-inset-bottom))",flexShrink:0}}>
       <Tap onTap={running?pause:reset} style={{padding:"16px 22px",borderRadius:14,background:running?C.redDim:C.s2,border:running?`1px solid ${C.red}`:"none",display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{fontSize:15,fontWeight:600,color:running?C.red:C.ink3}}>{running?"Pause":"Reset"}</span></Tap>
       {(kind==="amrap"&&running&&!done)
-        ? <Tap onTap={()=>{setRounds(r=>r+1);setChecked({});}} style={{flex:1,padding:"16px",borderRadius:14,background:C.green,display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{fontSize:16,fontWeight:700,color:"#000"}}>+1 tour</span></Tap>
+        ? <Tap onTap={()=>{cexos.forEach(logOccurrence);setRounds(r=>r+1);setChecked({});}} style={{flex:1,padding:"16px",borderRadius:14,background:C.green,display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{fontSize:16,fontWeight:700,color:"#000"}}>+1 tour</span></Tap>
         : (!running ? <Tap onTap={startTimer} style={{flex:1,padding:"16px",borderRadius:14,background:C.blue,display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{fontSize:16,fontWeight:700,color:"#000"}}>{elapsed>0?"Reprendre":"Démarrer le bloc"}</span></Tap> : <div style={{flex:1}}/>)}
     </div>);
   }
@@ -2384,7 +2391,7 @@ function SettingsTab({user,excluded,onToggleExclude,onSignOut,onReset,onOpenLibr
           <span style={{fontSize:17,color:C.red}}>›</span>
         </Tap>
       </div>
-      <div style={{fontSize:12,color:C.ink4,textAlign:"center",marginTop:28}}>SŌMA · {"S"+weekNumber()} · {DB.length} exercices · build 23.49a</div>
+      <div style={{fontSize:12,color:C.ink4,textAlign:"center",marginTop:28}}>SŌMA · {"S"+weekNumber()} · {DB.length} exercices · build 23.50a</div>
     </div>
   );
 }
@@ -3184,7 +3191,7 @@ const NAV=[{id:"home",l:"Accueil"},{id:"seance",l:"Séances"},{id:"stats",l:"Sta
                           <span style={{fontSize:12,fontWeight:700,color:C.green}}>Voir le rapport →</span>
                         </Tap>
                       ):isPastMissed?null:(
-                        <Tap onTap={()=>{setSessionActive(true);}} style={{flex:1,padding:"16px",borderRadius:15,background:C.blue,display:"flex",alignItems:"center",justifyContent:"center"}}>
+                        <Tap onTap={()=>{setSessionActive(true);if(!clock.running&&clock.sec===0)clock.start();}} style={{flex:1,padding:"16px",borderRadius:15,background:C.blue,display:"flex",alignItems:"center",justifyContent:"center"}}>
                           <span style={{fontSize:17,fontWeight:600,color:"#000"}}>Démarrer</span>
                         </Tap>
                       )}
@@ -3319,11 +3326,20 @@ const NAV=[{id:"home",l:"Accueil"},{id:"seance",l:"Séances"},{id:"stats",l:"Sta
       {focusIdx!=null&&exos[focusIdx]&&(
         <ExerciseFocus key={exos[focusIdx].id} ex={exos[focusIdx]} idx={focusIdx} count={exos.length} dayIdx={dayIdx} sDate={sDate}
           log={log} onLogSet={saveLog} onDetail={e=>setDetailEx(e)}
-          onClose={()=>setFocusIdx(null)} hasNext={focusIdx<exos.length-1} onNext={()=>setFocusIdx(focusIdx+1)}/>
+          onClose={()=>setFocusIdx(null)} hasNext={focusIdx<exos.length-1} onNext={()=>{
+            const _n=exos[focusIdx+1];
+            if(_n&&_n.circuitId){
+              const _g=exos.filter(e=>e.circuitId===_n.circuitId);
+              setFocusIdx(null);
+              setSupBlock({label:_n.m||"Superset",kind:_g.length>=3?"circuit":"superset",exercises:_g,restSec:90,tours:(_g[0]&&_g[0].sets)||4});
+            }else{
+              setFocusIdx(focusIdx+1);
+            }
+          }}/>
       )}
-      {supBlock&&<CircuitPlayer mode={supBlock.kind} exos={supBlock.exercises} blocks={[supBlock]} onClose={()=>setSupBlock(null)} onAllDone={()=>{}}/>}
+      {supBlock&&<CircuitPlayer mode={supBlock.kind} exos={supBlock.exercises} blocks={[supBlock]} onClose={()=>setSupBlock(null)} onAllDone={()=>{}} log={log} onLogSet={saveLog} sDate={sDate}/>}
       {showCircuit&&sessionMode!=="classique"&&exos.length>0&&(
-        <CircuitPlayer mode={sessionMode} exos={exos} blocks={day.blocks} defMin={sessionMode==="amrap"?(day.timeCapMin||12):(day.emomMinutes||Math.max(exos.length,8))} onClose={()=>setShowCircuit(false)} onAllDone={()=>{}} startBlock={circuitStart}/>
+        <CircuitPlayer mode={sessionMode} exos={exos} blocks={day.blocks} defMin={sessionMode==="amrap"?(day.timeCapMin||12):(day.emomMinutes||Math.max(exos.length,8))} onClose={()=>setShowCircuit(false)} onAllDone={()=>{clock.stop();setShowFeedback(true);}} startBlock={circuitStart} log={log} onLogSet={saveLog} sDate={sDate}/>
       )}
 
       {/* BOTTOM NAV */}
