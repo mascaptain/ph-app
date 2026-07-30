@@ -1710,7 +1710,11 @@ function ExerciseRowCollapsed({ex,dayIdx,sDate,log,idx,onOpen,onReplace,doneSess
   // Pour une seance enregistree, les charges affichees sont celles REELLEMENT faites
   // (setsDetail), pas la rampe theorique 70%->100% que fabrique setPlanFor.
   const sd=(savedEx&&Array.isArray(savedEx.setsDetail)&&savedEx.setsDetail.length)?savedEx.setsDetail:null;
-  const ws=sd?sd.map(x=>Number(x.weight)||0):null;
+  // Sans detail serie par serie (seances anterieures au S5), la charge enregistree reste un
+  // FAIT unique : on l'affiche telle quelle. La rampe 70%->100% de setPlanFor est une
+  // prescription, elle n'a rien a faire sur une seance deja realisee.
+  const ws=sd?sd.map(x=>Number(x.weight)||0)
+    :(savedEx&&Number(savedEx.weight)>0?[Number(savedEx.weight)]:null);
   const w0=ws?ws[0]:plan[0].w, wn=ws?ws[ws.length-1]:plan[n-1].w;
   const wlabel=w0>0?(w0===wn?`${w0} kg`:`${w0}→${wn} kg`):"PdC";
   const restLbl=ex.rest>0?(ex.rest>=60?fmtMSS(ex.rest):`${ex.rest}s`):null;
@@ -3055,7 +3059,7 @@ function SettingsTab({user,excluded,onToggleExclude,onSignOut,onReset,onOpenLibr
           <span style={{fontSize:17,color:C.red}}>›</span>
         </Tap>
       </div>
-      <div style={{fontSize:12,color:C.ink4,textAlign:"center",marginTop:28}}>SŌMA · {"S"+weekNumber()} · {DB.length} exercices · build 23.67a</div>
+      <div style={{fontSize:12,color:C.ink4,textAlign:"center",marginTop:28}}>SŌMA · {"S"+weekNumber()} · {DB.length} exercices · build 23.68a</div>
     </div>
   );
 }
@@ -3984,7 +3988,11 @@ export default function SomaApp() {
   const isPastMissed=!!(day?.salle&&!isDayDone&&new Date(sDate+"T00:00:00")<new Date(new Date().toDateString()));
   const locked=isDayDone||isPastMissed;
   const isRest=!day?.salle;
-  const exos=((isDayDone&&doneSession)?(doneSession.exercises||[]):(aiOverride?.exercises||day?.exercises||[])).filter(e=>!excluded.includes(e.id));
+  // Pour une journee close on part de doneDay (exercices enregistres REMIS EN FORME : kg issu
+  // de weight, sets issu de completedSets) et non de doneSession.exercises brut. Lire la base
+  // directement ici court-circuitait toute la normalisation : d'ou les charges affichees en
+  // "PdC" et les blocs perdus, alors meme que la mise en forme existait juste au-dessus.
+  const exos=((isDayDone&&doneDay)?(doneDay.exercises||[]):(aiOverride?.exercises||day?.exercises||[])).filter(e=>!excluded.includes(e.id));
   // Le badge n'annoncait que le mode principal : une seance classique comportant des supersets
   // s'affichait "Classique" tout court, y compris une fois terminee. L'agencement reel est
   // desormais lisible, et il survit a la cloture puisqu'il est sauvegarde avec les exercices.
