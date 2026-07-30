@@ -1195,6 +1195,12 @@ function HomeTab({profile,streak,sessions,weights,todaySession,onStartToday,acce
   const lastWeekSessions=sessions.filter(s=>{const sd=new Date(s.date);return sd>=lwStart&&sd<wk;});
   const lastWeekVol=lastWeekSessions.reduce((a,s)=>a+(s.totalKg||0),0);
   const volDeltaPct=lastWeekVol>0?Math.round((weekVol-lastWeekVol)/lastWeekVol*100):null;
+  // Temps d'entrainement cumule de la semaine : le tonnage seul ne dit rien de la charge
+  // de travail d'une semaine faite de seances courtes et denses.
+  const fmtMin=(m)=>m>=60?`${Math.floor(m/60)}h${String(m%60).padStart(2,"0")}`:`${m} min`;
+  const weekMin=Math.round(weekSessions.reduce((a,s)=>a+(Number(s.duration)||0),0)/60);
+  const lastWeekMin=Math.round(lastWeekSessions.reduce((a,s)=>a+(Number(s.duration)||0),0)/60);
+  const minDelta=weekMin-lastWeekMin;
   const sessDelta=weekSessions.length-lastWeekSessions.length;
   const showBilan=lastWeekSessions.length>0||weekSessions.length>0;
   const bw=weights&&weights.length?weights[weights.length-1].kg:(profile&&profile.weight_kg);
@@ -1228,6 +1234,7 @@ function HomeTab({profile,streak,sessions,weights,todaySession,onStartToday,acce
     </div>
     <div style={{display:"flex",gap:10,marginBottom:12}}>
       <Stat v={Math.round(weekVol).toLocaleString("fr-FR")} l="Volume semaine" sub="kg soulevés"/>
+      <Stat v={fmtMin(weekMin)} l="Temps semaine" sub="d'entraînement"/>
       <Stat v={totalSessions} l="Total" sub="séances faites"/>
     </div>
     {showBilan&&<div style={{background:C.s1,borderRadius:16,padding:"16px",marginBottom:12}}>
@@ -1235,6 +1242,10 @@ function HomeTab({profile,streak,sessions,weights,todaySession,onStartToday,acce
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
         <span style={{fontSize:13,color:C.ink3}}>Séances</span>
         <span style={{fontSize:14,fontWeight:700,color:C.ink}}>{weekSessions.length} <span style={{color:C.ink4,fontWeight:600}}>vs {lastWeekSessions.length}</span> {sessDelta!==0&&<span style={{color:sessDelta>0?C.green:C.red}}>{sessDelta>0?"▲":"▼"}{Math.abs(sessDelta)}</span>}</span>
+      </div>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+        <span style={{fontSize:13,color:C.ink3}}>Temps</span>
+        <span style={{fontSize:14,fontWeight:700,color:C.ink}}>{fmtMin(weekMin)} <span style={{color:C.ink4,fontWeight:600}}>vs {fmtMin(lastWeekMin)}</span> {minDelta!==0&&<span style={{color:minDelta>0?C.green:C.red}}>{minDelta>0?"▲+":"▼"}{Math.abs(minDelta)} min</span>}</span>
       </div>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
         <span style={{fontSize:13,color:C.ink3}}>Volume</span>
@@ -2008,7 +2019,7 @@ function LoadChart({data,color=C.blue}){
     </div>
   </div>);
 }
-function StatsTab({sessions,weights,accent,onOpenPhotos,pinnedPBs,onManagePBs,activeSkills,onManageSkills,onOpenRewards}) {
+function StatsTab({sessions,weights,accent,onOpenPhotos,pinnedPBs,onManagePBs,activeSkills,onManageSkills,onOpenRewards,trainingDaysPerWeek}) {
   const total=sessions.length,totalKg=sessions.reduce((a,s)=>a+(s.totalKg||0),0);
   const avgScore=total?Math.round(sessions.reduce((a,s)=>a+computeScore(s.totalKg,s.totalSets,s.feedback),0)/total):0;
   const pbs=useMemo(()=>computePBs(sessions),[sessions]);
@@ -2603,7 +2614,7 @@ function SettingsTab({user,excluded,onToggleExclude,onSignOut,onReset,onOpenLibr
           <span style={{fontSize:17,color:C.red}}>›</span>
         </Tap>
       </div>
-      <div style={{fontSize:12,color:C.ink4,textAlign:"center",marginTop:28}}>SŌMA · {"S"+weekNumber()} · {DB.length} exercices · build 23.58a</div>
+      <div style={{fontSize:12,color:C.ink4,textAlign:"center",marginTop:28}}>SŌMA · {"S"+weekNumber()} · {DB.length} exercices · build 23.59a</div>
     </div>
   );
 }
@@ -3236,7 +3247,7 @@ export default function SomaApp() {
     const src=aiOverride?.exercises||day?.exercises||[];
     const newExos=src.map(ex=>ex.id===replaced.id?{...newEx,sets:ex.sets}:ex);
     setAiOverride(prev=>({...(prev||{titre:day.label,abs:day.abs}),exercises:newExos}));
-    setShowPicker(null);setFullScreenEx(null);setFocusIdx(null);setShowCircuit(false);setSessionMode("classique");
+    setShowPicker(null);setFullScreenEx(null);setFocusIdx(null);setShowCircuit(false);setModeOverride("classique");
   };
 
   const handleFeedbackSave=(fb)=>{
@@ -3677,7 +3688,7 @@ const NAV=[{id:"home",l:"Accueil"},{id:"seance",l:"Séances"},{id:"stats",l:"Sta
               )}
             </div>
           )}
-          {tab==="stats"&&<><StatsTab sessions={sessions} weights={weights} accent={accent} pinnedPBs={profile?.pinned_pbs} onManagePBs={()=>setShowPBManager(true)} activeSkills={profile?.active_skills} onManageSkills={()=>setShowSkillManager(true)} onOpenRewards={()=>setShowRewardsManager(true)}/><HistoryTab sessions={sessions} onSelect={setShowReport} accent={accent} onOpenPhotos={()=>setShowPhotos(true)} photos={photos} urls={photoUrls}/></>}
+          {tab==="stats"&&<><StatsTab sessions={sessions} weights={weights} accent={accent} trainingDaysPerWeek={trainingDaysPerWeek} pinnedPBs={profile?.pinned_pbs} onManagePBs={()=>setShowPBManager(true)} activeSkills={profile?.active_skills} onManageSkills={()=>setShowSkillManager(true)} onOpenRewards={()=>setShowRewardsManager(true)}/><HistoryTab sessions={sessions} onSelect={setShowReport} accent={accent} onOpenPhotos={()=>setShowPhotos(true)} photos={photos} urls={photoUrls}/></>}
           {tab==="settings"&&<SettingsTab user={user} excluded={excluded} onToggleExclude={toggleExclude} onOpenLibrary={()=>setShowLibrary(true)} profile={profile} schedule={schedule} avatarUrl={avatarUrl} onUpdateConfig={updateConfig} onOpenScheduleEditor={()=>setShowSched(true)} onRedoOnboarding={()=>setShowOnboardingRedo(true)}
             onSignOut={async()=>{await supabase.auth.signOut();setUser(null);setLog({});setWeights({});setSessions([]);setExcluded([]);setStreak(0);}}
             onReset={async()=>{
