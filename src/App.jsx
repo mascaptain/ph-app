@@ -2583,7 +2583,7 @@ function SettingsTab({user,excluded,onToggleExclude,onSignOut,onReset,onOpenLibr
           <span style={{fontSize:17,color:C.red}}>›</span>
         </Tap>
       </div>
-      <div style={{fontSize:12,color:C.ink4,textAlign:"center",marginTop:28}}>SŌMA · {"S"+weekNumber()} · {DB.length} exercices · build 23.56a</div>
+      <div style={{fontSize:12,color:C.ink4,textAlign:"center",marginTop:28}}>SŌMA · {"S"+weekNumber()} · {DB.length} exercices · build 23.57a</div>
     </div>
   );
 }
@@ -3081,6 +3081,7 @@ export default function SomaApp() {
         exercises:typeof s.exercises==="string"?JSON.parse(s.exercises||"[]"):(s.exercises||[]),
         feedback:typeof s.feedback==="string"?JSON.parse(s.feedback||"null"):s.feedback,
       }));
+      if(strData) longestRef.current=Number(strData.longest_streak)||0;
       setSessions(norm);computeStreak(norm);
       if(pbs?.length){const w={};pbs.forEach(pb=>{w[pb.exercise_id||pb.exercise_name]=pb.weight_kg;});setWeights(prev=>{const next={...prev,...w};persist(uid,{weights:next});return next;});}
       if(strData) setStreak(strData.current_streak||0);
@@ -3092,6 +3093,22 @@ export default function SomaApp() {
   },[]);
 
   useEffect(()=>{if(user) loadUserData(user.id);},[user]);
+
+  // La table streaks etait lue au demarrage et supprimee au reset, mais JAMAIS ecrite :
+  // 0 ligne en base, la serie etait donc recalculee en local a chaque chargement et
+  // n'existait nulle part cote serveur. Elle est desormais tenue a jour a chaque calcul.
+  const longestRef=useRef(0);
+  const persistStreak=useCallback((cnt,sess)=>{
+    const id=user?.id; if(!id) return;
+    const longest=Math.max(cnt,longestRef.current||0);
+    longestRef.current=longest;
+    const dates=(sess||[]).map(s=>s.date).filter(Boolean).sort();
+    supabase.from("streaks").upsert({
+      user_id:id,current_streak:cnt,longest_streak:longest,
+      last_session_date:dates[dates.length-1]||null,
+      total_sessions:(sess||[]).length,updated_at:new Date().toISOString(),
+    },{onConflict:"user_id"}).then(({error})=>{ if(error) console.error("SB streak:",error.message); });
+  },[user]);
 
   function computeStreak(sess){
     const dateSet=new Set((sess||[]).map(x=>x.date));
@@ -3108,6 +3125,7 @@ export default function SomaApp() {
       break;
     }
     setStreak(cnt);
+    persistStreak(cnt,sess);
   }
 
   // ── Persistance : 100% serveur ──
@@ -3298,7 +3316,7 @@ export default function SomaApp() {
         session_index:entry.sessionIndex,
         mode:sessionMode,
         total_kg:Math.round(totalKg),total_sets:totalSets,
-        duration_seconds:durationSec,score,
+        duration_seconds:durationSec,score,completed:true,
         exercises:JSON.stringify(exercisesData),
         feedback:JSON.stringify(fb),
         notes:fb.notes||""
