@@ -630,11 +630,22 @@ const fmtDateShort=(d)=>{ if(!d) return ""; const dd=(typeof d==="string")?new D
 // automatique n'est possible, c'est pour cela qu'il est demande en fin d'exercice.
 // RPE = reps en reserve : 10 = plus rien, 9 = 1 rep, 8 = 2 reps, 7 = 3 reps.
 const RPE_STEP={6:0.05,7:0.035,8:0.02,9:0,10:-0.05};
-const nextLoad=(prevKg,prevRpe,fallback)=>{
+// Increment reel du materiel : une barre monte par 2,5 kg, un kettlebell ou une paire
+// d'halteres par 2 kg. Sans cela, un ajustement de 5% sur 10 kg (0,5 kg) etait avale par
+// l'arrondi et le ressenti n'avait AUCUN effet sur les charges legeres.
+const loadStep=(eq)=>(eq==="kb"||eq==="db")?2:2.5;
+const nextLoad=(prevKg,prevRpe,fallback,step)=>{
   if(!(prevKg>0)) return fallback;
+  const st=step||2.5;
   const r=Math.round(Number(prevRpe));
   const k=(r>=6&&r<=10)?RPE_STEP[r]:0;
-  return Math.max(2.5,Math.round(prevKg*(1+k)/2.5)*2.5);
+  if(!k) return prevKg;
+  let out=Math.round(prevKg*(1+k)/st)*st;
+  // Un ressenti non neutre doit TOUJOURS deplacer la charge d'au moins un increment,
+  // sinon le coach reste muet sur tout le materiel leger.
+  if(k>0&&out<=prevKg) out=prevKg+st;
+  if(k<0&&out>=prevKg) out=prevKg-st;
+  return Math.max(st,Math.round(out*10)/10);
 };
 // Derniere performance reelle par exercice (la plus recente qui compte des series faites).
 const perfIndex=(sessions)=>{
@@ -670,7 +681,7 @@ const personalizeDay=(day,profile,week,perf)=>{
     const p=perf&&perf[ex.id];
     // Ta derniere seance prime sur toute estimation : c'est la seule donnee vraie.
     if(p&&p.kg>0&&ex.eq!=="bw"){
-      kg=nextLoad(p.kg,p.rpe,ex.kg);
+      kg=nextLoad(p.kg,p.rpe,ex.kg,loadStep(ex.eq));
       if(ph.deload) kg=Math.max(2.5,Math.round(kg*0.85/2.5)*2.5);
     }
     else if(rm>0){ kg=Math.max(2.5,Math.round(rm*intensity/2.5)*2.5); }
@@ -684,9 +695,7 @@ const personalizeDay=(day,profile,week,perf)=>{
   });
   return {...day,exercises};
 };
-const MODE_WEEK_PLANS={force:["classique","classique","classique","classique+circuit","classique"],seche:["classique+circuit","amrap","classique+circuit","emom","classique+circuit"],hybride:["classique","emom","classique+circuit","amrap","classique"],endurance:["amrap","classique+circuit","emom","amrap","classique+circuit"]};
 const baseGoal=(g)=>g==="force"?"force":g==="endurance"?"endurance":g==="seche"?"seche":"hybride";
-const assignMode=(day,idx,profile,week)=>{ if(!day||!day.salle) return day; const plan=MODE_WEEK_PLANS[baseGoal(profile&&profile.goal)]||MODE_WEEK_PLANS.hybride; let tag=plan[idx%plan.length]; const ph=phaseOf(week); if(ph.deload) tag=tag.indexOf("circuit")>=0?"classique+circuit":"classique"; const circuit=tag.indexOf("circuit")>=0; const recommendedMode=tag.indexOf("amrap")>=0?"amrap":tag.indexOf("emom")>=0?"emom":"classique"; return {...day,recommendedMode,circuit}; };
 const buildCircuits=(day,profile)=>{ const exos=day.exercises||[]; if(exos.length<3) return day; const goal=baseGoal(profile&&profile.goal); const gs=(goal==="seche"||goal==="endurance")?3:2; const out=exos.map(e=>({...e})); let cid=0; for(let i=1;i<out.length;i+=gs){ const slice=out.slice(i,i+gs); if(slice.length<2) break; cid++; const gt=slice.length>=3?"circuit":"superset";
   // Un superset/circuit tourne par definition le MEME nombre de tours pour tous ses exercices.
   // Les membres gardaient chacun leur nombre de series propre issu de personalizeDay, alors que
@@ -703,9 +712,18 @@ const MET_EQ_BASE={kb:3,cd:3,bw:2,db:2,bar:0,mc:0};
 const metconScore=(ex,goal)=>{ const n=String(ex.n||"").toLowerCase(); if(MET_BAN.some(k=>n.indexOf(k)>=0)) return 0; let s=MET_EQ_BASE[ex.eq]||0; if(s===0) return 0; if(MET_KW.some(k=>n.indexOf(k)>=0)) s+=2; const e=ex.eq; if(goal==="endurance") s+=(e==="cd"?2:e==="bw"?1:0); else if(goal==="seche") s+=((e==="bw"||e==="cd")?1:0); else if(goal==="force") s+=((e==="kb"||e==="db")?1:0); else s+=((e==="kb"||e==="db")?1:0); return s; };
 const metRepsAmrap=(ex)=> ex.eq==="cd"?0:ex.eq==="bw"?12:ex.eq==="kb"?12:10;
 const metRepsEmom=(ex)=> ex.eq==="cd"?0:ex.eq==="bw"?12:ex.eq==="kb"?10:8;
-const metKg=(ex,profile,f)=>{ if(ex.eq==="bw"||ex.eq==="cd") return 0; const sc=engineScale(profile); const base=(typeof ex.kg==="number"?ex.kg:0)*sc*f; return base>0?Math.max(4,Math.round(base/2)*2):0; };
-const buildMetcon=(day,mode,profile,week,seed)=>{ if(!day||!day.salle) return day; const goal=baseGoal(profile&&profile.goal); const equip=(profile&&profile.equipment)||[]; const ph=phaseOf(week); let pool=DB.filter(e=>metconScore(e,goal)>0).filter(e=> e.eq==="bw" || !equip.length || equip.indexOf(e.eq)>=0); const seen={}; pool=pool.filter(e=>{ if(seen[e.n]) return false; seen[e.n]=1; return true; }); const dayEqs={};(day.exercises||[]).forEach(e=>{dayEqs[e.eq]=(dayEqs[e.eq]||0)+1;});pool=pool.map(e=>({e,s:metconScore(e,goal)+((dayEqs[e.eq]||0)>0?2:0)})).sort((a,b)=>b.s-a.s).map(x=>x.e); if(pool.length<6) pool=DB.filter(e=>metconScore(e,"hybride")>0); const off=pool.length?(((week-1)*3+(seed||0)*5)%pool.length):0; const rot=pool.slice(off).concat(pool.slice(0,off)); const lvl=profile&&profile.level; let nBlocks=lvl==="avance"?3:lvl==="debutant"?2:3; if(ph.deload) nBlocks=2; const perBlock=3; const rounds=lvl==="debutant"?3:lvl==="avance"?4:3; const cap=lvl==="avance"?12:10; const f=mode==="amrap"?0.55:0.65; const used={}; const blocks=[]; for(let b=0;b<nBlocks;b++){ const exs=[]; let cd=0; const mus={}; while(exs.length<perBlock){ let e=rot.find(x=>!used[x.n]&&(x.eq!=="cd"||cd<1)&&!mus[primaryMuscle(x.m)]); if(!e) e=rot.find(x=>!used[x.n]&&(x.eq!=="cd"||cd<1)); if(!e) e=rot.find(x=>!used[x.n]); if(!e) break; used[e.n]=1; if(e.eq==="cd")cd++; mus[primaryMuscle(e.m)]=1; exs.push(e); } if(!exs.length) break; const exercises=exs.map(ex=>{ const kg=metKg(ex,profile,f); if(mode==="amrap"){ const r=metRepsAmrap(ex); return {...ex,kg,reps:String(ex.eq==="cd"?"40s":r),repsPerRound:r,modeTag:"AMRAP"}; } const r=metRepsEmom(ex); return {...ex,kg,reps:String(ex.eq==="cd"?"40s":r),repsPerMinute:r,modeTag:"EMOM"}; }); const durationMin=mode==="amrap"?cap:(exercises.length*rounds); blocks.push({label:(mode==="amrap"?"AMRAP ":"EMOM ")+(b+1),kind:mode,durationMin,rounds:mode==="emom"?rounds:0,exercises}); } const totalMin=blocks.reduce((a,bl)=>a+bl.durationMin,0)+Math.max(0,blocks.length-1)*2; const flat=[]; blocks.forEach((bl,bidx)=>bl.exercises.forEach(e=>{e.blockIdx=bidx;flat.push(e);})); return {...day,mode,metcon:true,blocks,totalMin,timeCapMin:blocks[0]?blocks[0].durationMin:cap,emomMinutes:blocks[0]?blocks[0].durationMin:8,exercises:flat}; };
-const applyMode=(day,mode,profile,week,seed)=>{ if(!day||!day.salle) return day; if(mode==="amrap"||mode==="emom") return buildMetcon(day,mode,profile,week,seed); return day.circuit?buildCircuits(day,profile):day; };
+const metKg=(ex,profile,f,perf)=>{
+  if(ex.eq==="bw"||ex.eq==="cd") return 0;
+  // Le RPE ressenti en EMOM/AMRAP ne servait a rien : les charges de metcon etaient
+  // toujours recalculees depuis le bareme theorique. Elles suivent maintenant l'historique,
+  // sans quoi le debrief de fin de bloc n'aurait aucun effet reel.
+  const p=perf&&perf[ex.id];
+  if(p&&p.kg>0) return nextLoad(p.kg,p.rpe,p.kg,loadStep(ex.eq));
+  const sc=engineScale(profile); const base=(typeof ex.kg==="number"?ex.kg:0)*sc*f;
+  return base>0?Math.max(4,Math.round(base/2)*2):0;
+};
+const buildMetcon=(day,mode,profile,week,seed,perf)=>{ if(!day||!day.salle) return day; const goal=baseGoal(profile&&profile.goal); const equip=(profile&&profile.equipment)||[]; const ph=phaseOf(week); let pool=DB.filter(e=>metconScore(e,goal)>0).filter(e=> e.eq==="bw" || !equip.length || equip.indexOf(e.eq)>=0); const seen={}; pool=pool.filter(e=>{ if(seen[e.n]) return false; seen[e.n]=1; return true; }); const dayEqs={};(day.exercises||[]).forEach(e=>{dayEqs[e.eq]=(dayEqs[e.eq]||0)+1;});pool=pool.map(e=>({e,s:metconScore(e,goal)+((dayEqs[e.eq]||0)>0?2:0)})).sort((a,b)=>b.s-a.s).map(x=>x.e); if(pool.length<6) pool=DB.filter(e=>metconScore(e,"hybride")>0); const off=pool.length?(((week-1)*3+(seed||0)*5)%pool.length):0; const rot=pool.slice(off).concat(pool.slice(0,off)); const lvl=profile&&profile.level; let nBlocks=lvl==="avance"?3:lvl==="debutant"?2:3; if(ph.deload) nBlocks=2; const perBlock=3; const rounds=lvl==="debutant"?3:lvl==="avance"?4:3; const cap=lvl==="avance"?12:10; const f=mode==="amrap"?0.55:0.65; const used={}; const blocks=[]; for(let b=0;b<nBlocks;b++){ const exs=[]; let cd=0; const mus={}; while(exs.length<perBlock){ let e=rot.find(x=>!used[x.n]&&(x.eq!=="cd"||cd<1)&&!mus[primaryMuscle(x.m)]); if(!e) e=rot.find(x=>!used[x.n]&&(x.eq!=="cd"||cd<1)); if(!e) e=rot.find(x=>!used[x.n]); if(!e) break; used[e.n]=1; if(e.eq==="cd")cd++; mus[primaryMuscle(e.m)]=1; exs.push(e); } if(!exs.length) break; const exercises=exs.map(ex=>{ const kg=metKg(ex,profile,f,perf); if(mode==="amrap"){ const r=metRepsAmrap(ex); return {...ex,kg,reps:String(ex.eq==="cd"?"40s":r),repsPerRound:r,modeTag:"AMRAP"}; } const r=metRepsEmom(ex); return {...ex,kg,reps:String(ex.eq==="cd"?"40s":r),repsPerMinute:r,modeTag:"EMOM"}; }); const durationMin=mode==="amrap"?cap:(exercises.length*rounds); blocks.push({label:(mode==="amrap"?"AMRAP ":"EMOM ")+(b+1),kind:mode,durationMin,rounds:mode==="emom"?rounds:0,exercises}); } const totalMin=blocks.reduce((a,bl)=>a+bl.durationMin,0)+Math.max(0,blocks.length-1)*2; const flat=[]; blocks.forEach((bl,bidx)=>bl.exercises.forEach(e=>{e.blockIdx=bidx;flat.push(e);})); return {...day,mode,metcon:true,blocks,totalMin,timeCapMin:blocks[0]?blocks[0].durationMin:cap,emomMinutes:blocks[0]?blocks[0].durationMin:8,exercises:flat}; };
+const applyMode=(day,mode,profile,week,seed,perf)=>{ if(!day||!day.salle) return day; if(mode==="amrap"||mode==="emom") return buildMetcon(day,mode,profile,week,seed,perf); return day.circuit?buildCircuits(day,profile):day; };
 const primaryMuscle = (m) => String(m||"").split("·")[0].trim().toLowerCase();
 const altPool = (ex) => DB.filter(e=>e.id!==ex.id && e.eq===ex.eq && primaryMuscle(e.m)===primaryMuscle(ex.m));
 const rotateDay = (day,w) => {
@@ -1040,34 +1058,6 @@ function Tap({children,onTap,style,disabled}) {
 
 
 // ─── WELCOME SCREEN ──────────────────────────────────────────────────────────
-function WelcomeScreen({user,todaySession,streak,onStart,onSkip}){
-  const h=new Date().getHours();
-  const greet=h<12?"Bonjour":h<18?"Bon après-midi":"Bonsoir";
-  const name=user?.user_metadata?.name||"Athlète";
-  const isRest=!todaySession?.salle;
-  return(
-    <div style={{position:"fixed",inset:0,background:C.bg,zIndex:850,display:"flex",flexDirection:"column",fontFamily:F,paddingTop:"env(safe-area-inset-top)",paddingBottom:"env(safe-area-inset-bottom)"}}>
-      <div style={{flex:1,display:"flex",flexDirection:"column",justifyContent:"space-between",padding:"52px 24px 32px",maxWidth:480,margin:"0 auto",width:"100%"}}>
-        <div>
-          <div style={{fontSize:12,fontWeight:600,color:C.ink4,textTransform:"uppercase",letterSpacing:".14em",marginBottom:12}}>{greet}</div>
-          <div style={{fontSize:42,fontWeight:700,color:C.ink,letterSpacing:"-.03em",lineHeight:1.05,marginBottom:24}}>{name}</div>
-          {streak>0&&<div style={{display:"inline-flex",alignItems:"center",gap:8,padding:"8px 16px",borderRadius:980,background:C.orDim}}><span style={{fontSize:17,fontWeight:700,color:C.orange}}>{streak}</span><span style={{fontSize:14,color:C.orange}}>{" jours"}</span></div>}
-        </div>
-        <div style={{background:C.s1,borderRadius:22,padding:"24px",marginBottom:24}}>
-          <div style={{fontSize:11,fontWeight:600,color:C.ink4,textTransform:"uppercase",letterSpacing:".14em",marginBottom:12}}>{isRest?"Aujourd'hui":(todaySession?.day||"")+" · Séance du jour"}</div>
-          {isRest
-            ?<><div style={{fontSize:28,fontWeight:700,color:C.ink4,marginBottom:8}}>Récupération</div><div style={{fontSize:16,color:C.ink4}}>{todaySession?.muscle||"Repos actif"}</div></>
-            :<><div style={{fontSize:28,fontWeight:700,color:C.ink,letterSpacing:"-.02em",lineHeight:1.1,marginBottom:10}}>{todaySession?.label}</div><div style={{fontSize:16,color:C.ink3,marginBottom:18}}>{todaySession?.muscle}</div><div style={{display:"flex",gap:8}}><span style={{padding:"6px 12px",borderRadius:8,background:C.s3,fontSize:13,fontWeight:600,color:C.ink3}}>{(todaySession?.exercises||[]).length} exercices</span><span style={{padding:"6px 12px",borderRadius:8,background:C.s3,fontSize:13,fontWeight:600,color:C.ink3}}>{todaySession?.salle==="haut"?"Salle Haute":"Salle Basse"}</span></div></>
-          }
-        </div>
-        <div style={{display:"flex",flexDirection:"column",gap:10}}>
-          {!isRest&&<Tap onTap={onStart} style={{padding:"17px",borderRadius:15,background:C.blue,display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{fontSize:17,fontWeight:600,color:"#000"}}>Commencer</span></Tap>}
-          <Tap onTap={onSkip} style={{padding:"15px",borderRadius:15,border:`1px solid ${C.s4}`,display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{fontSize:17,fontWeight:600,color:C.ink3}}>{isRest?"Entrer":"Voir le programme"}</span></Tap>
-        </div>
-      </div>
-    </div>
-  );
-}
 // ─── AUTH SCREEN ─────────────────────────────────────────────────────────────
 function AuthScreen({onAuth}) {
   const[mode,setMode]=useState("login"); // login | signup | magic
@@ -1224,105 +1214,6 @@ function MiniRest({timer,label,onExpand}) {
 }
 
 // ─── EXERCISE FULL SCREEN ────────────────────────────────────────────────────
-function ExFullScreen({ex,log,onLogSet,onStartRest,onClose,lastKg,dayIdx,exercises,onNav}) {
-  const sets=typeof ex.sets==="number"?ex.sets:4;
-  const lk=`d${dayIdx}_${ex.id}`;
-  const defReps=(()=>{const m=String(ex.reps||"").match(/\d+/);return m?parseInt(m[0]):10;})();
-  const [rpe,setRpe]=useState(()=>Number(ex.rpe)||8);
-  const [rows,setRows]=useState(()=>Array.from({length:sets},(_,i)=>{const e=log[`${lk}_s${i}`];return{done:!!(e&&e.done),weight:(e&&e.weight!=null)?e.weight:(ex.kg||0),reps:(e&&e.reps!=null)?e.reps:defReps};}));
-  const completed=rows.filter(r=>r.done).length;
-  const allDone=sets>0&&completed===sets;
-  const list=exercises||[];
-  const idx=list.findIndex(e=>e.id===ex.id);
-  const total=list.length;
-  const writeLog=(i,r)=>onLogSet(`${lk}_s${i}`,{done:r.done,weight:r.weight,reps:r.reps,rpe,date:todayKey()});
-  const upd=(i,patch)=>setRows(rs=>{const nr=rs.map((r,j)=>j===i?{...r,...patch}:r);if(nr[i].done)writeLog(i,nr[i]);return nr;});
-  const toggle=i=>setRows(rs=>{const nr=rs.map((r,j)=>j===i?{...r,done:!r.done}:r);const r=nr[i];writeLog(i,r);if(r.done&&ex.rest>0)onStartRest(ex.rest,ex.n);return nr;});
-  const restLbl=ex.rest>=60?fmtMSS(ex.rest):`${ex.rest}s`;
-  return(
-    <div style={{position:"fixed",inset:0,background:C.bg,zIndex:Z.fullscreen,display:"flex",flexDirection:"column",fontFamily:F,animation:`fadeIn 200ms ${EO} both`,paddingTop:"env(safe-area-inset-top)",paddingBottom:"env(safe-area-inset-bottom)"}}>
-      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"16px 20px",borderBottom:`1px solid ${C.s3}`}}>
-        <Tap onTap={onClose} style={{width:40,height:40,borderRadius:10,background:C.s2,display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{fontSize:13,fontWeight:600,color:C.ink3}}>✕</span></Tap>
-        <div style={{fontSize:13,fontWeight:600,color:C.ink4,textTransform:"uppercase",letterSpacing:".1em"}}>{idx>=0?`Exercice ${idx+1}/${total}`:""}</div>
-        <div style={{fontSize:13,fontWeight:600,color:allDone?C.green:C.ink4}}>{completed}/{sets}</div>
-      </div>
-      <div style={{flex:1,overflowY:"auto",padding:"24px 20px"}}>
-        <div style={{fontSize:34,fontWeight:700,color:allDone?C.green:C.ink,letterSpacing:"-.02em",lineHeight:1.1,marginBottom:10,transition:`color 300ms ${EO}`}}>{ex.n}</div>
-        <div style={{display:"flex",gap:8,marginBottom:20,flexWrap:"wrap",alignItems:"center"}}>
-          <span style={{fontSize:14,color:C.ink3}}>{ex.m}</span><span style={{color:C.s4}}>·</span>
-          <span style={{fontSize:13,fontWeight:600,padding:"2px 10px",borderRadius:980,background:C.s2,color:C.ink4}}>{EQ_LABELS[ex.eq]}</span>
-          {ex.rest>0&&<><span style={{color:C.s4}}>·</span><span style={{fontSize:13,color:C.ink4}}>repos {restLbl}</span></>}
-        </div>
-        {lastKg>0&&<div style={{padding:"12px 16px",borderRadius:12,background:C.orDim,marginBottom:20}}><span style={{fontSize:14,fontWeight:600,color:C.orange}}>Dernière fois : {lastKg}kg · vise {lastKg+2.5}kg</span></div>}
-        {ex.cue&&<div style={{padding:"16px",borderRadius:14,background:C.s2,marginBottom:20}}><div style={{fontSize:11,fontWeight:600,color:C.ink4,textTransform:"uppercase",letterSpacing:".1em",marginBottom:8}}>Cue technique</div><div style={{fontSize:15,color:C.ink2,lineHeight:1.6}}>{ex.cue}</div></div>}
-        <div style={{fontSize:11,fontWeight:600,color:C.ink4,textTransform:"uppercase",letterSpacing:".1em",marginBottom:6}}>RPE — effort ressenti</div>
-        <div style={{display:"flex",gap:8,marginBottom:24}}>{[6,7,8,9,10].map(v=>(<Tap key={v} onTap={()=>setRpe(v)} style={{flex:1,height:42,borderRadius:11,background:rpe===v?C.blue:C.s2,display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{fontSize:15,fontWeight:700,color:rpe===v?"#000":C.ink3}}>{v}</span></Tap>))}</div>
-        <div style={{display:"flex",alignItems:"center",marginBottom:6,padding:"0 2px"}}>
-          <span style={{width:30,fontSize:11,fontWeight:600,color:C.ink4,textTransform:"uppercase"}}>Série</span>
-          <span style={{flex:1,textAlign:"center",fontSize:11,fontWeight:600,color:C.ink4,textTransform:"uppercase",letterSpacing:".08em"}}>Charge</span>
-          <span style={{fontSize:11,fontWeight:600,color:C.ink4,textTransform:"uppercase",letterSpacing:".08em",marginRight:8}}>Reps</span>
-          <span style={{width:44}}/>
-        </div>
-        {rows.map((r,i)=>(
-          <div key={i} style={{display:"flex",alignItems:"center",gap:8,padding:"10px 0",borderTop:`1px solid ${C.s3}`}}>
-            <span style={{fontSize:14,fontWeight:700,color:r.done?C.green:C.ink4,width:30,flexShrink:0}}>{i+1}</span>
-            <div style={{display:"flex",alignItems:"center",gap:6,flex:1,justifyContent:"center"}}>
-              <Tap onTap={()=>upd(i,{weight:Math.max(0,Math.round((r.weight-2.5)*10)/10)})} style={{width:36,height:36,borderRadius:9,background:C.s3,display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{fontSize:18,fontWeight:300,color:C.ink}}>−</span></Tap>
-              <span style={{fontSize:16,fontWeight:700,color:C.ink,minWidth:54,textAlign:"center"}}>{r.weight===0?"BW":`${r.weight}kg`}</span>
-              <Tap onTap={()=>upd(i,{weight:Math.round((r.weight+2.5)*10)/10})} style={{width:36,height:36,borderRadius:9,background:C.s3,display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{fontSize:18,fontWeight:300,color:C.ink}}>+</span></Tap>
-            </div>
-            <div style={{display:"flex",alignItems:"center",gap:5}}>
-              <Tap onTap={()=>upd(i,{reps:Math.max(1,r.reps-1)})} style={{width:34,height:34,borderRadius:9,background:C.s3,display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{fontSize:16,fontWeight:300,color:C.ink}}>−</span></Tap>
-              <span style={{fontSize:15,fontWeight:600,color:C.ink2,minWidth:24,textAlign:"center"}}>{r.reps}</span>
-              <Tap onTap={()=>upd(i,{reps:r.reps+1})} style={{width:34,height:34,borderRadius:9,background:C.s3,display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{fontSize:16,fontWeight:300,color:C.ink}}>+</span></Tap>
-            </div>
-            <Tap onTap={()=>toggle(i)} style={{width:44,height:44,borderRadius:12,border:`2px solid ${r.done?C.green:C.div}`,background:r.done?C.greenDim:C.s2,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}><span style={{fontSize:18,fontWeight:700,color:r.done?C.green:C.ink4}}>{r.done?"✓":""}</span></Tap>
-          </div>
-        ))}
-        <div style={{display:"flex",gap:10,marginTop:24}}>
-          {idx>0&&<Tap onTap={()=>onNav(-1)} style={{padding:"15px 18px",borderRadius:14,background:C.s2,display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{fontSize:15,fontWeight:600,color:C.ink3}}>← Préc.</span></Tap>}
-          {idx>=0&&idx<total-1
-            ? <Tap onTap={()=>onNav(1)} style={{flex:1,padding:"15px",borderRadius:14,background:allDone?C.blue:C.s2,display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{fontSize:16,fontWeight:600,color:allDone?"#000":C.ink2}}>Exercice suivant →</span></Tap>
-            : <Tap onTap={onClose} style={{flex:1,padding:"15px",borderRadius:14,background:C.blue,display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{fontSize:16,fontWeight:600,color:"#000"}}>Terminer</span></Tap>}
-        </div>
-      </div>
-    </div>
-  );
-}
-function ExRow({ex,weight,onWeightChange,log,onLogSet,onStartRest,idx,lastKg,onFullScreen,dayIdx}) {
-  const sets=typeof ex.sets==="number"?ex.sets:4;
-  const lk=`d${dayIdx}_${ex.id}`;
-  const completed=Array.from({length:sets},(_,i)=>!!(log[`${lk}_s${i}`]&&log[`${lk}_s${i}`].done)).filter(Boolean).length;
-  const allDone=sets>0&&completed===sets;
-  const kg=weight??ex.kg??0;
-  const restLbl=ex.rest>0?(ex.rest>=60?fmtMSS(ex.rest):`${ex.rest}s`):null;
-  return(
-    <Tap onTap={()=>onFullScreen(ex)} style={{borderBottom:`1px solid ${C.s3}`,padding:"16px 0",display:"flex",alignItems:"center",gap:14,animation:`fadeSlideIn 280ms ${EO} ${idx*35}ms both`}}>
-      <div style={{width:46,height:46,borderRadius:"50%",flexShrink:0,border:`2px solid ${allDone?C.green:C.div}`,background:allDone?C.greenDim:"transparent",display:"flex",alignItems:"center",justifyContent:"center",transition:`all 250ms ${EO}`}}>
-        <span style={{fontSize:13,fontWeight:700,color:allDone?C.green:C.ink4}}>{completed}/{sets}</span>
-      </div>
-      <div style={{flex:1,minWidth:0}}>
-        <div style={{display:"flex",gap:8,marginBottom:4,alignItems:"center",flexWrap:"wrap"}}>
-          <span style={{fontSize:17,fontWeight:600,color:allDone?C.ink4:C.ink,textDecoration:allDone?"line-through":"none",transition:`color 250ms ${EO}`}}>{ex.n}</span>
-          <span style={{fontSize:11,fontWeight:600,padding:"2px 8px",borderRadius:980,background:C.s3,color:C.ink4}}>{EQ_LABELS[ex.eq]}</span>
-        </div>
-        <div style={{display:"flex",gap:8,flexWrap:"wrap",alignItems:"center"}}>
-          <span style={{fontSize:14,fontWeight:600,color:C.ink2}}>{sets} × {ex.reps}</span>
-          <span style={{color:C.s4}}>·</span>
-          <span style={{fontSize:14,color:C.ink3}}>{kg===0?"Poids du corps":`${kg}kg`}</span>
-          {restLbl&&<><span style={{color:C.s4}}>·</span><span style={{fontSize:13,color:C.ink4}}>repos {restLbl}</span></>}
-          {lastKg>0&&<span style={{fontSize:12,fontWeight:600,color:C.orange}}>↑{lastKg}kg</span>}
-        </div>
-      </div>
-      <span style={{color:C.ink4,fontSize:14,flexShrink:0}}>▶</span>
-    </Tap>
-  );
-}
-// Regroupement des exercices en blocs pour l'affichage.
-// Une seance TERMINEE retombait ici sans aucune information de bloc : chaque exercice
-// formait son propre groupe ("1 exo"), et un AMRAP de 3 blocs de 3 exercices s'affichait
-// comme 9 groupes d'un exercice. On reconstruit les blocs a partir de ce qui a ete
-// sauvegarde - blockIdx d'abord, puis circuitId, puis le muscle.
 const METCON_PER_BLOCK=3;
 const groupBlocks=(exos,mode)=>{
   const list=exos||[];
@@ -1516,6 +1407,14 @@ function CircuitPlayer({mode,exos,onClose,defMin,blocks,onAllDone,startBlock,log
     occRef.current=occ;
   },[bi]);
   const goNext=()=>{clearInterval(ref.current);clearInterval(restRef.current);if(lastBlock){onAllDone&&onAllDone();onClose&&onClose();}else{setBi(b=>b+1);}};
+  // Fin de bloc : on ne passe plus directement au suivant. Le ressenti est demande ici,
+  // et il pilote la charge des prochaines seances - c'est ce qui rend le coach dynamique.
+  const [debrief,setDebrief]=useState(false);
+  const finishBlock=()=>{clearInterval(ref.current);clearInterval(restRef.current);setRunning(false);setDebrief(true);};
+  const submitDebrief=(rpe)=>{
+    if(rpe&&sDate&&onLogSet) (cexos||[]).forEach(e=>{ if(e&&e.id) onLogSet(`${sDate}_${e.id}_rpe`,{rpe,date:sDate}); });
+    setDebrief(false); goNext();
+  };
   // Le decompte est pilote par une ref, jamais depuis l'updater de state : les effets de bord
   // qui s'y trouvaient (bip ET enregistrement d'occurrence) etaient joues deux fois sous
   // React StrictMode, ce qui pouvait compter une minute EMOM en double.
@@ -1536,7 +1435,7 @@ function CircuitPlayer({mode,exos,onClose,defMin,blocks,onAllDone,startBlock,log
       if(n>=tt){
         clearInterval(ref.current);
         if(isEmom&&cexos.length) logOccurrence(cexos[lastMin.current%cexos.length]);
-        signalBlockOver(); setRunning(false); setElapsed(tt); setTimeout(()=>goNext(),900); return;
+        signalBlockOver(); setRunning(false); setElapsed(tt); setTimeout(()=>finishBlock(),900); return;
       }
       setElapsed(n);
     },1000);
@@ -1563,7 +1462,7 @@ function CircuitPlayer({mode,exos,onClose,defMin,blocks,onAllDone,startBlock,log
     logOccurrence(cexos[si]);
     if(si<cexos.length-1){ setSi(si+1); } else { setSi(0); setRounds(r=>r+1); }
   };
-  const validateSup=()=>{if(resting>0)return;logOccurrence(cexos[si]);if(si<cexos.length-1){setSi(si+1);}else{setSi(0);if(stour>=supTours){goNext();}else{setStour(stour+1);startRest();}}};
+  const validateSup=()=>{if(resting>0)return;logOccurrence(cexos[si]);if(si<cexos.length-1){setSi(si+1);}else{setSi(0);if(stour>=supTours){finishBlock();}else{setStour(stour+1);startRest();}}};
   const HEAD=(
     <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"16px 20px",flexShrink:0}}>
       <div><div style={{fontSize:20,fontWeight:700,color:C.ink}}>{cur.label||(kind==="amrap"?"AMRAP":kind==="emom"?"EMOM":kind==="circuit"?"Circuit":"Superset")}</div><div style={{fontSize:12,color:C.ink4,marginTop:2}}>Bloc {bi+1}/{BLK.length} · {cexos.length} exercices</div></div>
@@ -1664,7 +1563,7 @@ function CircuitPlayer({mode,exos,onClose,defMin,blocks,onAllDone,startBlock,log
     FOOT=(<div style={BAR}>
       {running&&!done&&<Btn label="Pause" act={pause} bg={C.s2} fg={C.ink3} flex={0} />}
       {done
-        ? <Btn label={lastBlock?"Terminer":"Bloc suivant"} act={goNext} bg={C.green}/>
+        ? <Btn label={lastBlock?"Terminer":"Bloc suivant"} act={finishBlock} bg={C.green}/>
         : running
           ? <Btn label="Fait" act={validateAmrap} bg={C.green} flex={2}/>
           : <Btn label={elapsed>0?"Reprendre":"Démarrer le bloc"} act={startTimer}/>}
@@ -1677,17 +1576,44 @@ function CircuitPlayer({mode,exos,onClose,defMin,blocks,onAllDone,startBlock,log
     </div>);
     FOOT=(<div style={BAR}>
       {done
-        ? <Btn label={lastBlock?"Terminer":"Bloc suivant"} act={goNext} bg={C.green}/>
+        ? <Btn label={lastBlock?"Terminer":"Bloc suivant"} act={finishBlock} bg={C.green}/>
         : running
           ? <Btn label="Pause" act={pause} bg={C.s2} fg={C.ink2}/>
           : <Btn label={elapsed>0?"Reprendre":"Démarrer le bloc"} act={startTimer}/>}
     </div>);
   }
   return (
-    <div style={{position:"fixed",top:0,left:0,right:0,height:"100dvh",maxHeight:"100dvh",background:C.bg,zIndex:Z.fullscreen,overflowY:"auto",overscrollBehavior:"none",WebkitOverflowScrolling:"touch",fontFamily:F,paddingTop:"env(safe-area-inset-top)",boxSizing:"border-box"}}>
+    <div style={{position:"fixed",top:0,left:0,right:0,height:"100dvh",maxHeight:"100dvh",background:C.bg,zIndex:Z.fullscreen,overflowY:"auto",overscrollBehavior:"none",WebkitOverflowScrolling:"touch",fontFamily:F,paddingTop:"env(safe-area-inset-top)",boxSizing:"border-box",animation:`sheetIn ${DUR.modal} ${ED} both`}}>
       <div style={{maxWidth:600,margin:"0 auto"}}>
         {HEAD}
-        {BODY}
+        <div key={`${bi}:${resting>0?"rest":done?"done":running?"run":"idle"}:${si}`} style={{animation:`stateIn 240ms ${EO} both`}}>{BODY}</div>
+        {debrief&&(
+          <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.45)",zIndex:Z.fullscreen+50,display:"flex",alignItems:"flex-end",justifyContent:"center",animation:`fadeIn 200ms ${EO} both`}}>
+            <div style={{width:"100%",maxWidth:600,maxHeight:"92vh",overflowY:"auto",background:C.bg,borderTopLeftRadius:22,borderTopRightRadius:22,padding:"22px 20px calc(22px + env(safe-area-inset-bottom))",animation:`sheetIn ${DUR.modal} ${ED} both`}}>
+              <div style={{fontSize:20,fontWeight:700,color:C.ink}}>{cur.label||"Bloc"} terminé</div>
+              <div style={{fontSize:13,color:C.ink4,marginTop:4,marginBottom:6}}>Ta réponse ajuste les charges des prochaines séances.</div>
+              <div style={{fontSize:12,color:C.ink4,marginBottom:16}}>{cexos.map(e=>e.n).join(" · ")}</div>
+              {[[6,"Trop léger","La charge était sous-évaluée"],
+                [7,"Ça passait","Il restait 3 répétitions"],
+                [8,"Exigeant","Il restait 2 répétitions"],
+                [9,"Très dur","Il restait 1 répétition"],
+                [10,"Pas tenu","Charge trop lourde ou série cassée"]].map(([v,t,d])=>(
+                <Tap key={v} onTap={()=>submitDebrief(v)} style={{display:"flex",alignItems:"center",gap:12,padding:"14px 16px",borderRadius:14,background:C.s1,marginBottom:8}}>
+                  <div style={{width:36,height:36,borderRadius:10,background:C.s2,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                    <span style={{fontSize:15,fontWeight:700,color:C.ink2}}>{v}</span>
+                  </div>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{fontSize:15,fontWeight:600,color:C.ink}}>{t}</div>
+                    <div style={{fontSize:12,color:C.ink4,marginTop:1}}>{d}</div>
+                  </div>
+                </Tap>
+              ))}
+              <Tap onTap={()=>submitDebrief(null)} style={{marginTop:6,padding:"13px",display:"flex",justifyContent:"center"}}>
+                <span style={{fontSize:14,fontWeight:600,color:C.ink4}}>Passer sans noter</span>
+              </Tap>
+            </div>
+          </div>
+        )}
         {FOOT}
       </div>
     </div>);
@@ -1807,7 +1733,7 @@ function ExerciseFocus({ex,dayIdx,sDate,log,onLogSet,onClose,onNext,hasNext,idx,
   const restPct=restTotal>0?(restTotal-resting)/restTotal:0;
   const RING=54,CIRC=2*Math.PI*RING;
   return (
-    <div style={{position:"fixed",inset:0,background:C.bg,zIndex:Z.fullscreen,display:"flex",flexDirection:"column",alignItems:"center",fontFamily:F,paddingTop:"env(safe-area-inset-top)",paddingBottom:"env(safe-area-inset-bottom)"}}>
+    <div style={{position:"fixed",inset:0,background:C.bg,zIndex:Z.fullscreen,display:"flex",flexDirection:"column",alignItems:"center",fontFamily:F,paddingTop:"env(safe-area-inset-top)",paddingBottom:"env(safe-area-inset-bottom)",animation:`sheetIn ${DUR.modal} ${ED} both`}}>
     <div style={{width:"100%",maxWidth:600,display:"flex",flexDirection:"column",flex:1,minHeight:0}}>
       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"16px 20px"}}>
         <Tap onTap={onClose} style={{width:40,height:40,borderRadius:10,background:C.s2,display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{fontSize:20,color:C.ink3}}>‹</span></Tap>
@@ -1815,7 +1741,8 @@ function ExerciseFocus({ex,dayIdx,sDate,log,onLogSet,onClose,onNext,hasNext,idx,
         <Tap onTap={()=>onDetail&&onDetail(ex)} style={{width:40,height:40,borderRadius:10,background:C.s2,display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{fontSize:15,fontWeight:700,color:C.blue}}>i</span></Tap>
       </div>
 
-      <div ref={scRef} style={{flex:1,overflowY:"auto",display:"flex",flexDirection:"column",padding:"0 20px 20px",WebkitOverflowScrolling:"touch"}}>
+      <div ref={scRef} key={resting>0?"rest":allDone?"done":`set${cur}`}
+        style={{flex:1,overflowY:"auto",display:"flex",flexDirection:"column",padding:"0 20px 20px",WebkitOverflowScrolling:"touch",animation:`stateIn 260ms ${EO} both`}}>
 
         {/* REPOS — il occupe l'ecran au lieu de se cacher sous la liste : on ne l'ecourte plus par distraction */}
         {resting>0?(
@@ -1935,52 +1862,6 @@ function ExerciseFocus({ex,dayIdx,sDate,log,onLogSet,onClose,onNext,hasNext,idx,
         )}
       </div>
     </div>
-    </div>
-  );
-}
-
-function WorkoutExercise({ex,log,onLogSet,onStartRest,lastKg,dayIdx,idx,onDetail,onReplace,linked,isLast,onToggleLink}) {
-  const sets=typeof ex.sets==="number"?ex.sets:4;
-  const lk=`d${dayIdx}_${ex.id}`;
-  const defReps=(()=>{const m=String(ex.reps||"").match(/\d+/);return m?parseInt(m[0]):10;})();
-  const [rows,setRows]=useState(()=>Array.from({length:sets},(_,i)=>{const e=log[`${lk}_s${i}`];return{done:!!(e&&e.done),weight:(e&&e.weight!=null)?String(e.weight):(ex.kg?String(ex.kg):""),reps:(e&&e.reps!=null)?String(e.reps):String(defReps)};}));
-  const completed=rows.filter(r=>r.done).length;
-  const allDone=sets>0&&completed===sets;
-  const write=(i,r)=>onLogSet(`${lk}_s${i}`,{done:r.done,weight:parseFloat(r.weight)||0,reps:parseInt(r.reps)||0,date:todayKey()});
-  const setField=(i,k,v)=>setRows(rs=>{const nr=rs.map((r,j)=>j===i?{...r,[k]:v}:r);if(nr[i].done)write(i,nr[i]);return nr;});
-  const toggle=i=>setRows(rs=>{const nr=rs.map((r,j)=>j===i?{...r,done:!r.done}:r);const r=nr[i];write(i,r);if(r.done&&ex.rest>0&&!linked)onStartRest(ex.rest,ex.n);return nr;});
-  const restLbl=ex.rest>0?(ex.rest>=60?fmtMSS(ex.rest):`${ex.rest}s`):null;
-  const inp={width:"100%",height:40,borderRadius:10,border:`1px solid ${C.s4}`,background:C.s2,color:C.ink,fontSize:16,fontWeight:600,fontFamily:F,textAlign:"center",outline:"none",boxSizing:"border-box"};
-  return (
-    <div style={{background:C.s1,borderRadius:16,padding:"14px",marginBottom:12,border:`1px solid ${allDone?C.green:C.s3}`,transition:`border-color 250ms ${EO}`,animation:`fadeSlideIn 280ms ${EO} ${idx*35}ms both`}}>
-      <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:12}}>
-        <Tap onTap={()=>onDetail(ex)} style={{flex:1,minWidth:0}}>
-          <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:3}}>
-            <span style={{fontSize:17,fontWeight:600,color:allDone?C.ink4:C.ink,textDecoration:allDone?"line-through":"none"}}>{ex.n}</span>
-            <span style={{width:18,height:18,borderRadius:"50%",background:C.s3,display:"inline-flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:700,color:C.blue,flexShrink:0}}>i</span>
-          </div>
-          <div style={{fontSize:13,color:linked?C.blue:C.ink4}}>{linked?"⛓ Superset · enchaîné au suivant (sans repos)":`${ex.m}${restLbl?` · repos ${restLbl}`:""}`}</div>
-        </Tap>
-        {!isLast&&<Tap onTap={onToggleLink} style={{width:36,height:36,borderRadius:10,background:linked?C.blueDim:C.s2,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}><span style={{fontSize:15,color:linked?C.blue:C.ink3}}>⛓</span></Tap>}
-        <Tap onTap={()=>onReplace(ex)} style={{width:36,height:36,borderRadius:10,background:C.s2,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}><span style={{fontSize:16,color:C.ink3}}>⇄</span></Tap>
-        <div style={{fontSize:13,fontWeight:700,color:allDone?C.green:C.ink4,minWidth:32,textAlign:"right",flexShrink:0}}>{completed}/{sets}</div>
-      </div>
-      <div style={{display:"grid",gridTemplateColumns:"26px 1fr 60px 60px 44px",gap:8,alignItems:"center",marginBottom:6,padding:"0 2px"}}>
-        <span style={{fontSize:10,fontWeight:600,color:C.ink4,textTransform:"uppercase"}}>Sér</span>
-        <span style={{fontSize:10,fontWeight:600,color:C.ink4,textTransform:"uppercase"}}>Objectif</span>
-        <span style={{fontSize:10,fontWeight:600,color:C.ink4,textTransform:"uppercase",textAlign:"center"}}>Kg</span>
-        <span style={{fontSize:10,fontWeight:600,color:C.ink4,textTransform:"uppercase",textAlign:"center"}}>Reps</span>
-        <span/>
-      </div>
-      {rows.map((r,i)=>(
-        <div key={i} style={{display:"grid",gridTemplateColumns:"26px 1fr 60px 60px 44px",gap:8,alignItems:"center",marginBottom:8}}>
-          <span style={{fontSize:15,fontWeight:700,color:r.done?C.green:C.ink3}}>{i+1}</span>
-          <span style={{fontSize:13,color:C.ink4}}>{ex.kg?`${ex.kg}kg`:"PdC"} × {ex.reps}</span>
-          <input inputMode="decimal" value={r.weight} onChange={e=>setField(i,"weight",e.target.value.replace(/[^0-9.]/g,""))} placeholder={ex.kg?String(ex.kg):"0"} style={inp}/>
-          <input inputMode="numeric" value={r.reps} onChange={e=>setField(i,"reps",e.target.value.replace(/[^0-9]/g,""))} placeholder={String(defReps)} style={inp}/>
-          <Tap onTap={()=>toggle(i)} style={{width:44,height:40,borderRadius:10,border:`2px solid ${r.done?C.green:C.div}`,background:r.done?C.greenDim:C.s2,display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{fontSize:18,fontWeight:700,color:r.done?C.green:C.ink4}}>{r.done?"✓":""}</span></Tap>
-        </div>
-      ))}
     </div>
   );
 }
@@ -2415,35 +2296,6 @@ function SkillsOctagon({sessions}) {
   );
 }
 
-function LoadChart({data,color=C.blue}){
-  if(!data||data.length===0) return <div style={{height:90,display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{fontSize:13,color:C.ink4}}>Pas encore de données pour cet exercice.</span></div>;
-  const vals=data.map(d=>d.v);const max=Math.max(...vals);const min=Math.min(...vals);
-  if(data.length===1){
-    const v=vals[0];const scaleMax=Math.max(v*1.5,v+10);const frac=Math.min(1,Math.max(0,v/scaleMax));const ang=Math.PI*(1-frac);const cx=110,cy=92,r=80;const nx=cx+r*Math.cos(ang),ny=cy-r*Math.sin(ang);
-    return(<div style={{display:"flex",flexDirection:"column",alignItems:"center"}}>
-      <svg viewBox="0 0 220 110" style={{width:"100%",maxWidth:240}}>
-        <path d="M30 92 A80 80 0 0 1 190 92" fill="none" stroke={C.s3} strokeWidth="12" strokeLinecap="round"/>
-        <path d={`M30 92 A80 80 0 0 1 ${nx} ${ny}`} fill="none" stroke={color} strokeWidth="12" strokeLinecap="round"/>
-        <circle cx={nx} cy={ny} r="7" fill={color}/>
-      </svg>
-      <div style={{fontSize:24,fontWeight:700,color:C.ink,marginTop:-6}}>{v}kg</div>
-      <div style={{fontSize:12,color:C.ink4}}>1 séance enregistrée</div>
-    </div>);
-  }
-  const H=90;const range=(max-min)||1;
-  return(<div>
-    <div style={{display:"flex",alignItems:"flex-end",gap:6,height:H}}>
-      {data.map((d,i)=>{const h=14+((d.v-min)/range)*(H-26);const last=i===data.length-1;return(
-        <div key={i} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"flex-end",height:"100%"}}>
-          <span style={{fontSize:10,fontWeight:700,color:last?color:C.ink3,marginBottom:3}}>{d.v}</span>
-          <div style={{width:"100%",maxWidth:34,height:h,borderRadius:8,background:last?color:C.s3}}/>
-        </div>);})}
-    </div>
-    <div style={{display:"flex",gap:6,marginTop:6}}>
-      {data.map((d,i)=>(<div key={i} style={{flex:1,textAlign:"center",fontSize:10,color:C.ink4}}>{d.date}</div>))}
-    </div>
-  </div>);
-}
 function StatsTab({sessions,weights,accent,onOpenPhotos,pinnedPBs,onManagePBs,activeSkills,onManageSkills,onOpenRewards,trainingDaysPerWeek}) {
   const total=sessions.length,totalKg=sessions.reduce((a,s)=>a+(s.totalKg||0),0);
   const avgScore=total?Math.round(sessions.reduce((a,s)=>a+computeScore(s.totalKg,s.totalSets,s.feedback,targetOf(s)),0)/total):0;
@@ -3059,7 +2911,7 @@ function SettingsTab({user,excluded,onToggleExclude,onSignOut,onReset,onOpenLibr
           <span style={{fontSize:17,color:C.red}}>›</span>
         </Tap>
       </div>
-      <div style={{fontSize:12,color:C.ink4,textAlign:"center",marginTop:28}}>SŌMA · {"S"+weekNumber()} · {DB.length} exercices · build 23.68a</div>
+      <div style={{fontSize:12,color:C.ink4,textAlign:"center",marginTop:28}}>SŌMA · {"S"+weekNumber()} · {DB.length} exercices · build 23.69a</div>
     </div>
   );
 }
@@ -3067,7 +2919,9 @@ function SettingsTab({user,excluded,onToggleExclude,onSignOut,onReset,onOpenLibr
 // ─── TAB TRANSITION — slide between tabs ─────────────────────────────────────
 function TabContent({tab,prevTab,children}) {
   const dir = useMemo(()=>{
-    const order=["seance","stats","history","settings"];
+    // La liste ne correspondait pas aux onglets reels ("home" manquait, "history" n'existe
+    // pas) : indexOf renvoyait -1 et la direction du glissement etait fausse.
+    const order=["home","seance","stats","settings"];
     const ci=order.indexOf(tab),pi=order.indexOf(prevTab||tab);
     return ci>pi?1:-1;
   },[tab,prevTab]);
@@ -3880,9 +3734,6 @@ export default function SomaApp() {
     }
   };
 
-  const lastKgPerEx=useMemo(()=>{
-    const map={};sessions.slice().reverse().forEach(s=>{(s.exercises||[]).forEach(ex=>{if(ex.weight&&!map[ex.id])map[ex.id]=ex.weight;});});return map;
-  },[sessions]);
 
   useEffect(()=>{
     if(!profile) return;
@@ -3922,7 +3773,6 @@ export default function SomaApp() {
     try{await supabase.from("profiles").upsert({id:uid,goal:next.goal,level:next.level,equipment:next.equipment,frequency:next.frequency,weight_kg:next.weight_kg,program_start:next.program_start,session_index:0,total_sessions:next.total_sessions,updated_at:next.updated_at},{onConflict:"id"});}catch(e){console.error("profile redo",e);}
     setShowOnboardingRedo(false);
   };
-  if(false&&showWelcome) return(<WelcomeScreen user={user} todaySession={viewSchedule[todayIdx()]||PROGRAM[todayIdx()]} streak={streak} onStart={()=>{setShowWelcome(false);setDayIdx(todayIdx());}} onSkip={()=>setShowWelcome(false)}/>);
 
   const sessionIndex=profile?.session_index||0;
   const trainingDaysPerWeek=(schedule||[]).filter(d=>d&&d.salle).length||(profile?.frequency||4);
@@ -3983,7 +3833,7 @@ export default function SomaApp() {
   const sessionMode=effMode;
   // Une journee close n'est pas re-derivee : applyMode regenererait un metcon (blocs, tours,
   // exercices tires au sort) par-dessus une seance deja faite.
-  const day=isDayDone?day0:applyMode(day0,effMode,profile,sessionWeek,dayIdx,dayCons);
+  const day=isDayDone?day0:applyMode(day0,effMode,profile,sessionWeek,dayIdx,perf);
   const sDate=tabDate;
   const isPastMissed=!!(day?.salle&&!isDayDone&&new Date(sDate+"T00:00:00")<new Date(new Date().toDateString()));
   const locked=isDayDone||isPastMissed;
@@ -4014,6 +3864,11 @@ const NAV=[{id:"home",l:"Accueil"},{id:"seance",l:"Séances"},{id:"stats",l:"Sta
         *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;user-select:none;}
         body{margin:0;background:${C.bg};}
         @keyframes fadeIn{from{opacity:0}to{opacity:1}}
+        @keyframes sheetIn{from{opacity:0;transform:translateY(28px) scale(.985)}to{opacity:1;transform:none}}
+        @keyframes stateIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+        @media (prefers-reduced-motion: reduce){
+          *{animation-duration:.001ms !important;animation-iteration-count:1 !important;transition-duration:.001ms !important}
+        }
         @keyframes slideUp{from{transform:translateY(40px);opacity:0}to{transform:none;opacity:1}}
         @keyframes fadeSlideIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
         @keyframes fadeUp{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:none}}
