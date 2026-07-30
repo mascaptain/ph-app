@@ -1467,28 +1467,55 @@ function ExerciseFocus({ex,dayIdx,sDate,log,onLogSet,onClose,onNext,hasNext,idx,
   const plan=setPlanFor(ex);const n=plan.length;
   const lk=`${sDate}_${ex.id}`;
   const [done,setDone]=useState(()=>plan.map((_,i)=>!!(log[`${lk}_s${i}`]&&log[`${lk}_s${i}`].done)));
+  // Charge et reps ajustables serie par serie, initialisees sur ce qui est deja enregistre
+  // pour cette date puis sur le prescrit. Le prescrit n'est qu'une proposition : sans ce
+  // reglage, aucune montee en charge reelle ne pouvait etre enregistree.
+  const [loads,setLoads]=useState(()=>plan.map((s,i)=>{const e=log[`${lk}_s${i}`];return (e&&e.weight!=null)?Number(e.weight):Number(s.w)||0;}));
+  const [reps,setReps]=useState(()=>plan.map((s,i)=>{const e=log[`${lk}_s${i}`];return (e&&e.reps!=null)?Number(e.reps):(repsNum(s.reps)||repsNum(ex.reps)||8);}));
   const [resting,setResting]=useState(0);
+  const [restTotal,setRestTotal]=useState(0);
   const restRef=useRef(null);
   const scRef=useRef(null);
   useEffect(()=>()=>clearInterval(restRef.current),[]);
   useEffect(()=>{ if(scRef.current) scRef.current.scrollTop=0; window.scrollTo&&window.scrollTo(0,0); },[ex.id]);
-  const startRest=(s)=>{clearInterval(restRef.current);setResting(s);restRef.current=setInterval(()=>{setResting(pp=>{if(pp<=1){clearInterval(restRef.current);beep();return 0;}return pp-1;});},1000);};
+  const startRest=(s)=>{clearInterval(restRef.current);setRestTotal(s);setResting(s);restRef.current=setInterval(()=>{setResting(pp=>{if(pp<=1){clearInterval(restRef.current);beep();return 0;}return pp-1;});},1000);};
   const skipRest=()=>{clearInterval(restRef.current);setResting(0);};
   const cur=done.findIndex(d=>!d);
   const allDone=cur===-1;
   const validate=()=>{
     if(allDone||resting>0) return;
     const i=cur;
-    onLogSet(`${lk}_s${i}`,{done:true,weight:plan[i].w,reps:repsNum(ex.reps),date:todayKey()});
+    // On enregistre la charge et les reps REELLEMENT faites, pas le prescrit.
+    onLogSet(`${lk}_s${i}`,{done:true,weight:loads[i],reps:reps[i],date:todayKey()});
     setDone(d=>d.map((v,j)=>j===i?true:v));
+    // La charge de la serie suivante part de celle qu'on vient de faire : on ne
+    // retombe pas sur le prescrit apres un ajustement.
+    if(i<n-1) setLoads(l=>l.map((v,j)=>j===i+1&&!done[j]?loads[i]:v));
     if(i<n-1&&ex.rest>0) startRest(ex.rest);
   };
-  const primary=resting>0?{label:`Passer le repos · ${fmtMSS(resting)}`,act:skipRest,bg:C.s2,fg:C.ink}
-    // Un exercice termine ramene a la LISTE, il n'enchaine plus tout seul sur le suivant :
-    // l'enchainement automatique retirait le controle de l'ordre et du rythme de la seance.
-    // Passer au suivant reste possible, mais c'est un choix explicite (action secondaire).
-    :allDone?{label:"Retour à la liste",act:onClose,bg:C.green,fg:"#000"}
-    :{label:`Valider la série ${cur+1}`,act:validate,bg:C.blue,fg:"#000"};
+  // ─── "Une chose a la fois" ─────────────────────────────────────────────────
+  // L'ecran ne montre que l'action en cours : cette serie, ou ce repos. Le reste
+  // de la seance reste dans la liste, en arriere. La liste de toutes les series
+  // empilees demandait de chercher sa ligne entre deux efforts et offrait des
+  // cibles etroites; ici il n'y a qu'un geste possible a chaque instant.
+  const dots=(
+    <div style={{display:"flex",gap:6,justifyContent:"center"}}>
+      {plan.map((_,i)=>(
+        <div key={i} style={{width:done[i]?9:7,height:done[i]?9:7,borderRadius:"50%",
+          background:done[i]?C.green:(i===cur?C.ink4:C.s4),transition:`all 200ms ${EO}`}}/>
+      ))}
+    </div>
+  );
+  const step=(lbl,act)=>(
+    <Tap onTap={act} style={{width:52,height:52,borderRadius:14,background:C.s2,display:"flex",alignItems:"center",justifyContent:"center"}}>
+      <span style={{fontSize:20,fontWeight:600,color:C.ink2}}>{lbl}</span>
+    </Tap>
+  );
+  const curLoad=loads[cur>=0?cur:0]||0;
+  const curReps=reps[cur>=0?cur:0]||0;
+  const prevIdx=cur-1;
+  const restPct=restTotal>0?(restTotal-resting)/restTotal:0;
+  const RING=54,CIRC=2*Math.PI*RING;
   return (
     <div style={{position:"fixed",inset:0,background:C.bg,zIndex:Z.fullscreen,display:"flex",flexDirection:"column",alignItems:"center",fontFamily:F,paddingTop:"env(safe-area-inset-top)",paddingBottom:"env(safe-area-inset-bottom)"}}>
     <div style={{width:"100%",maxWidth:600,display:"flex",flexDirection:"column",flex:1,minHeight:0}}>
@@ -1497,28 +1524,97 @@ function ExerciseFocus({ex,dayIdx,sDate,log,onLogSet,onClose,onNext,hasNext,idx,
         <span style={{fontSize:13,fontWeight:600,color:C.ink4,textTransform:"uppercase",letterSpacing:".1em"}}>Exercice {idx+1}/{count}</span>
         <Tap onTap={()=>onDetail&&onDetail(ex)} style={{width:40,height:40,borderRadius:10,background:C.s2,display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{fontSize:15,fontWeight:700,color:C.blue}}>i</span></Tap>
       </div>
-      <div style={{padding:"0 24px 8px"}}>
-        <div style={{fontSize:30,fontWeight:700,color:C.ink,letterSpacing:"-.02em",lineHeight:1.1}}>{ex.n}</div>
-        <div style={{fontSize:14,color:C.ink4,marginTop:6}}>{ex.m}{ex.cue?` · ${ex.cue}`:""}</div>
-      </div>
-      <div ref={scRef} style={{flex:1,overflowY:"auto",padding:"12px 20px",WebkitOverflowScrolling:"touch"}}>
-        {plan.map((s,i)=>{
-          const d=done[i];const isCur=i===cur&&resting===0;
-          return (
-            <div key={i} style={{display:"flex",alignItems:"center",gap:14,padding:"16px 18px",borderRadius:16,marginBottom:10,background:isCur?C.blueDim:C.s1,border:`1px solid ${d?C.green:isCur?C.blue:C.s3}`,transition:`all 200ms ${EO}`}}>
-              <div style={{width:36,height:36,borderRadius:"50%",background:d?C.green:isCur?C.blue:C.s2,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}><span style={{fontSize:15,fontWeight:700,color:d||isCur?"#000":C.ink3}}>{d?"✓":i+1}</span></div>
-              <div style={{flex:1}}><span style={{fontSize:22,fontWeight:700,color:d?C.ink4:C.ink}}>{s.w>0?`${s.w} kg`:"Poids du corps"}</span><span style={{fontSize:16,color:C.ink3,marginLeft:10}}>× {s.reps}</span></div>
+
+      <div ref={scRef} style={{flex:1,overflowY:"auto",display:"flex",flexDirection:"column",padding:"0 20px 20px",WebkitOverflowScrolling:"touch"}}>
+
+        {/* REPOS — il occupe l'ecran au lieu de se cacher sous la liste : on ne l'ecourte plus par distraction */}
+        {resting>0?(
+          <div style={{flex:1,display:"flex",flexDirection:"column",justifyContent:"center",alignItems:"center",gap:22,padding:"20px 0"}}>
+            <div style={{fontSize:12,fontWeight:600,color:C.ink4,textTransform:"uppercase",letterSpacing:".12em"}}>Récupération</div>
+            <div style={{position:"relative",width:132,height:132}}>
+              <svg width="132" height="132" viewBox="0 0 132 132" style={{transform:"rotate(-90deg)"}}>
+                <circle cx="66" cy="66" r={RING} fill="none" stroke={C.s2} strokeWidth="9"/>
+                <circle cx="66" cy="66" r={RING} fill="none" stroke={C.green} strokeWidth="9" strokeLinecap="round"
+                  strokeDasharray={CIRC} strokeDashoffset={CIRC*restPct} style={{transition:`stroke-dashoffset 900ms linear`}}/>
+              </svg>
+              <div style={{position:"absolute",inset:0,display:"flex",alignItems:"center",justifyContent:"center"}}>
+                <span style={{fontSize:34,fontWeight:700,color:C.ink,letterSpacing:"-.03em",fontVariantNumeric:"tabular-nums"}}>{fmtMSS(resting)}</span>
+              </div>
             </div>
-          );
-        })}
-        {resting>0&&(
-          <div style={{textAlign:"center",padding:"24px 0 8px"}}>
-            <div style={{fontSize:12,fontWeight:600,color:C.ink4,textTransform:"uppercase",letterSpacing:".1em",marginBottom:8}}>Repos</div>
-            <div style={{fontSize:64,fontWeight:700,color:C.ink,letterSpacing:"-.03em",lineHeight:1}}>{fmtMSS(resting)}</div>
+            <div style={{textAlign:"center"}}>
+              <div style={{fontSize:12,fontWeight:600,color:C.ink4,textTransform:"uppercase",letterSpacing:".1em",marginBottom:5}}>Ensuite</div>
+              <div style={{fontSize:18,fontWeight:700,color:C.ink}}>Série {cur+1} · {curLoad>0?`${curLoad} kg`:"Poids du corps"} × {curReps}</div>
+            </div>
+            <Tap onTap={skipRest} style={{padding:"15px 26px",borderRadius:14,background:C.s2}}>
+              <span style={{fontSize:16,fontWeight:600,color:C.ink2}}>Passer le repos</span>
+            </Tap>
+          </div>
+        ):allDone?(
+          /* EXERCICE TERMINE — la montee en charge se lit d'un coup d'oeil */
+          <div style={{flex:1,display:"flex",flexDirection:"column",justifyContent:"center",gap:20,padding:"20px 0"}}>
+            <div style={{textAlign:"center"}}>
+              <div style={{width:56,height:56,borderRadius:"50%",background:C.green,margin:"0 auto 14px",display:"flex",alignItems:"center",justifyContent:"center"}}>
+                <span style={{fontSize:26,fontWeight:700,color:"#000"}}>✓</span>
+              </div>
+              <div style={{fontSize:24,fontWeight:700,color:C.ink,letterSpacing:"-.02em"}}>{ex.n}</div>
+              <div style={{fontSize:14,color:C.ink4,marginTop:5}}>{n} séries terminées</div>
+            </div>
+            <div style={{background:C.s1,borderRadius:16,padding:"14px 16px",display:"flex",flexDirection:"column",gap:7}}>
+              {plan.map((_,i)=>(
+                <div key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                  <span style={{fontSize:13,color:C.ink4}}>Série {i+1}</span>
+                  <span style={{fontSize:15,fontWeight:600,color:C.ink,fontVariantNumeric:"tabular-nums"}}>{loads[i]>0?`${loads[i]} kg`:"PdC"} × {reps[i]}</span>
+                </div>
+              ))}
+            </div>
+            <div>
+              <Tap onTap={onClose} style={{padding:"18px",borderRadius:16,background:C.green,display:"flex",alignItems:"center",justifyContent:"center"}}>
+                <span style={{fontSize:17,fontWeight:700,color:"#000"}}>Retour à la liste</span>
+              </Tap>
+              {hasNext&&<Tap onTap={onNext} style={{marginTop:10,padding:"15px",borderRadius:14,background:"transparent",border:`1px solid ${C.div}`,display:"flex",alignItems:"center",justifyContent:"center"}}>
+                <span style={{fontSize:15,fontWeight:600,color:C.ink3}}>Enchaîner sur le suivant →</span>
+              </Tap>}
+            </div>
+          </div>
+        ):(
+          /* SERIE EN COURS — une seule serie a l'ecran, ajustable avant validation */
+          <div style={{flex:1,display:"flex",flexDirection:"column",gap:18,paddingTop:4}}>
+            <div>
+              <div style={{fontSize:26,fontWeight:700,color:C.ink,letterSpacing:"-.02em",lineHeight:1.15}}>{ex.n}</div>
+              <div style={{fontSize:14,color:C.ink4,marginTop:5}}>{ex.m}{ex.cue?` · ${ex.cue}`:""}</div>
+            </div>
+            <div style={{textAlign:"center",padding:"6px 0"}}>
+              <div style={{fontSize:12,fontWeight:600,color:C.ink4,textTransform:"uppercase",letterSpacing:".12em",marginBottom:10}}>Série {cur+1} sur {n}</div>
+              <div style={{fontSize:64,fontWeight:700,color:C.ink,letterSpacing:"-.04em",lineHeight:1,fontVariantNumeric:"tabular-nums"}}>
+                {curLoad>0?curLoad:"PdC"}{curLoad>0&&<span style={{fontSize:24,fontWeight:600,color:C.ink3}}> kg</span>}
+              </div>
+              <div style={{fontSize:17,color:C.ink3,marginTop:8,fontVariantNumeric:"tabular-nums"}}>× {curReps} reps{ex.rpe?` · RPE ${ex.rpe}`:""}</div>
+            </div>
+            {/* Ajustement avant validation : la charge reelle differe souvent du prescrit,
+                et c'est la seule facon d'enregistrer une vraie montee en charge. */}
+            <div style={{display:"flex",gap:10,alignItems:"center",justifyContent:"center"}}>
+              {step("−",()=>setLoads(l=>l.map((v,i)=>i===cur?Math.max(0,Math.round((v-2.5)*10)/10):v)))}
+              <span style={{fontSize:12,fontWeight:600,color:C.ink4,textTransform:"uppercase",letterSpacing:".1em",width:56,textAlign:"center"}}>Charge</span>
+              {step("+",()=>setLoads(l=>l.map((v,i)=>i===cur?Math.round((v+2.5)*10)/10:v)))}
+              <div style={{width:14}}/>
+              {step("−",()=>setReps(r=>r.map((v,i)=>i===cur?Math.max(1,v-1):v)))}
+              <span style={{fontSize:12,fontWeight:600,color:C.ink4,textTransform:"uppercase",letterSpacing:".1em",width:56,textAlign:"center"}}>Reps</span>
+              {step("+",()=>setReps(r=>r.map((v,i)=>i===cur?v+1:v)))}
+            </div>
+            {prevIdx>=0&&(
+              <div style={{background:C.s1,borderRadius:14,padding:"12px 15px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                <span style={{fontSize:13,color:C.ink4}}>Série précédente</span>
+                <span style={{fontSize:15,fontWeight:600,color:C.ink,fontVariantNumeric:"tabular-nums"}}>{loads[prevIdx]>0?`${loads[prevIdx]} kg`:"PdC"} × {reps[prevIdx]}</span>
+              </div>
+            )}
+            <div style={{marginTop:"auto",display:"flex",flexDirection:"column",gap:16}}>
+              {dots}
+              <Tap onTap={validate} style={{padding:"20px",borderRadius:16,background:C.blue,display:"flex",alignItems:"center",justifyContent:"center"}}>
+                <span style={{fontSize:18,fontWeight:700,color:"#000"}}>Valider la série {cur+1}</span>
+              </Tap>
+            </div>
           </div>
         )}
-        <Tap onTap={primary.act} style={{marginTop:14,padding:"18px",borderRadius:16,background:primary.bg,display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{fontSize:17,fontWeight:700,color:primary.fg}}>{primary.label}</span></Tap>
-        {allDone&&hasNext&&resting===0&&<Tap onTap={onNext} style={{marginTop:10,padding:"15px",borderRadius:14,background:"transparent",border:`1px solid ${C.div}`,display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{fontSize:15,fontWeight:600,color:C.ink3}}>Enchaîner sur le suivant →</span></Tap>}
       </div>
     </div>
     </div>
@@ -2625,7 +2721,7 @@ function SettingsTab({user,excluded,onToggleExclude,onSignOut,onReset,onOpenLibr
           <span style={{fontSize:17,color:C.red}}>›</span>
         </Tap>
       </div>
-      <div style={{fontSize:12,color:C.ink4,textAlign:"center",marginTop:28}}>SŌMA · {"S"+weekNumber()} · {DB.length} exercices · build 23.60a</div>
+      <div style={{fontSize:12,color:C.ink4,textAlign:"center",marginTop:28}}>SŌMA · {"S"+weekNumber()} · {DB.length} exercices · build 23.61a</div>
     </div>
   );
 }
