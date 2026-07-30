@@ -716,13 +716,36 @@ function beep() {
 }
 
 // ─── HOOKS ───────────────────────────────────────────────────────────────────
+// Chrono de seance base sur des TIMESTAMPS, jamais sur un compteur de ticks.
+// Un setInterval est suspendu par le navigateur des que l'app passe en arriere-plan
+// (ecran eteint, autre application) et perdu a chaque rechargement : le temps ecoule
+// est donc recalcule a partir de l'heure de depart, ce qui reste juste dans tous les cas.
+const CLOCK_KEY="soma_clock";
+const readClock=()=>{try{const r=JSON.parse(localStorage.getItem(CLOCK_KEY)||"null");if(!r||typeof r!=="object")return null;if(r.day&&r.day!==todayKey())return null;return r;}catch(_e){return null;}};
+const writeClock=(s)=>{try{if(s)localStorage.setItem(CLOCK_KEY,JSON.stringify(s));else localStorage.removeItem(CLOCK_KEY);}catch(_e){}};
+const clockSec=(s)=>{ if(!s) return 0; const acc=Number(s.acc)||0; const live=(s.running&&s.startedAt)?Math.max(0,Math.floor((Date.now()-s.startedAt)/1000)):0; return acc+live; };
+
 function useStopwatch() {
-  const [sec,setSec]=useState(0);const[running,setRunning]=useState(false);const ref=useRef(null);
-  const start=()=>{setSec(0);setRunning(true);clearInterval(ref.current);ref.current=setInterval(()=>setSec(p=>p+1),1000);};
-  const resume=()=>{if(ref.current)clearInterval(ref.current);setRunning(true);ref.current=setInterval(()=>setSec(p=>p+1),1000);};
-  const stop=()=>{clearInterval(ref.current);setRunning(false);};
-  const reset=()=>{clearInterval(ref.current);setRunning(false);setSec(0);};
-  useEffect(()=>()=>clearInterval(ref.current),[]);
+  // Rehydrate au montage : une seance en cours survit a un rechargement de page.
+  const[st,setSt]=useState(readClock);
+  const[,tick]=useState(0);
+  const sec=clockSec(st);
+  const running=!!(st&&st.running);
+  useEffect(()=>{
+    if(!running) return undefined;
+    const id=setInterval(()=>tick(t=>t+1),1000);
+    // Au retour au premier plan, le temps est recalcule immediatement (pas de rattrapage progressif).
+    const sync=()=>tick(t=>t+1);
+    document.addEventListener("visibilitychange",sync);
+    window.addEventListener("focus",sync);
+    return()=>{clearInterval(id);document.removeEventListener("visibilitychange",sync);window.removeEventListener("focus",sync);};
+  },[running]);
+  // Persistance faite dans un effet, jamais dans les updaters (qui doivent rester purs).
+  useEffect(()=>{writeClock(st);},[st]);
+  const start=useCallback(()=>setSt({startedAt:Date.now(),acc:0,running:true,day:todayKey()}),[]);
+  const resume=useCallback(()=>setSt(prev=>({startedAt:Date.now(),acc:clockSec(prev),running:true,day:(prev&&prev.day)||todayKey()})),[]);
+  const stop=useCallback(()=>setSt(prev=>prev?{startedAt:null,acc:clockSec(prev),running:false,day:prev.day}:prev),[]);
+  const reset=useCallback(()=>setSt(null),[]);
   return{sec,running,start,resume,stop,reset};
 }
 
@@ -1655,6 +1678,19 @@ function SessionReport({session,sessions,trainingDaysPerWeek,onClose,onDelete}) 
                 <div>
                   <div style={{fontSize:15,fontWeight:600,color:C.ink}}>{ex.n||ex.name}</div>
                   <div style={{fontSize:13,color:C.ink3}}>{ex.completedSets} séries · {ex.m||ex.muscle}</div>
+                  {/* Montee en charge de la seance : la charge max seule ne disait pas si les
+                      series avaient ete montees progressivement ou faites a poids constant. */}
+                  {(()=>{
+                    const sd=Array.isArray(ex.setsDetail)?ex.setsDetail:[];
+                    if(sd.length<2) return null;
+                    const ws=sd.map(s=>Number(s.weight)||0);
+                    const monte=ws.some(w=>w!==ws[0]);
+                    return(
+                      <div style={{fontSize:12,color:monte?C.blue:C.ink4,marginTop:3,fontVariantNumeric:"tabular-nums"}}>
+                        {monte?`${ws.join(" → ")} kg`:`${sd.length} × ${sd[0].reps} reps`}
+                      </div>
+                    );
+                  })()}
                 </div>
                 {ex.weight>0&&<span style={{fontSize:18,fontWeight:700,color:C.ink}}>{ex.weight}kg</span>}
               </div>
@@ -2398,7 +2434,7 @@ function SettingsTab({user,excluded,onToggleExclude,onSignOut,onReset,onOpenLibr
           <span style={{fontSize:17,color:C.red}}>›</span>
         </Tap>
       </div>
-      <div style={{fontSize:12,color:C.ink4,textAlign:"center",marginTop:28}}>SŌMA · {"S"+weekNumber()} · {DB.length} exercices · build 23.54a</div>
+      <div style={{fontSize:12,color:C.ink4,textAlign:"center",marginTop:28}}>SŌMA · {"S"+weekNumber()} · {DB.length} exercices · build 23.55a</div>
     </div>
   );
 }
@@ -2900,9 +2936,14 @@ export default function SomaApp() {
   },[user]);
 
   const saveLog=useCallback((key,val)=>{
+    // Filet de securite : le chrono ne demarrait que depuis le bouton "Demarrer" de l'onglet
+    // Seance. Toute autre entree en seance (ouverture directe d'un exercice, lecteur de
+    // circuit/EMOM/AMRAP) laissait la duree a 0. Des qu'une serie est validee, la seance a
+    // commence : le chrono part, quel que soit le chemin emprunte.
+    if(val&&val.done&&!clock.running&&clock.sec===0) clock.start();
     setLog(prev=>{const next={...prev,[key]:val};persist(user?.id,{log:next});return next;});
     if(val.weight) setWeights(prev=>{const exId=key.split("_s")[0];if(!prev[exId]||val.weight>prev[exId]){const next={...prev,[exId]:val.weight};persist(user?.id,{weights:next});return next;}return prev;});
-  },[persist]);
+  },[persist,clock]);
 
   const saveWeight=useCallback((id,val)=>{setWeights(prev=>{const next={...prev,[id]:val};persist(user?.id,{weights:next});return next;});},[persist]);
   const toggleExclude=useCallback(id=>{setExcluded(prev=>{const next=prev.includes(id)?prev.filter(x=>x!==id):[...prev,id];persist(user?.id,{excluded:next});return next;});},[persist]);
@@ -2945,14 +2986,39 @@ export default function SomaApp() {
     if(fb&&fb.photo){try{const pm=JSON.parse(localStorage.getItem("soma_photos")||"{}");pm[sDateLocal]=fb.photo;localStorage.setItem("soma_photos",JSON.stringify(pm));}catch(_e){} delete fb.photo;}
     let totalKg=0,totalSets=0;
     const exercisesData=exos.map(ex=>{
-      const s=typeof ex.sets==="number"?ex.sets:4;
-      let completedSets=0,lastWeight=0,topWeight=0;
-      Array.from({length:s},(_,i)=>{
-        const e=log[`${sDate}_${ex.id}_s${i}`];
-        if(e?.done){completedSets++;lastWeight=e.weight||0;if(lastWeight>topWeight)topWeight=lastWeight;const r=Number(e.reps)||parseFloat(String(ex.reps||"8").split("–")[0])||8;totalKg+=lastWeight*r;totalSets++;}
-      });
-      return{id:ex.id,n:ex.n||ex.name,m:ex.m||ex.muscle,weight:topWeight,completedSets};
+      const prefix=`${sDate}_${ex.id}_s`;
+      // On balaie les series REELLEMENT enregistrees, au lieu d'un nombre attendu. En EMOM/AMRAP
+      // "sets" n'est pas un nombre (les exos portent repsPerRound / repsPerMinute) : l'ancien
+      // repli sur 4 plafonnait donc silencieusement le comptage a 4 tours, et tout tour au-dela
+      // etait perdu, en volume comme en series.
+      const planned=typeof ex.sets==="number"?ex.sets:0;
+      const logged=Object.keys(log).reduce((mx,k)=>{
+        if(k.indexOf(prefix)!==0) return mx;
+        const i=parseInt(k.slice(prefix.length),10);
+        return (isNaN(i)||i+1<=mx)?mx:i+1;
+      },0);
+      const n=Math.max(planned,logged);
+      const defReps=parseFloat(String(ex.reps||"8").split("–")[0])||8;
+      let completedSets=0,topWeight=0;
+      const setsDetail=[];
+      for(let i=0;i<n;i++){
+        const e=log[`${prefix}${i}`];
+        if(!e||!e.done) continue;
+        const w=Number(e.weight)||0;
+        const r=Number(e.reps)||defReps;
+        completedSets++;
+        if(w>topWeight) topWeight=w;
+        totalKg+=w*r;
+        totalSets++;
+        // Detail conserve serie par serie : seule facon de revoir la montee en charge d'une
+        // seance. L'ancien format n'en gardait que la charge maximale, le reste etait jete.
+        setsDetail.push({i,weight:w,reps:r});
+      }
+      return{id:ex.id,n:ex.n||ex.name,m:ex.m||ex.muscle,weight:topWeight,reps:defReps,completedSets,setsDetail};
     });
+    // Duree figee UNE fois ici : elle doit etre identique en local, dans le state et en base,
+    // et ne pas dependre de l'etat du chrono au moment ou l'ecriture Supabase part.
+    const durationSec=clock.sec;
     const score=computeScore(totalKg,totalSets,fb);
     // Date = jour du programme (ex: LUN = date du lundi de cette semaine)
     const entry={
@@ -2962,7 +3028,7 @@ export default function SomaApp() {
       exercises:exercisesData,
       totalKg:Math.round(totalKg),
       totalSets,
-      duration:clock.sec,
+      duration:durationSec,
       score,
       feedback:fb,
       user_id:user?.id,
@@ -2993,7 +3059,10 @@ export default function SomaApp() {
       return next;
     });
     // 3. Fermer popup immédiatement
-    clock.stop();
+    // reset (et pas stop) : "stop" laissait le compteur a sa valeur, si bien que la seance
+    // suivante demarrait avec le temps de la precedente et que le bouton Demarrer,
+    // conditionne a sec===0, ne relancait jamais rien.
+    clock.reset();
     setSessionActive(false);
     setShowFeedback(false);
     setShowReport(entry);
@@ -3006,7 +3075,7 @@ export default function SomaApp() {
         session_index:entry.sessionIndex,
         mode:sessionMode,
         total_kg:Math.round(totalKg),total_sets:totalSets,
-        duration_seconds:clock.sec,score,
+        duration_seconds:durationSec,score,
         exercises:JSON.stringify(exercisesData),
         feedback:JSON.stringify(fb),
         notes:fb.notes||""
