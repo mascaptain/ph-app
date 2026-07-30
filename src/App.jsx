@@ -591,10 +591,26 @@ const SESSION_TEMPLATES = [...PROGRAM.filter(d=>d.salle).map(d=>({label:d.label,
 const weekNumber = () => { const dt=new Date(); const d=new Date(Date.UTC(dt.getFullYear(),dt.getMonth(),dt.getDate())); const dn=(d.getUTCDay()+6)%7; d.setUTCDate(d.getUTCDate()-dn+3); const ft=new Date(Date.UTC(d.getUTCFullYear(),0,4)); const fn=(ft.getUTCDay()+6)%7; ft.setUTCDate(ft.getUTCDate()-fn+3); return 1+Math.round((d-ft)/604800000); };
 const PHASES12=[{n:"Accumulation",f:"Volume, base"},{n:"Accumulation",f:"Volume"},{n:"Accumulation",f:"Volume +"},{n:"Intensification",f:"Charges +"},{n:"Intensification",f:"Charges ++"},{n:"Intensification",f:"Lourd"},{n:"Réalisation",f:"Explosif"},{n:"Réalisation",f:"Puissance"},{n:"Réalisation",f:"Pic de force"},{n:"Deload",f:"Récupération"},{n:"Test / PR",f:"Validation"},{n:"Test / PR",f:"Nouveaux maxs"}];
 const programWeek=()=>((weekNumber()-1)%12)+1;
-const MESO = [ {k:"Volume",s:1,r:0.9,g:"Series hautes, tempo controle"}, {k:"Intensite",s:0,r:1.2,g:"Charges lourdes, reps basses"}, {k:"Puissance",s:0,r:1.35,g:"Explosif, repos longs"}, {k:"Deload",s:-1,r:0.85,g:"Recuperation, charges legeres"} ];
+// Une seule periodisation. Deux modeles coexistaient et se contredisaient: un cycle MESO
+// de 4 semaines qui pilotait REELLEMENT les charges, les series et les repos, et un modele
+// PHASES12 de 12 blocs qui pilotait l'AFFICHAGE de la phase et les jalons du rapport.
+// L'application annoncait donc une phase d'entrainement differente de celle qu'elle
+// appliquait a tes charges. PHASES12 fait desormais autorite, et porte ses parametres.
+const PHASE_PARAMS={
+  "Accumulation":   {s: 1, r:0.90, i:1.00, g:"Séries hautes, tempo contrôlé"},
+  "Intensification":{s: 0, r:1.20, i:1.06, g:"Charges lourdes, reps basses"},
+  "Réalisation":    {s: 0, r:1.35, i:1.10, g:"Explosif, repos longs"},
+  "Deload":         {s:-1, r:0.85, i:0.85, g:"Récupération, charges légères"},
+  "Test / PR":      {s:-1, r:1.30, i:1.12, g:"Validation, nouveaux maxs"},
+};
 const REST_STEPS=[30,45,60,75,90,120,150,180,210,240,300];
 const snapRest=(s)=>{ if(!s||s<=0) return 0; return REST_STEPS.reduce((a,b)=>Math.abs(b-s)<Math.abs(a-s)?b:a); };
-const phaseOf = (w) => MESO[((w%4)+4)%4];
+const phaseOf = (w) => {
+  const i=Math.max(0,Math.min(PHASES12.length-1,(Number(w)||1)-1));
+  const name=PHASES12[i].n;
+  const prm=PHASE_PARAMS[name]||PHASE_PARAMS["Accumulation"];
+  return {k:name,...prm,deload:name==="Deload",peak:(name==="Réalisation"||name==="Test / PR")};
+};
 const PROG_WEEKS=12;
 // Un programme fait 60 seances, POINT - que la semaine en cours en compte 3, 4 ou 5.
 // La longueur etait calculee en 12*frequence (soit 48 a 4 seances/semaine), ce qui liait a tort
@@ -641,13 +657,13 @@ const personalizeDay=(day,profile,week,perf)=>{
   if(!day||!day.salle) return day;
   const scale=engineScale(profile);
   const ph=phaseOf(week);
-  const intensity=ph.k==="Intensite"?1.06:ph.k==="Deload"?0.85:1.0;
+  const intensity=ph.i;
   const setAdj=ph.s||0;
   const lvlSets=(profile&&profile.level==="debutant")?-1:(profile&&profile.level==="avance")?1:0;
   const rms=(profile&&profile.rms)||{};
   const goal=profile&&profile.goal;
   const gf=goal==="force"?1.25:goal==="endurance"?0.6:goal==="seche"?0.75:1.0;
-  const restPF=ph.k==="Intensite"?1.1:ph.k==="Deload"?0.85:1.0;
+  const restPF=ph.r;
   const exercises=(day.exercises||[]).map(ex=>{
     let kg=ex.kg;
     const rm=rms[ex.id];
@@ -655,7 +671,7 @@ const personalizeDay=(day,profile,week,perf)=>{
     // Ta derniere seance prime sur toute estimation : c'est la seule donnee vraie.
     if(p&&p.kg>0&&ex.eq!=="bw"){
       kg=nextLoad(p.kg,p.rpe,ex.kg);
-      if(ph.k==="Deload") kg=Math.max(2.5,Math.round(kg*0.85/2.5)*2.5);
+      if(ph.deload) kg=Math.max(2.5,Math.round(kg*0.85/2.5)*2.5);
     }
     else if(rm>0){ kg=Math.max(2.5,Math.round(rm*intensity/2.5)*2.5); }
     else if(typeof ex.kg==="number"&&ex.kg>0&&ex.eq!=="bw"){ kg=Math.max(2.5,Math.round(ex.kg*scale*intensity/2.5)*2.5); }
@@ -670,7 +686,7 @@ const personalizeDay=(day,profile,week,perf)=>{
 };
 const MODE_WEEK_PLANS={force:["classique","classique","classique","classique+circuit","classique"],seche:["classique+circuit","amrap","classique+circuit","emom","classique+circuit"],hybride:["classique","emom","classique+circuit","amrap","classique"],endurance:["amrap","classique+circuit","emom","amrap","classique+circuit"]};
 const baseGoal=(g)=>g==="force"?"force":g==="endurance"?"endurance":g==="seche"?"seche":"hybride";
-const assignMode=(day,idx,profile,week)=>{ if(!day||!day.salle) return day; const plan=MODE_WEEK_PLANS[baseGoal(profile&&profile.goal)]||MODE_WEEK_PLANS.hybride; let tag=plan[idx%plan.length]; const ph=phaseOf(week); if(ph.k==="Deload") tag=tag.indexOf("circuit")>=0?"classique+circuit":"classique"; const circuit=tag.indexOf("circuit")>=0; const recommendedMode=tag.indexOf("amrap")>=0?"amrap":tag.indexOf("emom")>=0?"emom":"classique"; return {...day,recommendedMode,circuit}; };
+const assignMode=(day,idx,profile,week)=>{ if(!day||!day.salle) return day; const plan=MODE_WEEK_PLANS[baseGoal(profile&&profile.goal)]||MODE_WEEK_PLANS.hybride; let tag=plan[idx%plan.length]; const ph=phaseOf(week); if(ph.deload) tag=tag.indexOf("circuit")>=0?"classique+circuit":"classique"; const circuit=tag.indexOf("circuit")>=0; const recommendedMode=tag.indexOf("amrap")>=0?"amrap":tag.indexOf("emom")>=0?"emom":"classique"; return {...day,recommendedMode,circuit}; };
 const buildCircuits=(day,profile)=>{ const exos=day.exercises||[]; if(exos.length<3) return day; const goal=baseGoal(profile&&profile.goal); const gs=(goal==="seche"||goal==="endurance")?3:2; const out=exos.map(e=>({...e})); let cid=0; for(let i=1;i<out.length;i+=gs){ const slice=out.slice(i,i+gs); if(slice.length<2) break; cid++; const gt=slice.length>=3?"circuit":"superset";
   // Un superset/circuit tourne par definition le MEME nombre de tours pour tous ses exercices.
   // Les membres gardaient chacun leur nombre de series propre issu de personalizeDay, alors que
@@ -680,7 +696,7 @@ const buildCircuits=(day,profile)=>{ const exos=day.exercises||[]; if(exos.lengt
   slice.forEach((e,k)=>{ e.circuitId=cid; e.circuitPos=k+1; e.circuitSize=slice.length; e.groupType=gt; e.groupTours=tours; e.sets=tours; }); } return {...day,exercises:out}; };
 const classifySession=(day)=>{ const ex=(day&&day.exercises)||[]; if(!ex.length) return {system:"force",metconEligible:false,condShare:0,hasBar:false}; let cond=0,hasBar=false; const n=ex.length; ex.forEach(e=>{ if(e.eq==="bar") hasBar=true; if(e.eq==="kb"||e.eq==="cd") cond+=1; else if(e.eq==="bw") cond+=0.8; else if(e.eq==="db") cond+=0.5; }); const condShare=cond/n; const metconEligible=!hasBar&&condShare>=0.5; const system=metconEligible?(condShare>0.85?"conditioning":"mixed"):"force"; return {system,metconEligible,condShare:+condShare.toFixed(2),hasBar}; };
 const GOAL_METCON={force:0.10,hypertrophie:0.20,seche:0.55,hybride:0.45,endurance:0.70,performance:0.50};
-const weeklyModePlan=(days,profile,week)=>{ const goal=(GOAL_METCON[profile&&profile.goal]!=null)?profile.goal:"hybride"; let ratio=GOAL_METCON[goal]; const ph=phaseOf(week); if(ph.k==="Deload") ratio*=0.4; const trainIdx=days.map((d,i)=>({i,salle:!!(d&&d.salle),cls:classifySession(d)})).filter(x=>x.salle); const nTrain=trainIdx.length; const eligible=trainIdx.filter(x=>x.cls.metconEligible); let nMet=Math.min(Math.round(ratio*nTrain),eligible.length); const ranked=eligible.slice().sort((a,b)=> b.cls.condShare-a.cls.condShare || a.i-b.i); const start=eligible.length?((week-1)%eligible.length):0; const chosen=[]; for(let k=0;k<nMet&&k<ranked.length;k++){ chosen.push(ranked[(start+k)%ranked.length].i); } const plan={}; const emomBias=(ph.k==="Intensite"||ph.k==="Puissance"); chosen.sort((a,b)=>a-b).forEach((idx,order)=>{ const emom=emomBias?(order%2===0):(order%2===1); plan[idx]={mode:emom?"emom":"amrap",circuit:false}; }); trainIdx.forEach(x=>{ if(!plan[x.i]){ const circ=(goal!=="force"&&goal!=="hypertrophie"); plan[x.i]={mode:"classique",circuit:circ}; } }); return plan; };
+const weeklyModePlan=(days,profile,week)=>{ const goal=(GOAL_METCON[profile&&profile.goal]!=null)?profile.goal:"hybride"; let ratio=GOAL_METCON[goal]; const ph=phaseOf(week); if(ph.deload) ratio*=0.4; const trainIdx=days.map((d,i)=>({i,salle:!!(d&&d.salle),cls:classifySession(d)})).filter(x=>x.salle); const nTrain=trainIdx.length; const eligible=trainIdx.filter(x=>x.cls.metconEligible); let nMet=Math.min(Math.round(ratio*nTrain),eligible.length); const ranked=eligible.slice().sort((a,b)=> b.cls.condShare-a.cls.condShare || a.i-b.i); const start=eligible.length?((week-1)%eligible.length):0; const chosen=[]; for(let k=0;k<nMet&&k<ranked.length;k++){ chosen.push(ranked[(start+k)%ranked.length].i); } const plan={}; const emomBias=ph.peak; chosen.sort((a,b)=>a-b).forEach((idx,order)=>{ const emom=emomBias?(order%2===0):(order%2===1); plan[idx]={mode:emom?"emom":"amrap",circuit:false}; }); trainIdx.forEach(x=>{ if(!plan[x.i]){ const circ=(goal!=="force"&&goal!=="hypertrophie"); plan[x.i]={mode:"classique",circuit:circ}; } }); return plan; };
 const MET_BAN=["planche","dragon flag","muscle-up","handstand","l-sit","nordic","windmill","turkish","get-up","ab rollout","front lever","back lever","pistol","figure 8","around the world","pass under","halo","dead bug","hollow"];
 const MET_KW=["swing","clean","snatch","thruster","press","pompe","push-up","push up","burpee","gobelet","goblet","squat","fente","lunge","step-up","jump","saut","corde","rameur","velo","mountain","twist","knee raise","relev","sit-up","situp","carry","farmer","slam","wall ball","complex","jumping","rowing","row"];
 const MET_EQ_BASE={kb:3,cd:3,bw:2,db:2,bar:0,mc:0};
@@ -688,7 +704,7 @@ const metconScore=(ex,goal)=>{ const n=String(ex.n||"").toLowerCase(); if(MET_BA
 const metRepsAmrap=(ex)=> ex.eq==="cd"?0:ex.eq==="bw"?12:ex.eq==="kb"?12:10;
 const metRepsEmom=(ex)=> ex.eq==="cd"?0:ex.eq==="bw"?12:ex.eq==="kb"?10:8;
 const metKg=(ex,profile,f)=>{ if(ex.eq==="bw"||ex.eq==="cd") return 0; const sc=engineScale(profile); const base=(typeof ex.kg==="number"?ex.kg:0)*sc*f; return base>0?Math.max(4,Math.round(base/2)*2):0; };
-const buildMetcon=(day,mode,profile,week,seed)=>{ if(!day||!day.salle) return day; const goal=baseGoal(profile&&profile.goal); const equip=(profile&&profile.equipment)||[]; const ph=phaseOf(week); let pool=DB.filter(e=>metconScore(e,goal)>0).filter(e=> e.eq==="bw" || !equip.length || equip.indexOf(e.eq)>=0); const seen={}; pool=pool.filter(e=>{ if(seen[e.n]) return false; seen[e.n]=1; return true; }); const dayEqs={};(day.exercises||[]).forEach(e=>{dayEqs[e.eq]=(dayEqs[e.eq]||0)+1;});pool=pool.map(e=>({e,s:metconScore(e,goal)+((dayEqs[e.eq]||0)>0?2:0)})).sort((a,b)=>b.s-a.s).map(x=>x.e); if(pool.length<6) pool=DB.filter(e=>metconScore(e,"hybride")>0); const off=pool.length?(((week-1)*3+(seed||0)*5)%pool.length):0; const rot=pool.slice(off).concat(pool.slice(0,off)); const lvl=profile&&profile.level; let nBlocks=lvl==="avance"?3:lvl==="debutant"?2:3; if(ph.k==="Deload") nBlocks=2; const perBlock=3; const rounds=lvl==="debutant"?3:lvl==="avance"?4:3; const cap=lvl==="avance"?12:10; const f=mode==="amrap"?0.55:0.65; const used={}; const blocks=[]; for(let b=0;b<nBlocks;b++){ const exs=[]; let cd=0; const mus={}; while(exs.length<perBlock){ let e=rot.find(x=>!used[x.n]&&(x.eq!=="cd"||cd<1)&&!mus[primaryMuscle(x.m)]); if(!e) e=rot.find(x=>!used[x.n]&&(x.eq!=="cd"||cd<1)); if(!e) e=rot.find(x=>!used[x.n]); if(!e) break; used[e.n]=1; if(e.eq==="cd")cd++; mus[primaryMuscle(e.m)]=1; exs.push(e); } if(!exs.length) break; const exercises=exs.map(ex=>{ const kg=metKg(ex,profile,f); if(mode==="amrap"){ const r=metRepsAmrap(ex); return {...ex,kg,reps:String(ex.eq==="cd"?"40s":r),repsPerRound:r,modeTag:"AMRAP"}; } const r=metRepsEmom(ex); return {...ex,kg,reps:String(ex.eq==="cd"?"40s":r),repsPerMinute:r,modeTag:"EMOM"}; }); const durationMin=mode==="amrap"?cap:(exercises.length*rounds); blocks.push({label:(mode==="amrap"?"AMRAP ":"EMOM ")+(b+1),kind:mode,durationMin,rounds:mode==="emom"?rounds:0,exercises}); } const totalMin=blocks.reduce((a,bl)=>a+bl.durationMin,0)+Math.max(0,blocks.length-1)*2; const flat=[]; blocks.forEach(bl=>bl.exercises.forEach(e=>flat.push(e))); return {...day,mode,metcon:true,blocks,totalMin,timeCapMin:blocks[0]?blocks[0].durationMin:cap,emomMinutes:blocks[0]?blocks[0].durationMin:8,exercises:flat}; };
+const buildMetcon=(day,mode,profile,week,seed)=>{ if(!day||!day.salle) return day; const goal=baseGoal(profile&&profile.goal); const equip=(profile&&profile.equipment)||[]; const ph=phaseOf(week); let pool=DB.filter(e=>metconScore(e,goal)>0).filter(e=> e.eq==="bw" || !equip.length || equip.indexOf(e.eq)>=0); const seen={}; pool=pool.filter(e=>{ if(seen[e.n]) return false; seen[e.n]=1; return true; }); const dayEqs={};(day.exercises||[]).forEach(e=>{dayEqs[e.eq]=(dayEqs[e.eq]||0)+1;});pool=pool.map(e=>({e,s:metconScore(e,goal)+((dayEqs[e.eq]||0)>0?2:0)})).sort((a,b)=>b.s-a.s).map(x=>x.e); if(pool.length<6) pool=DB.filter(e=>metconScore(e,"hybride")>0); const off=pool.length?(((week-1)*3+(seed||0)*5)%pool.length):0; const rot=pool.slice(off).concat(pool.slice(0,off)); const lvl=profile&&profile.level; let nBlocks=lvl==="avance"?3:lvl==="debutant"?2:3; if(ph.deload) nBlocks=2; const perBlock=3; const rounds=lvl==="debutant"?3:lvl==="avance"?4:3; const cap=lvl==="avance"?12:10; const f=mode==="amrap"?0.55:0.65; const used={}; const blocks=[]; for(let b=0;b<nBlocks;b++){ const exs=[]; let cd=0; const mus={}; while(exs.length<perBlock){ let e=rot.find(x=>!used[x.n]&&(x.eq!=="cd"||cd<1)&&!mus[primaryMuscle(x.m)]); if(!e) e=rot.find(x=>!used[x.n]&&(x.eq!=="cd"||cd<1)); if(!e) e=rot.find(x=>!used[x.n]); if(!e) break; used[e.n]=1; if(e.eq==="cd")cd++; mus[primaryMuscle(e.m)]=1; exs.push(e); } if(!exs.length) break; const exercises=exs.map(ex=>{ const kg=metKg(ex,profile,f); if(mode==="amrap"){ const r=metRepsAmrap(ex); return {...ex,kg,reps:String(ex.eq==="cd"?"40s":r),repsPerRound:r,modeTag:"AMRAP"}; } const r=metRepsEmom(ex); return {...ex,kg,reps:String(ex.eq==="cd"?"40s":r),repsPerMinute:r,modeTag:"EMOM"}; }); const durationMin=mode==="amrap"?cap:(exercises.length*rounds); blocks.push({label:(mode==="amrap"?"AMRAP ":"EMOM ")+(b+1),kind:mode,durationMin,rounds:mode==="emom"?rounds:0,exercises}); } const totalMin=blocks.reduce((a,bl)=>a+bl.durationMin,0)+Math.max(0,blocks.length-1)*2; const flat=[]; blocks.forEach(bl=>bl.exercises.forEach(e=>flat.push(e))); return {...day,mode,metcon:true,blocks,totalMin,timeCapMin:blocks[0]?blocks[0].durationMin:cap,emomMinutes:blocks[0]?blocks[0].durationMin:8,exercises:flat}; };
 const applyMode=(day,mode,profile,week,seed)=>{ if(!day||!day.salle) return day; if(mode==="amrap"||mode==="emom") return buildMetcon(day,mode,profile,week,seed); return day.circuit?buildCircuits(day,profile):day; };
 const primaryMuscle = (m) => String(m||"").split("·")[0].trim().toLowerCase();
 const altPool = (ex) => DB.filter(e=>e.id!==ex.id && e.eq===ex.eq && primaryMuscle(e.m)===primaryMuscle(ex.m));
@@ -2095,7 +2111,7 @@ function FeedbackSheet({onClose,onSave}) {
 function SessionReport({session,sessions,trainingDaysPerWeek,photoUrl,onClose,onDelete}) {
   if(!session) return null;
   const{totalKg=0,totalSets=0,duration=0,exercises=[],date="",dayLabel="",feedback,sessionIndex=0}=session;
-  const score=computeScore(totalKg,totalSets,feedback);
+  const score=computeScore(totalKg,totalSets,feedback,targetOf(session));
   const photo=photoUrl||null;
   const animScore=useCountUp(score,1200);
   const animKg=useCountUp(Math.round(totalKg/1000*10)/10*10,1400);
@@ -2401,7 +2417,7 @@ function LoadChart({data,color=C.blue}){
 }
 function StatsTab({sessions,weights,accent,onOpenPhotos,pinnedPBs,onManagePBs,activeSkills,onManageSkills,onOpenRewards,trainingDaysPerWeek}) {
   const total=sessions.length,totalKg=sessions.reduce((a,s)=>a+(s.totalKg||0),0);
-  const avgScore=total?Math.round(sessions.reduce((a,s)=>a+computeScore(s.totalKg,s.totalSets,s.feedback),0)/total):0;
+  const avgScore=total?Math.round(sessions.reduce((a,s)=>a+computeScore(s.totalKg,s.totalSets,s.feedback,targetOf(s)),0)/total):0;
   const pbs=useMemo(()=>computePBs(sessions),[sessions]);
   const pinnedSet=new Set(pinnedPBs||[]);
   const displayedPBs=(pinnedPBs&&pinnedPBs.length)?pbs.filter(pb=>pinnedSet.has(pb.id)):pbs.slice(0,5);
@@ -2805,7 +2821,7 @@ function HistoryTab({sessions,onSelect,accent,onOpenPhotos,photos:photoMap,urls}
                 <div style={{fontSize:17,fontWeight:600,color:C.ink}}>{label}</div>
                 <div style={{fontSize:13,color:C.ink4,marginTop:2}}>{s.day} · {s.date}</div>
               </div>
-              {computeScore(s.totalKg,s.totalSets,s.feedback)>0&&<span style={{fontSize:15,fontWeight:700,color:accent||C.blue,padding:"4px 12px",background:C.s3,borderRadius:8}}>{computeScore(s.totalKg,s.totalSets,s.feedback)}</span>}
+              {computeScore(s.totalKg,s.totalSets,s.feedback,targetOf(s))>0&&<span style={{fontSize:15,fontWeight:700,color:accent||C.blue,padding:"4px 12px",background:C.s3,borderRadius:8}}>{computeScore(s.totalKg,s.totalSets,s.feedback,targetOf(s))}</span>}
             </div>
             <div style={{display:"flex",gap:14,flexWrap:"wrap"}}>
               {s.totalKg>0&&<span style={{fontSize:13,color:C.ink3}}>{s.totalKg.toLocaleString()}kg</span>}
@@ -3014,7 +3030,7 @@ function SettingsTab({user,excluded,onToggleExclude,onSignOut,onReset,onOpenLibr
           <span style={{fontSize:17,color:C.red}}>›</span>
         </Tap>
       </div>
-      <div style={{fontSize:12,color:C.ink4,textAlign:"center",marginTop:28}}>SŌMA · {"S"+weekNumber()} · {DB.length} exercices · build 23.65a</div>
+      <div style={{fontSize:12,color:C.ink4,textAlign:"center",marginTop:28}}>SŌMA · {"S"+weekNumber()} · {DB.length} exercices · build 23.66a</div>
     </div>
   );
 }
@@ -3120,11 +3136,24 @@ const MUSCLE_GROUP_MAP={
   cardio:"cardio","full body":"full",
 };
 const muscleGroupOf=(ex)=>MUSCLE_GROUP_MAP[primaryMuscle(ex.m)]||"full";
-const computeScore=(totalKg,totalSets,feedback)=>{
+// Le score se mesurait sur des valeurs ABSOLUES : 40 points pour 5000 kg souleves, 30 pour
+// 25 series. Une seance de jambes lourde plafonnait sans effort, une seance d'epaules ou de
+// gainage ne pouvait structurellement pas bien scorer, aussi bien executee soit-elle.
+// Il se mesure desormais a ce qui etait PRESCRIT ce jour-la : executer sa seance vaut 100.
+// Les seances enregistrees avant l'ajout du prescrit retombent sur l'ancien bareme.
+const computeScore=(totalKg,totalSets,feedback,target)=>{
   const fb=feedback||{};
   const g=Number(fb.global)||0,en=Number(fb.energy)||0;
-  return Math.round(Math.min((totalKg||0)/5000*40,40)+Math.min((totalSets||0)/25*30,30)+((g+en)/10*30));
+  const mood=(g+en)/10*30;
+  const tSets=Number(target&&target.sets)||0, tKg=Number(target&&target.kg)||0;
+  if(tSets>0||tKg>0){
+    const pSets=tSets>0?Math.min(1,(totalSets||0)/tSets):1;
+    const pKg  =tKg  >0?Math.min(1,(totalKg  ||0)/tKg  ):1;
+    return Math.round(pSets*35+pKg*35+mood);
+  }
+  return Math.round(Math.min((totalKg||0)/5000*40,40)+Math.min((totalSets||0)/25*30,30)+mood);
 };
+const targetOf=(s)=>({sets:s&&(s.targetSets!=null?s.targetSets:s.target_sets),kg:s&&(s.targetKg!=null?s.targetKg:s.target_kg)});
 const computePBs=(sessions)=>{
   const m={};(sessions||[]).forEach(s=>{(s.exercises||[]).forEach(e=>{if(e&&e.id&&(e.completedSets>0)&&(e.weight>0)){if(!m[e.id]||e.weight>m[e.id])m[e.id]=e.weight;}});});
   return Object.entries(m).map(([id,kg])=>{const ex=DB.find(x=>x.id===id);if(!ex)return null;return{...ex,pbKg:kg,oneRM:orm(kg,ex.reps)};}).filter(Boolean).sort((a,b)=>(b.oneRM||0)-(a.oneRM||0));
@@ -3133,17 +3162,33 @@ const BADGE_TIERS={
   "Assiduité":[1,5,10,20,30,50,75,100,150,200],
   Force:[40,60,80,100,120,140,160,180,200,220],
   Volume:[0.5,1,2.5,5,10,15,25,50,75,100],
-  "Régularité":[3,7,14,30,60,90,120,180,270,365],
+  "Régularité":[1,2,4,8,12,16,24,36,48,52],
   "Personal Bests":[1,3,5,10,15,20,25,30,40,50],
+};
+// Plus longue serie de semaines consecutives comportant au moins une seance.
+const weekKeyOf=(d)=>{const t=new Date(String(d)+"T00:00:00");if(isNaN(t))return null;const dow=(t.getDay()+6)%7;t.setDate(t.getDate()-dow);return localDateKey(t);};
+const longestWeekStreak=(sessions)=>{
+  const keys=[...new Set((sessions||[]).map(s=>weekKeyOf(s.date)).filter(Boolean))].sort();
+  let best=0,run=0,prev=null;
+  keys.forEach(k=>{
+    if(prev){ const gap=Math.round((new Date(k+"T00:00:00")-new Date(prev+"T00:00:00"))/86400000); run=(gap===7)?run+1:1; }
+    else run=1;
+    prev=k; if(run>best) best=run;
+  });
+  return best;
 };
 const computeBadges=(sessions)=>{
   const totalS=(sessions||[]).length;
   const maxW=(sessions||[]).reduce((m,s)=>Math.max(m,((s.exercises||[]).reduce((mm,e)=>Math.max(mm,e.weight||0),0))),0);
   const totalVol=(sessions||[]).reduce((a,s)=>a+(s.totalKg||0),0)/1000;
-  const days=new Set((sessions||[]).map(s=>s.date)).size;
+  // "Regularite" comptait les DATES DISTINCTES de seance. Comme une seule seance est
+  // possible par date (contrainte d'unicite user_id+date), cette valeur etait toujours
+  // STRICTEMENT EGALE a l'assiduite : deux des cinq familles de badges etaient un doublon.
+  // Elle mesure desormais la plus longue serie de semaines consecutives avec seance.
+  const days=longestWeekStreak(sessions);
   const nbPB=computePBs(sessions).length;
   const VALS={"Assiduité":totalS,Force:maxW,Volume:totalVol,"Régularité":days,"Personal Bests":nbPB};
-  const UNIT={"Assiduité":"séances",Force:"kg",Volume:"t",Régularité:"jours actifs","Personal Bests":"PB"};
+  const UNIT={"Assiduité":"séances",Force:"kg",Volume:"t",Régularité:"semaines d'affilée","Personal Bests":"PB"};
   const out=[];
   Object.keys(BADGE_TIERS).forEach(cat=>{
     const val=VALS[cat];
@@ -3530,6 +3575,8 @@ export default function SomaApp() {
         totalKg:Number(s.total_kg||s.totalKg||0),
         totalSets:Number(s.total_sets||s.totalSets||0),
         sessionIndex:Number(s.session_index||s.sessionIndex||0),
+        targetKg:s.target_kg!=null?Number(s.target_kg):null,
+        targetSets:s.target_sets!=null?Number(s.target_sets):null,
         duration:Number(s.duration_seconds||s.duration||0),
         exercises:typeof s.exercises==="string"?JSON.parse(s.exercises||"[]"):(s.exercises||[]),
         feedback:typeof s.feedback==="string"?JSON.parse(s.feedback||"null"):s.feedback,
@@ -3731,7 +3778,10 @@ export default function SomaApp() {
     // Duree figee UNE fois ici : elle doit etre identique en local, dans le state et en base,
     // et ne pas dependre de l'etat du chrono au moment ou l'ecriture Supabase part.
     const durationSec=clock.sec;
-    const score=computeScore(totalKg,totalSets,fb);
+    // Prescrit du jour : sans lui le score ne peut se mesurer qu'a des valeurs absolues.
+    const targetSets=exos.reduce((a,e)=>a+((e.groupTours>0)?e.groupTours:((typeof e.sets==="number"&&e.sets>0)?e.sets:4)),0);
+    const targetKg=Math.round(exos.reduce((a,e)=>a+setPlanFor(e).reduce((b,st)=>b+(Number(st.w)||0)*(repsNum(st.reps)||0),0),0));
+    const score=computeScore(totalKg,totalSets,fb,{sets:targetSets,kg:targetKg});
     // Date = jour du programme (ex: LUN = date du lundi de cette semaine)
     const entry={
       day:day.day,
@@ -3740,6 +3790,7 @@ export default function SomaApp() {
       exercises:exercisesData,
       totalKg:Math.round(totalKg),
       totalSets,
+      targetKg,targetSets,
       duration:durationSec,
       score,
       feedback:fb,
@@ -3780,6 +3831,7 @@ export default function SomaApp() {
         session_index:entry.sessionIndex,
         mode:sessionMode,
         total_kg:Math.round(totalKg),total_sets:totalSets,
+        target_kg:targetKg,target_sets:targetSets,
         duration_seconds:durationSec,score,completed:true,
         exercises:exercisesData,
         feedback:fb,
