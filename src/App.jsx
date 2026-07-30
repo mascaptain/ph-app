@@ -721,12 +721,57 @@ const fmtMSS = s => `${String(Math.floor(s/60)).padStart(2,"0")}:${String(s%60).
 const fmtDur = s => s>=3600?`${Math.floor(s/3600)}h${String(Math.floor((s%3600)/60)).padStart(2,"0")}m`:`${Math.floor(s/60)}m${String(s%60).padStart(2,"0")}s`;
 const orm = (kg,reps) => kg>0?Math.round(kg*(1+(parseFloat(String(reps).split("–")[0])||8)/30)):null;
 
-function beep() {
-  try {
-    const ctx=new(window.AudioContext||window.webkitAudioContext)();
-    [0,.15,.30].forEach(d=>{const o=ctx.createOscillator(),g=ctx.createGain();o.connect(g);g.connect(ctx.destination);o.frequency.value=1046;g.gain.setValueAtTime(.18,ctx.currentTime+d);g.gain.exponentialRampToValueAtTime(.001,ctx.currentTime+d+.1);o.start(ctx.currentTime+d);o.stop(ctx.currentTime+d+.1);});
-  } catch {}
-}
+// ─── SIGNAUX SONORES ────────────────────────────────────────────────────────
+// Un son = un sens. L'application n'avait qu'un seul timbre pour la fin d'un repos,
+// le changement de minute EMOM et la fin d'un bloc : trois evenements tres differents
+// sonnaient pareil, ce qui obligeait a regarder l'ecran pour savoir ce qui venait de
+// se passer. Quatre timbres distincts, synthetises a la volee (aucun fichier a charger).
+const SOUND={enabled:true,vibrate:true,countdown:true,ctx:null};
+
+// iOS refuse de produire du son tant que l'utilisateur n'a pas interagi avec la page,
+// et l'ancienne implementation creait un AudioContext NEUF a chaque bip - donc une fuite
+// et, sur mobile, un silence quasi systematique. Un seul contexte, debloque au premier tap.
+const audioCtx=()=>{
+  try{
+    if(!SOUND.ctx) SOUND.ctx=new(window.AudioContext||window.webkitAudioContext)();
+    if(SOUND.ctx.state==="suspended") SOUND.ctx.resume();
+    return SOUND.ctx;
+  }catch(_e){ return null; }
+};
+const unlockAudio=()=>{ const c=audioCtx(); if(c&&c.state==="suspended") c.resume(); };
+
+const tone=(f,t0,d,g,type)=>{
+  const c=audioCtx(); if(!c) return;
+  const o=c.createOscillator(),v=c.createGain();
+  o.type=type||"sine"; o.frequency.value=f;
+  o.connect(v); v.connect(c.destination);
+  const t=c.currentTime+t0;
+  v.gain.setValueAtTime(0.0001,t);
+  v.gain.exponentialRampToValueAtTime(g,t+0.012);
+  v.gain.exponentialRampToValueAtTime(0.0001,t+d);
+  o.start(t); o.stop(t+d+0.02);
+};
+
+const SFX={
+  // Fin de repos : le seul moment ou l'ecran n'est pas regarde. Doit porter.
+  cloche:()=>{[0,.16,.32].forEach(t=>tone(1046,t,0.16,0.22,"sine"));},
+  // Decompte 3-2-1 : un clic par seconde, montant, pour se remettre en position.
+  tick:(i)=>{tone([660,740,830][i]||830,0,0.09,0.18,"triangle");},
+  // Minute EMOM : revient toutes les 60 s, donc volontairement bref et neutre.
+  top:()=>{tone(880,0,0.07,0.20,"triangle");},
+  // Fin de bloc / cap AMRAP : grave et long, aucune confusion avec le top de minute.
+  gong:()=>{tone(196,0,1.1,0.26,"sine");tone(294,0.02,0.9,0.12,"sine");tone(392,0.04,0.5,0.06,"sine");},
+  // Confirmation de tap, tres discret.
+  clic:()=>{tone(1200,0,0.03,0.10,"triangle");},
+};
+
+const play=(name,arg)=>{ if(!SOUND.enabled) return; try{ if(SFX[name]) SFX[name](arg); }catch(_e){} };
+const buzz=(ms)=>{ if(!SOUND.vibrate) return; try{ navigator.vibrate&&navigator.vibrate(ms); }catch(_e){} };
+// Fin de repos : son + vibration, pour le cas ou le telephone est en poche ou en silencieux.
+const signalRestOver=()=>{ play("cloche"); buzz([90,60,90]); };
+const signalBlockOver=()=>{ play("gong"); buzz([180,80,180]); };
+// Egrene le decompte des trois dernieres secondes d'un repos.
+const signalCountdown=(remaining)=>{ if(!SOUND.countdown) return; if(remaining>=1&&remaining<=3){ play("tick",3-remaining); buzz(35); } };
 
 // ─── HOOKS ───────────────────────────────────────────────────────────────────
 // Chrono de seance base sur des TIMESTAMPS, jamais sur un compteur de ticks.
@@ -863,7 +908,16 @@ function useStopwatch(onPersist) {
 
 function useCountdown(onDone) {
   const[sec,setSec]=useState(0);const[total,setTotal]=useState(0);const[running,setRunning]=useState(false);const[done,setDone]=useState(false);const ref=useRef(null);
-  const start=useCallback(s=>{clearInterval(ref.current);setSec(s);setTotal(s);setRunning(true);setDone(false);ref.current=setInterval(()=>setSec(p=>{if(p<=1){clearInterval(ref.current);setRunning(false);setDone(true);beep();onDone?.();return 0;}return p-1;}),1000);},[onDone]);
+  const left=useRef(0);
+  const start=useCallback(s=>{
+    clearInterval(ref.current);setSec(s);setTotal(s);setRunning(true);setDone(false);left.current=s;
+    ref.current=setInterval(()=>{
+      const nx=left.current-1; left.current=nx;
+      if(nx<=0){clearInterval(ref.current);setSec(0);setRunning(false);setDone(true);signalRestOver();onDone&&onDone();return;}
+      signalCountdown(nx);
+      setSec(nx);
+    },1000);
+  },[onDone]);
   const stop=()=>{clearInterval(ref.current);setRunning(false);};
   const reset=()=>{clearInterval(ref.current);setRunning(false);setDone(false);setSec(0);setTotal(0);};
   useEffect(()=>()=>clearInterval(ref.current),[]);
@@ -1348,15 +1402,48 @@ function CircuitPlayer({mode,exos,onClose,defMin,blocks,onAllDone,startBlock,log
     occRef.current=occ;
   },[bi]);
   const goNext=()=>{clearInterval(ref.current);clearInterval(restRef.current);if(lastBlock){onAllDone&&onAllDone();onClose&&onClose();}else{setBi(b=>b+1);}};
-  const startTimer=()=>{if(running||total<=0)return;setRunning(true);lastMin.current=Math.floor(elapsed/60);const tt=total;const isEmom=kind==="emom";ref.current=setInterval(()=>{setElapsed(p=>{const n=p+1;if(isEmom){const cm=Math.floor(n/60);if(cm!==lastMin.current&&n<tt){const finishedEx=cexos.length?cexos[lastMin.current%cexos.length]:null;logOccurrence(finishedEx);lastMin.current=cm;beep();}}if(n>=tt){clearInterval(ref.current);if(isEmom&&cexos.length){logOccurrence(cexos[lastMin.current%cexos.length]);}beep();setRunning(false);setTimeout(()=>goNext(),900);return tt;}return n;});},1000);};
+  // Le decompte est pilote par une ref, jamais depuis l'updater de state : les effets de bord
+  // qui s'y trouvaient (bip ET enregistrement d'occurrence) etaient joues deux fois sous
+  // React StrictMode, ce qui pouvait compter une minute EMOM en double.
+  const elRef=useRef(0);
+  const startTimer=()=>{
+    if(running||total<=0)return;
+    setRunning(true); elRef.current=elapsed; lastMin.current=Math.floor(elapsed/60);
+    const tt=total,isEmom=kind==="emom";
+    ref.current=setInterval(()=>{
+      const n=elRef.current+1; elRef.current=n;
+      if(isEmom){
+        const cm=Math.floor(n/60);
+        if(cm!==lastMin.current&&n<tt){
+          logOccurrence(cexos.length?cexos[lastMin.current%cexos.length]:null);
+          lastMin.current=cm; play("top"); buzz(60);
+        }
+      }
+      if(n>=tt){
+        clearInterval(ref.current);
+        if(isEmom&&cexos.length) logOccurrence(cexos[lastMin.current%cexos.length]);
+        signalBlockOver(); setRunning(false); setElapsed(tt); setTimeout(()=>goNext(),900); return;
+      }
+      setElapsed(n);
+    },1000);
+  };
   const pause=()=>{clearInterval(ref.current);setRunning(false);};
-  const reset=()=>{clearInterval(ref.current);setRunning(false);setElapsed(0);setRounds(0);lastMin.current=0;};
+  const reset=()=>{clearInterval(ref.current);setRunning(false);setElapsed(0);elRef.current=0;setRounds(0);lastMin.current=0;};
   const remaining=Math.max(0,total-elapsed);
   const done=total>0&&elapsed>=total;
   const curMin=Math.min(durMin,Math.floor(elapsed/60)+1);
   const secInMin=done?0:60-(elapsed%60);
   const emomEx=cexos.length?cexos[(curMin-1)%cexos.length]:null;
-  const startRest=()=>{const rs=cur.restSec||90;setResting(rs);clearInterval(restRef.current);restRef.current=setInterval(()=>{setResting(pp=>{if(pp<=1){clearInterval(restRef.current);beep();return 0;}return pp-1;});},1000);};
+  const restLeft=useRef(0);
+  const startRest=()=>{
+    const rs=cur.restSec||90;
+    clearInterval(restRef.current); setResting(rs); restLeft.current=rs;
+    restRef.current=setInterval(()=>{
+      const nx=restLeft.current-1; restLeft.current=nx;
+      if(nx<=0){clearInterval(restRef.current);setResting(0);signalRestOver();return;}
+      signalCountdown(nx); setResting(nx);
+    },1000);
+  };
   const validateAmrap=()=>{
     if(!running||done) return;
     logOccurrence(cexos[si]);
@@ -1548,7 +1635,15 @@ function ExerciseFocus({ex,dayIdx,sDate,log,onLogSet,onClose,onNext,hasNext,idx,
   const scRef=useRef(null);
   useEffect(()=>()=>clearInterval(restRef.current),[]);
   useEffect(()=>{ if(scRef.current) scRef.current.scrollTop=0; window.scrollTo&&window.scrollTo(0,0); },[ex.id]);
-  const startRest=(s)=>{clearInterval(restRef.current);setRestTotal(s);setResting(s);restRef.current=setInterval(()=>{setResting(pp=>{if(pp<=1){clearInterval(restRef.current);beep();return 0;}return pp-1;});},1000);};
+  const restLeft=useRef(0);
+  const startRest=(s)=>{
+    clearInterval(restRef.current); setRestTotal(s); setResting(s); restLeft.current=s;
+    restRef.current=setInterval(()=>{
+      const nx=restLeft.current-1; restLeft.current=nx;
+      if(nx<=0){clearInterval(restRef.current);setResting(0);signalRestOver();return;}
+      signalCountdown(nx); setResting(nx);
+    },1000);
+  };
   const skipRest=()=>{clearInterval(restRef.current);setResting(0);};
   const cur=done.findIndex(d=>!d);
   const allDone=cur===-1;
@@ -1557,6 +1652,7 @@ function ExerciseFocus({ex,dayIdx,sDate,log,onLogSet,onClose,onNext,hasNext,idx,
     const i=cur;
     // On enregistre la charge et les reps REELLEMENT faites, pas le prescrit.
     onLogSet(`${lk}_s${i}`,{done:true,weight:loads[i],reps:reps[i],date:todayKey()});
+    play("clic"); buzz(18);
     setDone(d=>d.map((v,j)=>j===i?true:v));
     // La charge de la serie suivante part de celle qu'on vient de faire : on ne
     // retombe pas sur le prescrit apres un ajustement.
@@ -2082,7 +2178,7 @@ function IntervalTimer({onClose}) {
   const lastMinRef=useRef(0);
   const total=mode==="amrap"?amrapMin*60:emomMin*60;
   useEffect(()=>()=>clearInterval(ref.current),[]);
-  const start=()=>{if(running||total<=0)return;setRunning(true);lastMinRef.current=Math.floor(elapsed/60);const md=mode,tt=total;ref.current=setInterval(()=>{setElapsed(p=>{const n=p+1;if(md==="emom"){const cm=Math.floor(n/60);if(cm!==lastMinRef.current&&n<tt){lastMinRef.current=cm;beep();}}if(n>=tt){clearInterval(ref.current);setRunning(false);beep();return tt;}return n;});},1000);};
+  const start=()=>{if(running||total<=0)return;setRunning(true);lastMinRef.current=Math.floor(elapsed/60);const md=mode,tt=total;ref.current=setInterval(()=>{setElapsed(p=>{const n=p+1;if(md==="emom"){const cm=Math.floor(n/60);if(cm!==lastMinRef.current&&n<tt){lastMinRef.current=cm;play("top");buzz(60);}}if(n>=tt){clearInterval(ref.current);setRunning(false);signalBlockOver();return tt;}return n;});},1000);};
   const pause=()=>{clearInterval(ref.current);setRunning(false);};
   const reset=()=>{clearInterval(ref.current);setRunning(false);setElapsed(0);setRounds(0);lastMinRef.current=0;};
   const remaining=Math.max(0,total-elapsed);
@@ -2761,6 +2857,26 @@ function SettingsTab({user,excluded,onToggleExclude,onSignOut,onReset,onOpenLibr
         <span style={{fontSize:17,color:C.ink}}>Bibliothèque d'exercices</span>
         <span style={{fontSize:17,color:C.blue}}>›</span>
       </Tap>
+      {/* Signaux */}
+      <div style={{fontSize:12,fontWeight:600,color:C.ink4,textTransform:"uppercase",letterSpacing:".1em",marginBottom:10,marginTop:20}}>Signaux</div>
+      {[
+        ["sound_on","Sons","Fin de repos, minute EMOM, fin de bloc"],
+        ["vibrate_on","Vibration","Utile en salle avec des écouteurs"],
+        ["countdown_on","Décompte 3·2·1","Trois clics avant la fin du repos"],
+      ].map(([k,t,d],i,arr)=>{
+        const on=profile?.[k]!==false;
+        return (
+          <Tap key={k} onTap={()=>{ const next=!on; onUpdateConfig&&onUpdateConfig({[k]:next}); if(next){unlockAudio();play(k==="countdown_on"?"tick":"cloche");} }}
+            style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:12,padding:"14px 16px",background:C.s1,
+              borderRadius:i===0?"14px 14px 0 0":i===arr.length-1?"0 0 14px 14px":0,
+              borderTop:i?`1px solid ${C.s2}`:"none",marginBottom:i===arr.length-1?0:0}}>
+            <div><div style={{fontSize:15,fontWeight:600,color:C.ink}}>{t}</div><div style={{fontSize:12,color:C.ink4,marginTop:2}}>{d}</div></div>
+            <div style={{width:46,height:28,borderRadius:980,background:on?C.blue:C.s4,position:"relative",transition:`background 200ms ${EO}`,flexShrink:0}}>
+              <div style={{position:"absolute",top:3,left:on?21:3,width:22,height:22,borderRadius:"50%",background:"#fff",transition:`left 200ms ${EO}`}}/>
+            </div>
+          </Tap>
+        );
+      })}
       {/* Exclusions */}
       <div style={{fontSize:12,fontWeight:600,color:C.ink4,textTransform:"uppercase",letterSpacing:".1em",marginBottom:10,marginTop:20}}>
         Exercices exclus {excluded.length>0&&`· ${excluded.length}`}
@@ -2791,7 +2907,7 @@ function SettingsTab({user,excluded,onToggleExclude,onSignOut,onReset,onOpenLibr
           <span style={{fontSize:17,color:C.red}}>›</span>
         </Tap>
       </div>
-      <div style={{fontSize:12,color:C.ink4,textAlign:"center",marginTop:28}}>SŌMA · {"S"+weekNumber()} · {DB.length} exercices · build 23.62a</div>
+      <div style={{fontSize:12,color:C.ink4,textAlign:"center",marginTop:28}}>SŌMA · {"S"+weekNumber()} · {DB.length} exercices · build 23.63a</div>
     </div>
   );
 }
@@ -3220,6 +3336,20 @@ export default function SomaApp() {
   const[photoUrls,setPhotoUrls]=useState({});
   const[avatarUrl,setAvatarUrl]=useState("");
   useEffect(()=>{ let alive=true; (async()=>{ const u=await signPhotos(photos); if(alive) setPhotoUrls(u); })(); return()=>{alive=false;}; },[photos]);
+  // Les signaux sont declenches depuis des minuteurs, hors de l'arbre React : les preferences
+  // sont donc recopiees dans le module audio a chaque changement de profil.
+  useEffect(()=>{
+    SOUND.enabled  = profile?.sound_on!==false;
+    SOUND.vibrate  = profile?.vibrate_on!==false;
+    SOUND.countdown= profile?.countdown_on!==false;
+  },[profile]);
+  // iOS n'autorise aucun son tant que la page n'a pas ete touchee : sans ce deblocage,
+  // le tout premier bip d'une seance ne sort jamais.
+  useEffect(()=>{
+    const on=()=>{ unlockAudio(); window.removeEventListener("pointerdown",on); };
+    window.addEventListener("pointerdown",on,{once:false});
+    return()=>window.removeEventListener("pointerdown",on);
+  },[]);
   const avatarPath=profile&&profile.avatar;
   useEffect(()=>{ let alive=true; (async()=>{
     if(!avatarPath){ if(alive) setAvatarUrl(""); return; }
