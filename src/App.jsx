@@ -632,7 +632,13 @@ const personalizeDay=(day,profile,week)=>{
 const MODE_WEEK_PLANS={force:["classique","classique","classique","classique+circuit","classique"],seche:["classique+circuit","amrap","classique+circuit","emom","classique+circuit"],hybride:["classique","emom","classique+circuit","amrap","classique"],endurance:["amrap","classique+circuit","emom","amrap","classique+circuit"]};
 const baseGoal=(g)=>g==="force"?"force":g==="endurance"?"endurance":g==="seche"?"seche":"hybride";
 const assignMode=(day,idx,profile,week)=>{ if(!day||!day.salle) return day; const plan=MODE_WEEK_PLANS[baseGoal(profile&&profile.goal)]||MODE_WEEK_PLANS.hybride; let tag=plan[idx%plan.length]; const ph=phaseOf(week); if(ph.k==="Deload") tag=tag.indexOf("circuit")>=0?"classique+circuit":"classique"; const circuit=tag.indexOf("circuit")>=0; const recommendedMode=tag.indexOf("amrap")>=0?"amrap":tag.indexOf("emom")>=0?"emom":"classique"; return {...day,recommendedMode,circuit}; };
-const buildCircuits=(day,profile)=>{ const exos=day.exercises||[]; if(exos.length<3) return day; const goal=baseGoal(profile&&profile.goal); const gs=(goal==="seche"||goal==="endurance")?3:2; const out=exos.map(e=>({...e})); let cid=0; for(let i=1;i<out.length;i+=gs){ const slice=out.slice(i,i+gs); if(slice.length<2) break; cid++; const gt=slice.length>=3?"circuit":"superset"; slice.forEach((e,k)=>{ e.circuitId=cid; e.circuitPos=k+1; e.circuitSize=slice.length; e.groupType=gt; }); } return {...day,exercises:out}; };
+const buildCircuits=(day,profile)=>{ const exos=day.exercises||[]; if(exos.length<3) return day; const goal=baseGoal(profile&&profile.goal); const gs=(goal==="seche"||goal==="endurance")?3:2; const out=exos.map(e=>({...e})); let cid=0; for(let i=1;i<out.length;i+=gs){ const slice=out.slice(i,i+gs); if(slice.length<2) break; cid++; const gt=slice.length>=3?"circuit":"superset";
+  // Un superset/circuit tourne par definition le MEME nombre de tours pour tous ses exercices.
+  // Les membres gardaient chacun leur nombre de series propre issu de personalizeDay, alors que
+  // le lecteur ne compte qu'une serie de tours (celui du premier exercice) : tout membre dont le
+  // prescrit differait restait affiche comme incomplet une fois le groupe pourtant termine.
+  const tours=Math.max(...slice.map(e=>(typeof e.sets==="number"&&e.sets>0)?e.sets:4));
+  slice.forEach((e,k)=>{ e.circuitId=cid; e.circuitPos=k+1; e.circuitSize=slice.length; e.groupType=gt; e.groupTours=tours; e.sets=tours; }); } return {...day,exercises:out}; };
 const classifySession=(day)=>{ const ex=(day&&day.exercises)||[]; if(!ex.length) return {system:"force",metconEligible:false,condShare:0,hasBar:false}; let cond=0,hasBar=false; const n=ex.length; ex.forEach(e=>{ if(e.eq==="bar") hasBar=true; if(e.eq==="kb"||e.eq==="cd") cond+=1; else if(e.eq==="bw") cond+=0.8; else if(e.eq==="db") cond+=0.5; }); const condShare=cond/n; const metconEligible=!hasBar&&condShare>=0.5; const system=metconEligible?(condShare>0.85?"conditioning":"mixed"):"force"; return {system,metconEligible,condShare:+condShare.toFixed(2),hasBar}; };
 const GOAL_METCON={force:0.10,hypertrophie:0.20,seche:0.55,hybride:0.45,endurance:0.70,performance:0.50};
 const weeklyModePlan=(days,profile,week)=>{ const goal=(GOAL_METCON[profile&&profile.goal]!=null)?profile.goal:"hybride"; let ratio=GOAL_METCON[goal]; const ph=phaseOf(week); if(ph.k==="Deload") ratio*=0.4; const trainIdx=days.map((d,i)=>({i,salle:!!(d&&d.salle),cls:classifySession(d)})).filter(x=>x.salle); const nTrain=trainIdx.length; const eligible=trainIdx.filter(x=>x.cls.metconEligible); let nMet=Math.min(Math.round(ratio*nTrain),eligible.length); const ranked=eligible.slice().sort((a,b)=> b.cls.condShare-a.cls.condShare || a.i-b.i); const start=eligible.length?((week-1)%eligible.length):0; const chosen=[]; for(let k=0;k<nMet&&k<ranked.length;k++){ chosen.push(ranked[(start+k)%ranked.length].i); } const plan={}; const emomBias=(ph.k==="Intensite"||ph.k==="Puissance"); chosen.sort((a,b)=>a-b).forEach((idx,order)=>{ const emom=emomBias?(order%2===0):(order%2===1); plan[idx]={mode:emom?"emom":"amrap",circuit:false}; }); trainIdx.forEach(x=>{ if(!plan[x.i]){ const circ=(goal!=="force"&&goal!=="hypertrophie"); plan[x.i]={mode:"classique",circuit:circ}; } }); return plan; };
@@ -1312,9 +1318,18 @@ function CircuitPlayer({mode,exos,onClose,defMin,blocks,onAllDone,startBlock,log
   };
   const durMin=cur.durationMin||defMin||(kind==="amrap"?12:Math.max(cexos.length,8));
   const total=durMin*60;
-  const supTours=cur.tours||(cexos[0]&&cexos[0].sets)||4;
+  const supTours=cur.tours||(cexos[0]&&cexos[0].groupTours)||(cexos[0]&&cexos[0].sets)||4;
   useEffect(()=>()=>{clearInterval(ref.current);clearInterval(restRef.current);},[]);
-  useEffect(()=>{clearInterval(ref.current);clearInterval(restRef.current);setRunning(false);setElapsed(0);setRounds(0);setChecked({});setSi(0);setStour(1);setResting(0);lastMin.current=0;occRef.current={};},[bi]);
+  useEffect(()=>{
+    clearInterval(ref.current);clearInterval(restRef.current);
+    setRunning(false);setElapsed(0);setRounds(0);setChecked({});setSi(0);setStour(1);setResting(0);lastMin.current=0;
+    // Le compteur d'occurrences repartait de zero a chaque ouverture du lecteur : reprendre un
+    // bloc interrompu reecrivait par-dessus les tours deja valides. On repart de ce qui est
+    // reellement enregistre dans le log.
+    const occ={};
+    (cexos||[]).forEach(e=>{ if(!e||!e.id||!sDate) return; let c=0; while(log&&log[`${sDate}_${e.id}_s${c}`]&&log[`${sDate}_${e.id}_s${c}`].done) c++; occ[e.id]=c; });
+    occRef.current=occ;
+  },[bi]);
   const goNext=()=>{clearInterval(ref.current);clearInterval(restRef.current);if(lastBlock){onAllDone&&onAllDone();onClose&&onClose();}else{setBi(b=>b+1);}};
   const startTimer=()=>{if(running||total<=0)return;setRunning(true);lastMin.current=Math.floor(elapsed/60);const tt=total;const isEmom=kind==="emom";ref.current=setInterval(()=>{setElapsed(p=>{const n=p+1;if(isEmom){const cm=Math.floor(n/60);if(cm!==lastMin.current&&n<tt){const finishedEx=cexos.length?cexos[lastMin.current%cexos.length]:null;logOccurrence(finishedEx);lastMin.current=cm;beep();}}if(n>=tt){clearInterval(ref.current);if(isEmom&&cexos.length){logOccurrence(cexos[lastMin.current%cexos.length]);}beep();setRunning(false);setTimeout(()=>goNext(),900);return tt;}return n;});},1000);};
   const pause=()=>{clearInterval(ref.current);setRunning(false);};
@@ -1396,8 +1411,13 @@ function ExerciseRowCollapsed({ex,dayIdx,sDate,log,idx,onOpen,onReplace,doneSess
   // Une journee deja enregistree (doneSession) est CLOSE: on ne compare plus le nombre de series
   // fait a un "n" devine (setPlanFor n'a pas le vrai nombre prescrit pour un objet resume) - la
   // presence dans le compte-rendu final = termine, point final. Evite un faux "incomplet" permanent.
-  const completed=savedEx?n:plan.filter((_,i)=>log[`${sDate}_${ex.id}_s${i}`]&&log[`${sDate}_${ex.id}_s${i}`].done).length;
-  const allDone=savedEx?true:completed===n;
+  // On compte les series REELLEMENT enregistrees (balayage par prefixe) au lieu de tester les
+  // indices 0..n-1 : le lecteur de circuit numerote par TOURS DU BLOC, pas par series prescrites
+  // de l'exercice, et en EMOM/AMRAP le nombre de tours depasse souvent le prescrit.
+  const target=(ex.groupTours>0)?ex.groupTours:n;
+  const loggedDone=Object.keys(log||{}).reduce((c,k)=>(k.indexOf(`${sDate}_${ex.id}_s`)===0&&log[k]&&log[k].done)?c+1:c,0);
+  const completed=savedEx?n:Math.min(loggedDone,target);
+  const allDone=savedEx?true:(target>0&&loggedDone>=target);
   const w0=plan[0].w,wn=plan[n-1].w;
   const wlabel=w0>0?(w0===wn?`${w0} kg`:`${w0}→${wn} kg`):"PdC";
   const restLbl=ex.rest>0?(ex.rest>=60?fmtMSS(ex.rest):`${ex.rest}s`):null;
@@ -2583,7 +2603,7 @@ function SettingsTab({user,excluded,onToggleExclude,onSignOut,onReset,onOpenLibr
           <span style={{fontSize:17,color:C.red}}>›</span>
         </Tap>
       </div>
-      <div style={{fontSize:12,color:C.ink4,textAlign:"center",marginTop:28}}>SŌMA · {"S"+weekNumber()} · {DB.length} exercices · build 23.57a</div>
+      <div style={{fontSize:12,color:C.ink4,textAlign:"center",marginTop:28}}>SŌMA · {"S"+weekNumber()} · {DB.length} exercices · build 23.58a</div>
     </div>
   );
 }
@@ -3264,7 +3284,12 @@ export default function SomaApp() {
         // seance. L'ancien format n'en gardait que la charge maximale, le reste etait jete.
         setsDetail.push({i,weight:w,reps:r});
       }
-      return{id:ex.id,n:ex.n||ex.name,m:ex.m||ex.muscle,weight:topWeight,reps:defReps,completedSets,setsDetail};
+      // La structure du jour (superset, circuit, tag EMOM/AMRAP) n'etait PAS sauvegardee :
+      // une seance close se reaffichait donc integralement a plat, en classique, quel qu'ait
+      // ete son agencement reel. On la conserve avec l'exercice.
+      return{id:ex.id,n:ex.n||ex.name,m:ex.m||ex.muscle,weight:topWeight,reps:defReps,completedSets,setsDetail,
+        ...(ex.groupType?{groupType:ex.groupType,circuitId:ex.circuitId,circuitPos:ex.circuitPos,circuitSize:ex.circuitSize,groupTours:ex.groupTours}:{}),
+        ...(ex.modeTag?{modeTag:ex.modeTag}:{})};
     });
     // Duree figee UNE fois ici : elle doit etre identique en local, dans le state et en base,
     // et ne pas dependre de l'etat du chrono au moment ou l'ecriture Supabase part.
@@ -3429,6 +3454,11 @@ export default function SomaApp() {
   const locked=isDayDone||isPastMissed;
   const isRest=!day?.salle;
   const exos=((isDayDone&&doneSession)?(doneSession.exercises||[]):(aiOverride?.exercises||day?.exercises||[])).filter(e=>!excluded.includes(e.id));
+  // Le badge n'annoncait que le mode principal : une seance classique comportant des supersets
+  // s'affichait "Classique" tout court, y compris une fois terminee. L'agencement reel est
+  // desormais lisible, et il survit a la cloture puisqu'il est sauvegarde avec les exercices.
+  const groupKind=(exos||[]).reduce((g,e)=>g||((e&&e.groupType)||null),null);
+  const modeLabel=(sessionMode==="amrap"?"AMRAP":sessionMode==="emom"?"EMOM":"Classique")+(groupKind?(groupKind==="circuit"?" + Circuit":" + Superset"):"");
   const absExos=aiOverride?.abs||day?.abs||[];
   const NAV_ICONS={
   home:(<><path d="M3 11l9-8 9 8"/><path d="M5 10v10a1 1 0 0 0 1 1h3v-6h6v6h3a1 1 0 0 0 1-1V10"/></>),
@@ -3478,7 +3508,13 @@ const NAV=[{id:"home",l:"Accueil"},{id:"seance",l:"Séances"},{id:"stats",l:"Sta
           {viewSchedule.map((d,i)=>{
             const exList=d.exercises||[];
             const dStrDate=programDate(i);
-            const done=exList.filter(e=>Array.from({length:typeof e.sets==="number"?e.sets:4},(_,si)=>si).every(si=>log[`${dStrDate}_${e.id}_s${si}`]?.done)).length;
+            // Meme regle que dans la liste d'exercices : on compte ce qui est enregistre, on ne
+            // teste pas des indices deduits d'un nombre de series suppose (4 par defaut).
+            const done=exList.filter(e=>{
+              const tgt=(e.groupTours>0)?e.groupTours:((typeof e.sets==="number"&&e.sets>0)?e.sets:4);
+              const c=Object.keys(log||{}).reduce((a,k)=>(k.indexOf(`${dStrDate}_${e.id}_s`)===0&&log[k]&&log[k].done)?a+1:a,0);
+              return c>=tgt;
+            }).length;
             const pct=exList.length?done/exList.length:0;
             const dayFullyDone=sessions.some(s=>s.date===dStrDate);
             const isSel=i===dayIdx,isToday=i===todayIdx();
@@ -3600,7 +3636,7 @@ const NAV=[{id:"home",l:"Accueil"},{id:"seance",l:"Séances"},{id:"stats",l:"Sta
                     );
                   }))}
                   {day.salle&&<div style={{marginBottom:16}}>
-                    <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:sessionMode==="classique"?0:10}}><span style={{fontSize:11,fontWeight:700,color:C.ink3,textTransform:"uppercase",letterSpacing:".1em"}}>Séance du jour</span><span style={{fontSize:11,fontWeight:800,color:"#000",background:C.blue,padding:"2px 9px",borderRadius:7,textTransform:"uppercase",letterSpacing:".06em"}}>{sessionMode==="amrap"?"AMRAP":sessionMode==="emom"?"EMOM":"Classique"}</span></div>
+                    <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:sessionMode==="classique"?0:10}}><span style={{fontSize:11,fontWeight:700,color:C.ink3,textTransform:"uppercase",letterSpacing:".1em"}}>Séance du jour</span><span style={{fontSize:11,fontWeight:800,color:"#000",background:C.blue,padding:"2px 9px",borderRadius:7,textTransform:"uppercase",letterSpacing:".06em"}}>{modeLabel}</span></div>
                     {sessionMode!=="classique"&&!locked&&<Tap onTap={()=>setShowCircuit(true)} style={{display:"flex",alignItems:"center",justifyContent:"center",gap:8,padding:"14px",borderRadius:12,background:C.blueDim,border:`1px solid ${C.blue}`}}><span style={{fontSize:15}}>⏱</span><span style={{fontSize:15,fontWeight:700,color:C.blue}}>Démarrer le circuit {sessionMode==="amrap"?"AMRAP":"EMOM"}</span></Tap>}
                   </div>}
                   <div>
@@ -3615,7 +3651,7 @@ const NAV=[{id:"home",l:"Accueil"},{id:"seance",l:"Séances"},{id:"stats",l:"Sta
                         <div style={{paddingLeft:12,borderLeft:`2px solid ${C.s3}`}}>
                           {blk.items.map(({ex,idx})=>(
                             <ExerciseRowCollapsed key={ex.id} ex={ex} idx={idx} dayIdx={dayIdx} sDate={sDate} log={log} doneSession={doneSession}
-                              onOpen={()=>{if(locked)return;if(sessionMode!=="classique"){setShowCircuit(true);return;}const _e=exos[idx];if(_e&&_e.circuitId){const _g=exos.filter(e=>e.circuitId===_e.circuitId);setSupBlock({label:_e.m||"Superset",kind:_g.length>=3?"circuit":"superset",exercises:_g,restSec:90,tours:(_g[0]&&_g[0].sets)||4});}else{setFocusIdx(idx);}}} onReplace={e=>setShowPicker(e)}/>
+                              onOpen={()=>{if(locked)return;if(sessionMode!=="classique"){setShowCircuit(true);return;}const _e=exos[idx];if(_e&&_e.circuitId){const _g=exos.filter(e=>e.circuitId===_e.circuitId);setSupBlock({label:_e.m||"Superset",kind:_g.length>=3?"circuit":"superset",exercises:_g,restSec:90,tours:(_g[0]&&(_g[0].groupTours||_g[0].sets))||4});}else{setFocusIdx(idx);}}} onReplace={e=>setShowPicker(e)}/>
                           ))}
                         </div>
                       </div>
