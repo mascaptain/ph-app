@@ -596,6 +596,13 @@ const REST_STEPS=[30,45,60,75,90,120,150,180,210,240,300];
 const snapRest=(s)=>{ if(!s||s<=0) return 0; return REST_STEPS.reduce((a,b)=>Math.abs(b-s)<Math.abs(a-s)?b:a); };
 const phaseOf = (w) => MESO[((w%4)+4)%4];
 const PROG_WEEKS=12;
+// Un programme fait 60 seances, POINT - que la semaine en cours en compte 3, 4 ou 5.
+// La longueur etait calculee en 12*frequence (soit 48 a 4 seances/semaine), ce qui liait a tort
+// la duree du programme au rythme hebdomadaire et ecrasait la valeur correcte des qu'on
+// repassait dans l'onboarding ou qu'on touchait a sa frequence.
+const PROGRAM_SESSIONS=60;
+// Les 12 blocs de phase se repartissent donc sur les seances, pas sur des semaines calendaires.
+const SESSIONS_PER_BLOCK=PROGRAM_SESSIONS/PROG_WEEKS; // 5
 const progWeekRaw=(start)=>{ if(!start) return null; const ms=Date.now()-new Date(start+"T00:00:00").getTime(); return Math.floor(ms/604800000)+1; };
 const progWeekOf=(start)=>{ const raw=progWeekRaw(start); if(raw==null) return programWeek(); return Math.min(PROG_WEEKS,Math.max(1,raw)); };
 const progEndDate=(start)=>{ if(!start) return null; const d=new Date(start+"T00:00:00"); d.setDate(d.getDate()+PROG_WEEKS*7-1); return d; };
@@ -1477,7 +1484,10 @@ function ExerciseFocus({ex,dayIdx,sDate,log,onLogSet,onClose,onNext,hasNext,idx,
     if(i<n-1&&ex.rest>0) startRest(ex.rest);
   };
   const primary=resting>0?{label:`Passer le repos · ${fmtMSS(resting)}`,act:skipRest,bg:C.s2,fg:C.ink}
-    :allDone?(hasNext?{label:"Exercice suivant →",act:onNext,bg:C.blue,fg:"#000"}:{label:"Terminer",act:onClose,bg:C.green,fg:"#000"})
+    // Un exercice termine ramene a la LISTE, il n'enchaine plus tout seul sur le suivant :
+    // l'enchainement automatique retirait le controle de l'ordre et du rythme de la seance.
+    // Passer au suivant reste possible, mais c'est un choix explicite (action secondaire).
+    :allDone?{label:"Retour à la liste",act:onClose,bg:C.green,fg:"#000"}
     :{label:`Valider la série ${cur+1}`,act:validate,bg:C.blue,fg:"#000"};
   return (
     <div style={{position:"fixed",inset:0,background:C.bg,zIndex:Z.fullscreen,display:"flex",flexDirection:"column",alignItems:"center",fontFamily:F,paddingTop:"env(safe-area-inset-top)",paddingBottom:"env(safe-area-inset-bottom)"}}>
@@ -1508,6 +1518,7 @@ function ExerciseFocus({ex,dayIdx,sDate,log,onLogSet,onClose,onNext,hasNext,idx,
           </div>
         )}
         <Tap onTap={primary.act} style={{marginTop:14,padding:"18px",borderRadius:16,background:primary.bg,display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{fontSize:17,fontWeight:700,color:primary.fg}}>{primary.label}</span></Tap>
+        {allDone&&hasNext&&resting===0&&<Tap onTap={onNext} style={{marginTop:10,padding:"15px",borderRadius:14,background:"transparent",border:`1px solid ${C.div}`,display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{fontSize:15,fontWeight:600,color:C.ink3}}>Enchaîner sur le suivant →</span></Tap>}
       </div>
     </div>
     </div>
@@ -2614,7 +2625,7 @@ function SettingsTab({user,excluded,onToggleExclude,onSignOut,onReset,onOpenLibr
           <span style={{fontSize:17,color:C.red}}>›</span>
         </Tap>
       </div>
-      <div style={{fontSize:12,color:C.ink4,textAlign:"center",marginTop:28}}>SŌMA · {"S"+weekNumber()} · {DB.length} exercices · build 23.59a</div>
+      <div style={{fontSize:12,color:C.ink4,textAlign:"center",marginTop:28}}>SŌMA · {"S"+weekNumber()} · {DB.length} exercices · build 23.60a</div>
     </div>
   );
 }
@@ -3146,14 +3157,17 @@ export default function SomaApp() {
     let cnt=0;
     for(let i=0;i<180;i++){
       const dt=new Date();dt.setDate(dt.getDate()-i);
+      const key=localDateKey(dt);
+      // Une seance FAITE compte toujours, quel que soit ce que dit le planning ce jour-la.
+      // Ce test passait apres le filtre "jour d'entrainement prevu" : une seance effectuee un
+      // jour marque Repos etait donc purement invisible pour la serie, qui affichait 1 au lieu
+      // de 2. C'est ce qui s'est reellement passe le 29/07 (mercredi, hors planning par defaut).
+      if(dateSet.has(key)){cnt++;continue;}
       const dow=(dt.getDay()+6)%7;
       const dd=(schedule&&schedule[dow])||PROG_DEF[dow];
-      const isTraining=!!(dd&&dd.salle);
-      if(!isTraining) continue;
-      const key=localDateKey(dt);
-      if(dateSet.has(key)){cnt++;continue;}
-      if(i===0) continue;
-      break;
+      if(!(dd&&dd.salle)) continue; // repos prevu et non travaille : n'interrompt pas la serie
+      if(i===0) continue;           // aujourd'hui pas encore fait : la serie court toujours
+      break;                        // seance prevue et manquee : la serie est rompue
     }
     setStreak(cnt);
     persistStreak(cnt,sess);
@@ -3230,8 +3244,8 @@ export default function SomaApp() {
   const toggleFav=useCallback(id=>{setFavorites(prev=>{const next=prev.includes(id)?prev.filter(x=>x!==id):[...prev,id];persist(user?.id,{favorites:next});return next;});},[persist]);
   const updateConfig=useCallback((updates)=>{
     const next={...(profile||{}),...updates};
-    if(updates.days){ next.frequency=updates.days.length; const sched=generateScheduleDays(updates.days); setSchedule(sched); persist(user?.id,{schedule:sched}); if(!(profile?.session_index)) next.total_sessions=12*updates.days.length; }
-    else if(updates.frequency){ const days=FREQ_DAYS[updates.frequency]||FREQ_DAYS[4]; const sched=generateScheduleDays(days); setSchedule(sched); persist(user?.id,{schedule:sched}); if(!(profile?.session_index)) next.total_sessions=12*days.length; }
+    if(updates.days){ next.frequency=updates.days.length; const sched=generateScheduleDays(updates.days); setSchedule(sched); persist(user?.id,{schedule:sched}); next.total_sessions=PROGRAM_SESSIONS; }
+    else if(updates.frequency){ const days=FREQ_DAYS[updates.frequency]||FREQ_DAYS[4]; const sched=generateScheduleDays(days); setSchedule(sched); persist(user?.id,{schedule:sched}); next.total_sessions=PROGRAM_SESSIONS; }
     setProfile(next);
     persist(user?.id,{profile:next});
     return (async()=>{ try{ const{error}=await supabase.from("profiles").upsert({id:user?.id,goal:next.goal,level:next.level,equipment:next.equipment,frequency:next.frequency,weight_kg:next.weight_kg,sex:next.sex,height_cm:next.height_cm,age:next.age,program_start:next.program_start,rms:next.rms,avatar:next.avatar,photos:next.photos,session_index:next.session_index,total_sessions:next.total_sessions,pinned_pbs:next.pinned_pbs,active_skills:next.active_skills,updated_at:new Date().toISOString()},{onConflict:"id"}); if(error)console.error("profile save",error.message); return {error}; }catch(e){ console.error("profile save",e); return {error:e}; } })();
@@ -3376,7 +3390,9 @@ export default function SomaApp() {
     if(!profile) return;
     const tdpw=(schedule||[]).filter(d=>d&&d.salle).length||(profile?.frequency||4);
     const expected=12*tdpw;
-    if((profile.session_index||0)===0&&profile.total_sessions!==expected){ updateConfig({total_sessions:expected}); }
+    // Plus de garde sur session_index===0 : la longueur du programme est une constante, elle doit
+    // etre remise d'aplomb a tout moment, pas seulement avant la premiere seance.
+    if(profile.total_sessions!==PROGRAM_SESSIONS){ updateConfig({total_sessions:PROGRAM_SESSIONS}); }
   },[profile,schedule]);
 
   if(authLoading) return(
@@ -3393,7 +3409,7 @@ export default function SomaApp() {
     const uid=user.id;
     const sched=generateSchedule(data.frequency);
     setSchedule(sched);
-    const prof={id:uid,name:user?.user_metadata?.name||null,goal:data.goal,level:data.level,equipment:data.equipment,frequency:data.frequency,weight_kg:data.weight_kg,program_start:data.programStart||todayKey(),session_index:0,total_sessions:12*(data.frequency||4),updated_at:new Date().toISOString()};
+    const prof={id:uid,name:user?.user_metadata?.name||null,goal:data.goal,level:data.level,equipment:data.equipment,frequency:data.frequency,weight_kg:data.weight_kg,program_start:data.programStart||todayKey(),session_index:0,total_sessions:PROGRAM_SESSIONS,updated_at:new Date().toISOString()};
     setProfile(prof);
     persist(uid,{schedule:sched,profile:prof});
     try{await supabase.from("profiles").upsert(prof,{onConflict:"id"});}catch(e){console.error("profile",e);}
@@ -3402,7 +3418,7 @@ export default function SomaApp() {
     const uid=user.id;
     const sched=generateSchedule(data.frequency);
     setSchedule(sched);
-    const next={...profile,goal:data.goal,level:data.level,equipment:data.equipment,frequency:data.frequency,weight_kg:data.weight_kg,program_start:data.programStart||todayKey(),session_index:0,total_sessions:12*(data.frequency||4),updated_at:new Date().toISOString()};
+    const next={...profile,goal:data.goal,level:data.level,equipment:data.equipment,frequency:data.frequency,weight_kg:data.weight_kg,program_start:data.programStart||todayKey(),session_index:0,total_sessions:PROGRAM_SESSIONS,updated_at:new Date().toISOString()};
     setProfile(next);
     persist(uid,{schedule:sched,profile:next});
     try{await supabase.from("profiles").upsert({id:uid,goal:next.goal,level:next.level,equipment:next.equipment,frequency:next.frequency,weight_kg:next.weight_kg,program_start:next.program_start,session_index:0,total_sessions:next.total_sessions,updated_at:next.updated_at},{onConflict:"id"});}catch(e){console.error("profile redo",e);}
@@ -3412,9 +3428,11 @@ export default function SomaApp() {
 
   const sessionIndex=profile?.session_index||0;
   const trainingDaysPerWeek=(schedule||[]).filter(d=>d&&d.salle).length||(profile?.frequency||4);
-  const expectedTotalSessions=12*trainingDaysPerWeek;
-  const totalSessions=profile?.total_sessions||expectedTotalSessions;
-  const sessionWeek=Math.min(PROG_WEEKS,Math.max(1,Math.floor(sessionIndex/trainingDaysPerWeek)+1));
+  const expectedTotalSessions=PROGRAM_SESSIONS;
+  const totalSessions=profile?.total_sessions||PROGRAM_SESSIONS;
+  // La phase avance avec les SEANCES effectuees, plus avec le calendrier : a 3 seances par
+  // semaine on affichait "S12/12" pendant les 24 dernieres seances du programme.
+  const sessionWeek=Math.min(PROG_WEEKS,Math.max(1,Math.floor(sessionIndex/SESSIONS_PER_BLOCK)+1));
   const programDone=sessionIndex>=totalSessions;
   const isViewingToday=dayIdx===todayIdx();
   const rawDay0=viewSchedule[dayIdx]||PROGRAM[dayIdx];
