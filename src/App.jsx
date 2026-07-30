@@ -1322,7 +1322,6 @@ function CircuitPlayer({mode,exos,onClose,defMin,blocks,onAllDone,startBlock,log
   const [running,setRunning]=useState(false);
   const [elapsed,setElapsed]=useState(0);
   const [rounds,setRounds]=useState(0);
-  const [checked,setChecked]=useState({});
   const [si,setSi]=useState(0);
   const [stour,setStour]=useState(1);
   const [resting,setResting]=useState(0);
@@ -1340,7 +1339,7 @@ function CircuitPlayer({mode,exos,onClose,defMin,blocks,onAllDone,startBlock,log
   useEffect(()=>()=>{clearInterval(ref.current);clearInterval(restRef.current);},[]);
   useEffect(()=>{
     clearInterval(ref.current);clearInterval(restRef.current);
-    setRunning(false);setElapsed(0);setRounds(0);setChecked({});setSi(0);setStour(1);setResting(0);lastMin.current=0;
+    setRunning(false);setElapsed(0);setRounds(0);setSi(0);setStour(1);setResting(0);lastMin.current=0;
     // Le compteur d'occurrences repartait de zero a chaque ouverture du lecteur : reprendre un
     // bloc interrompu reecrivait par-dessus les tours deja valides. On repart de ce qui est
     // reellement enregistre dans le log.
@@ -1358,58 +1357,129 @@ function CircuitPlayer({mode,exos,onClose,defMin,blocks,onAllDone,startBlock,log
   const secInMin=done?0:60-(elapsed%60);
   const emomEx=cexos.length?cexos[(curMin-1)%cexos.length]:null;
   const startRest=()=>{const rs=cur.restSec||90;setResting(rs);clearInterval(restRef.current);restRef.current=setInterval(()=>{setResting(pp=>{if(pp<=1){clearInterval(restRef.current);beep();return 0;}return pp-1;});},1000);};
+  const validateAmrap=()=>{
+    if(!running||done) return;
+    logOccurrence(cexos[si]);
+    if(si<cexos.length-1){ setSi(si+1); } else { setSi(0); setRounds(r=>r+1); }
+  };
   const validateSup=()=>{if(resting>0)return;logOccurrence(cexos[si]);if(si<cexos.length-1){setSi(si+1);}else{setSi(0);if(stour>=supTours){goNext();}else{setStour(stour+1);startRest();}}};
   const HEAD=(
     <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"16px 20px",flexShrink:0}}>
       <div><div style={{fontSize:20,fontWeight:700,color:C.ink}}>{cur.label||(kind==="amrap"?"AMRAP":kind==="emom"?"EMOM":kind==="circuit"?"Circuit":"Superset")}</div><div style={{fontSize:12,color:C.ink4,marginTop:2}}>Bloc {bi+1}/{BLK.length} · {cexos.length} exercices</div></div>
       <Tap onTap={onClose} style={{width:40,height:40,borderRadius:10,background:C.s2,display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{fontSize:14,color:C.ink3}}>✕</span></Tap>
     </div>);
+  // ─── "Une chose a la fois" applique aux lecteurs de bloc ────────────────────
+  // Les trois regimes partagent desormais la meme grammaire : un anneau pour le temps,
+  // l'exercice EN COURS en grand, la progression en tours, et ce qui vient ensuite.
+  // L'ancienne liste de tous les exercices du bloc obligeait a chercher sa ligne en plein
+  // effort, et ses cases a cocher n'etaient qu'un decor : elles n'ecrivaient rien.
+  const RING=54,CIRC=2*Math.PI*RING;
+  const Ring=({pct,value,label})=>(
+    <div style={{position:"relative",width:158,height:158,margin:"0 auto"}}>
+      <svg width="158" height="158" viewBox="0 0 132 132" style={{transform:"rotate(-90deg)"}}>
+        <circle cx="66" cy="66" r={RING} fill="none" stroke={C.s2} strokeWidth="9"/>
+        <circle cx="66" cy="66" r={RING} fill="none" stroke={C.green} strokeWidth="9" strokeLinecap="round"
+          strokeDasharray={CIRC} strokeDashoffset={CIRC*(1-Math.max(0,Math.min(1,pct)))}
+          style={{transition:`stroke-dashoffset 900ms linear`}}/>
+      </svg>
+      <div style={{position:"absolute",inset:0,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:3}}>
+        <span style={{fontSize:38,fontWeight:700,color:C.ink,letterSpacing:"-.03em",fontVariantNumeric:"tabular-nums"}}>{value}</span>
+        <span style={{fontSize:11,fontWeight:600,color:C.ink4,textTransform:"uppercase",letterSpacing:".1em"}}>{label}</span>
+      </div>
+    </div>
+  );
+  const TourBar=({d,t})=>(
+    <div style={{display:"flex",gap:5}}>
+      {Array.from({length:Math.max(1,t)},(_,i)=>(
+        <div key={i} style={{flex:1,height:5,borderRadius:3,background:i<d?C.green:C.s3,transition:`background 200ms ${EO}`}}/>
+      ))}
+    </div>
+  );
+  const Dots=({n,at})=>(
+    <div style={{display:"flex",gap:6,justifyContent:"center"}}>
+      {Array.from({length:n},(_,i)=>(
+        <div key={i} style={{width:i===at?10:8,height:i===at?10:8,borderRadius:"50%",
+          background:i<at?C.green:i===at?C.ink4:C.s4,transition:`all 200ms ${EO}`}}/>
+      ))}
+    </div>
+  );
+  const exSub=(e)=>e?`${e.kg>0?e.kg+" kg · ":""}${e.reps} reps`:"";
+  const Now=({ex,sub})=>(
+    <div style={{textAlign:"center"}}>
+      <div style={{fontSize:28,fontWeight:700,color:C.ink,letterSpacing:"-.02em",lineHeight:1.15}}>{ex?ex.n:"—"}</div>
+      <div style={{fontSize:16,color:C.ink3,marginTop:6,fontVariantNumeric:"tabular-nums"}}>{sub}</div>
+    </div>
+  );
+  const NextUp=({label,ex})=> ex?(
+    <div style={{background:C.s1,borderRadius:14,padding:"12px 15px",display:"flex",justifyContent:"space-between",alignItems:"center",gap:10}}>
+      <span style={{fontSize:13,color:C.ink4,flexShrink:0}}>{label}</span>
+      <span style={{fontSize:15,fontWeight:600,color:C.ink,textAlign:"right"}}>{ex.n}</span>
+    </div>
+  ):null;
+  const Btn=({label,act,bg,fg,flex})=>(
+    <Tap onTap={act} style={{flex:flex||1,padding:"18px",borderRadius:15,background:bg||C.blue,display:"flex",alignItems:"center",justifyContent:"center"}}>
+      <span style={{fontSize:17,fontWeight:700,color:fg||"#000"}}>{label}</span>
+    </Tap>
+  );
+  const skipRest=()=>{clearInterval(restRef.current);setResting(0);};
+  const WRAP={padding:"4px 20px 8px",width:"100%",display:"flex",flexDirection:"column",gap:20};
+  const BAR={display:"flex",gap:10,padding:"12px 20px calc(12px + env(safe-area-inset-bottom))",flexShrink:0};
+
   let BODY,FOOT;
   if(kind==="superset"||kind==="circuit"){
-    BODY=(<div style={{margin:"8px 0 0",padding:"0 20px 8px",width:"100%"}}>
-      {resting>0?(
-        <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:8}}>
-          <div style={{fontSize:13,fontWeight:700,color:C.ink4,textTransform:"uppercase",letterSpacing:".1em"}}>Repos</div>
-          <div style={{fontSize:72,fontWeight:700,color:C.green,letterSpacing:"-.03em",lineHeight:1}}>{fmtMSS(resting)}</div>
-          <div style={{fontSize:13,color:C.ink4}}>Tour {stour-1>0?stour-1:1}/{supTours} terminé</div>
-        </div>
-      ):(
+    const curEx=cexos[si],nextEx=si<cexos.length-1?cexos[si+1]:null;
+    const rs=cur.restSec||90;
+    BODY=(<div style={WRAP}>
+      {resting>0?(<>
+        <Ring pct={rs>0?(rs-resting)/rs:0} value={fmtMSS(resting)} label="Récupération"/>
+        <div style={{textAlign:"center",fontSize:14,color:C.ink3}}>Tour {Math.max(1,stour-1)} sur {supTours} terminé</div>
+        <NextUp label="Reprend par" ex={cexos[0]}/>
+      </>):(<>
         <div>
-          <div style={{textAlign:"center",fontSize:13,fontWeight:700,color:C.ink4,textTransform:"uppercase",letterSpacing:".1em",marginBottom:14}}>Tour {stour}/{supTours}</div>
-          {cexos.map((ex,i)=>{const act=i===si;const dn=i<si;return(
-            <div key={ex.id||i} style={{display:"flex",alignItems:"center",gap:12,padding:"16px",borderRadius:14,background:act?C.blueDim:C.s1,border:`1.5px solid ${act?C.blue:"transparent"}`,marginBottom:10,opacity:dn?0.5:1}}>
-              <div style={{width:30,height:30,borderRadius:"50%",background:act?C.blue:C.s3,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}><span style={{fontSize:13,fontWeight:700,color:act?"#000":C.ink3}}>{dn?"✓":String.fromCharCode(65+i)}</span></div>
-              <div style={{flex:1}}><div style={{fontSize:16,fontWeight:700,color:C.ink}}>{ex.n}</div><div style={{fontSize:13,color:C.ink3}}>{ex.kg>0?ex.kg+"kg · ":""}{ex.reps} reps</div></div>
-            </div>);})}
+          <div style={{textAlign:"center",fontSize:12,fontWeight:600,color:C.ink4,textTransform:"uppercase",letterSpacing:".12em",marginBottom:10}}>Tour {stour} sur {supTours}</div>
+          <TourBar d={stour-1} t={supTours}/>
         </div>
-      )}
+        <Now ex={curEx} sub={exSub(curEx)}/>
+        <Dots n={cexos.length} at={si}/>
+        <NextUp label={nextEx?"Enchaîner sans repos":"Puis"} ex={nextEx}/>
+      </>)}
     </div>);
-    FOOT=(<div style={{display:"flex",gap:10,padding:"12px 20px calc(12px + env(safe-area-inset-bottom))",flexShrink:0}}>
-      <Tap onTap={resting>0?undefined:validateSup} style={{flex:1,padding:"16px",borderRadius:14,background:resting>0?C.s3:C.blue,display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{fontSize:16,fontWeight:700,color:resting>0?C.ink4:"#000"}}>{resting>0?"Repos en cours…":(si<cexos.length-1?("Valider "+String.fromCharCode(65+si)):(stour>=supTours?"Terminer le bloc":"Valider → repos"))}</span></Tap>
+    FOOT=(<div style={BAR}>
+      {resting>0
+        ? <Btn label="Passer le repos" act={skipRest} bg={C.s2} fg={C.ink2}/>
+        : <Btn label={si<cexos.length-1?"Fait · exercice suivant":(stour>=supTours?"Terminer le bloc":"Fait · repos")} act={validateSup}/>}
+    </div>);
+  } else if(kind==="amrap"){
+    const curEx=cexos[si],nextEx=cexos.length?cexos[(si+1)%cexos.length]:null;
+    BODY=(<div style={WRAP}>
+      <Ring pct={total>0?elapsed/total:0} value={done?"FINI":fmtMSS(remaining)} label={done?"terminé":"restant"}/>
+      <div style={{textAlign:"center",fontSize:14,color:C.ink3}}>
+        <span style={{fontWeight:700,color:C.ink}}>{rounds}</span> tour{rounds>1?"s":""} complet{rounds>1?"s":""}
+        {running&&!done&&si>0?` · ${si}/${cexos.length} dans le tour en cours`:""}
+      </div>
+      {running&&!done&&<><Now ex={curEx} sub={exSub(curEx)}/><Dots n={cexos.length} at={si}/><NextUp label="Ensuite" ex={nextEx}/></>}
+      {!running&&!done&&<NextUp label="Commence par" ex={cexos[si]}/>}
+    </div>);
+    FOOT=(<div style={BAR}>
+      {running&&!done&&<Btn label="Pause" act={pause} bg={C.s2} fg={C.ink3} flex={0} />}
+      {done
+        ? <Btn label={lastBlock?"Terminer":"Bloc suivant"} act={goNext} bg={C.green}/>
+        : running
+          ? <Btn label="Fait" act={validateAmrap} bg={C.green} flex={2}/>
+          : <Btn label={elapsed>0?"Reprendre":"Démarrer le bloc"} act={startTimer}/>}
     </div>);
   } else {
-    const big=kind==="emom"?fmtMSS(secInMin):fmtMSS(remaining);
-    BODY=(<div style={{margin:"8px 0 0",padding:"0 20px 8px",width:"100%"}}>
-      <div style={{display:"flex",flexDirection:"column",alignItems:"center",marginBottom:18}}>
-        {kind==="emom"&&<div style={{fontSize:14,fontWeight:700,color:C.blue,marginBottom:6}}>Minute {curMin}/{durMin}</div>}
-        {kind==="amrap"&&<div style={{fontSize:14,fontWeight:700,color:C.blue,marginBottom:6}}>{rounds} tour{rounds>1?"s":""}</div>}
-        <div style={{fontSize:72,fontWeight:700,color:done?C.green:C.ink,letterSpacing:"-.03em",lineHeight:1}}>{done?"FINI":big}</div>
-        {kind==="emom"&&emomEx&&!done&&<div style={{marginTop:14,textAlign:"center"}}><div style={{fontSize:22,fontWeight:700,color:C.ink}}>{emomEx.n}</div><div style={{fontSize:15,color:C.ink3,marginTop:2}}>{emomEx.kg>0?emomEx.kg+"kg · ":""}{emomEx.reps} reps</div></div>}
-      </div>
-      <div>
-        {cexos.map((ex,i)=>{const hot=kind==="emom"&&running&&emomEx&&emomEx.id===ex.id;const ck=!!checked[i];return(
-          <Tap key={ex.id||i} onTap={()=>setChecked(c=>({...c,[i]:!c[i]}))} style={{display:"flex",alignItems:"center",gap:12,padding:"12px 14px",borderRadius:12,background:(ck||hot)?C.blueDim:C.s1,border:`1px solid ${(ck||hot)?C.blue:"transparent"}`,marginBottom:8}}>
-            <div style={{width:28,height:28,borderRadius:"50%",background:ck?C.blue:C.s3,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}><span style={{fontSize:13,fontWeight:700,color:ck?"#000":C.ink3}}>{ck?"✓":(i+1)}</span></div>
-            <div style={{flex:1,fontSize:15,fontWeight:600,color:C.ink,textDecoration:ck?"line-through":"none",opacity:ck?0.6:1}}>{ex.n}</div>
-            <div style={{fontSize:14,color:C.ink3}}>{ex.reps}{kind==="emom"?"/min":"/tour"}</div>
-          </Tap>);})}
-      </div>
+    const nextEx=cexos.length?cexos[curMin%cexos.length]:null;
+    BODY=(<div style={WRAP}>
+      <Ring pct={done?1:(60-secInMin)/60} value={done?"FINI":fmtMSS(secInMin)} label={done?"terminé":`minute ${curMin} / ${durMin}`}/>
+      {!done&&<><Now ex={emomEx} sub={exSub(emomEx)}/><TourBar d={curMin-1} t={durMin}/><NextUp label="Minute suivante" ex={nextEx}/></>}
     </div>);
-    FOOT=(<div style={{display:"flex",gap:10,padding:"12px 20px calc(12px + env(safe-area-inset-bottom))",flexShrink:0}}>
-      <Tap onTap={running?pause:reset} style={{padding:"16px 22px",borderRadius:14,background:running?C.redDim:C.s2,border:running?`1px solid ${C.red}`:"none",display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{fontSize:15,fontWeight:600,color:running?C.red:C.ink3}}>{running?"Pause":"Reset"}</span></Tap>
-      {(kind==="amrap"&&running&&!done)
-        ? <Tap onTap={()=>{cexos.forEach(logOccurrence);setRounds(r=>r+1);setChecked({});}} style={{flex:1,padding:"16px",borderRadius:14,background:C.green,display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{fontSize:16,fontWeight:700,color:"#000"}}>+1 tour</span></Tap>
-        : (!running ? <Tap onTap={startTimer} style={{flex:1,padding:"16px",borderRadius:14,background:C.blue,display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{fontSize:16,fontWeight:700,color:"#000"}}>{elapsed>0?"Reprendre":"Démarrer le bloc"}</span></Tap> : <div style={{flex:1}}/>)}
+    FOOT=(<div style={BAR}>
+      {done
+        ? <Btn label={lastBlock?"Terminer":"Bloc suivant"} act={goNext} bg={C.green}/>
+        : running
+          ? <Btn label="Pause" act={pause} bg={C.s2} fg={C.ink2}/>
+          : <Btn label={elapsed>0?"Reprendre":"Démarrer le bloc"} act={startTimer}/>}
     </div>);
   }
   return (
@@ -2721,7 +2791,7 @@ function SettingsTab({user,excluded,onToggleExclude,onSignOut,onReset,onOpenLibr
           <span style={{fontSize:17,color:C.red}}>›</span>
         </Tap>
       </div>
-      <div style={{fontSize:12,color:C.ink4,textAlign:"center",marginTop:28}}>SŌMA · {"S"+weekNumber()} · {DB.length} exercices · build 23.61a</div>
+      <div style={{fontSize:12,color:C.ink4,textAlign:"center",marginTop:28}}>SŌMA · {"S"+weekNumber()} · {DB.length} exercices · build 23.62a</div>
     </div>
   );
 }
