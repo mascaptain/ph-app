@@ -607,11 +607,37 @@ const progWeekRaw=(start)=>{ if(!start) return null; const ms=Date.now()-new Dat
 const progWeekOf=(start)=>{ const raw=progWeekRaw(start); if(raw==null) return programWeek(); return Math.min(PROG_WEEKS,Math.max(1,raw)); };
 const progEndDate=(start)=>{ if(!start) return null; const d=new Date(start+"T00:00:00"); d.setDate(d.getDate()+PROG_WEEKS*7-1); return d; };
 const fmtDateShort=(d)=>{ if(!d) return ""; const dd=(typeof d==="string")?new Date(d+"T00:00:00"):d; try{return dd.toLocaleDateString("fr-FR",{day:"2-digit",month:"short"});}catch(_e){return "";} };
+// ─── SURCHARGE PROGRESSIVE ──────────────────────────────────────────────────
+// La charge proposee derivait d'un bareme generique (poids de corps x niveau x phase) et
+// ne regardait JAMAIS ce qui avait ete reellement souleve. Elle derive desormais de la
+// derniere performance et du RPE ressenti - sans RPE collecte, aucune progression
+// automatique n'est possible, c'est pour cela qu'il est demande en fin d'exercice.
+// RPE = reps en reserve : 10 = plus rien, 9 = 1 rep, 8 = 2 reps, 7 = 3 reps.
+const RPE_STEP={6:0.05,7:0.035,8:0.02,9:0,10:-0.05};
+const nextLoad=(prevKg,prevRpe,fallback)=>{
+  if(!(prevKg>0)) return fallback;
+  const r=Math.round(Number(prevRpe));
+  const k=(r>=6&&r<=10)?RPE_STEP[r]:0;
+  return Math.max(2.5,Math.round(prevKg*(1+k)/2.5)*2.5);
+};
+// Derniere performance reelle par exercice (la plus recente qui compte des series faites).
+const perfIndex=(sessions)=>{
+  const m={};
+  (sessions||[]).slice().sort((a,b)=>String(a.date).localeCompare(String(b.date))).forEach(s=>{
+    (s.exercises||[]).forEach(e=>{
+      if(!e||!e.id||!(Number(e.weight)>0)||!(Number(e.completedSets)>0)) return;
+      m[e.id]={kg:Number(e.weight),rpe:(e.rpe!=null?Number(e.rpe):null),date:s.date};
+    });
+  });
+  return m;
+};
+const RPE_LABEL={6:"Facile · 4 reps en réserve",7:"Confortable · 3 reps en réserve",8:"Exigeant · 2 reps en réserve",9:"Difficile · 1 rep en réserve",10:"Maximal · aucune rep en réserve"};
+
 const LEVEL_LOAD={debutant:0.78,inter:1.0,avance:1.18,athlete:1.32};
 const SEX_LOAD={homme:1.0,femme:0.62,autre:0.85};
 const ENG_REF_BW=75;
 const engineScale=(profile)=>{ const bw=Number(profile&&profile.weight_kg)||ENG_REF_BW; const lvl=LEVEL_LOAD[profile&&profile.level]||1.0; const sx=SEX_LOAD[profile&&profile.sex]||0.9; const bwf=Math.max(0.7,Math.min(1.3,bw/ENG_REF_BW)); return lvl*sx*bwf; };
-const personalizeDay=(day,profile,week)=>{
+const personalizeDay=(day,profile,week,perf)=>{
   if(!day||!day.salle) return day;
   const scale=engineScale(profile);
   const ph=phaseOf(week);
@@ -625,7 +651,13 @@ const personalizeDay=(day,profile,week)=>{
   const exercises=(day.exercises||[]).map(ex=>{
     let kg=ex.kg;
     const rm=rms[ex.id];
-    if(rm>0){ kg=Math.max(2.5,Math.round(rm*intensity/2.5)*2.5); }
+    const p=perf&&perf[ex.id];
+    // Ta derniere seance prime sur toute estimation : c'est la seule donnee vraie.
+    if(p&&p.kg>0&&ex.eq!=="bw"){
+      kg=nextLoad(p.kg,p.rpe,ex.kg);
+      if(ph.k==="Deload") kg=Math.max(2.5,Math.round(kg*0.85/2.5)*2.5);
+    }
+    else if(rm>0){ kg=Math.max(2.5,Math.round(rm*intensity/2.5)*2.5); }
     else if(typeof ex.kg==="number"&&ex.kg>0&&ex.eq!=="bw"){ kg=Math.max(2.5,Math.round(ex.kg*scale*intensity/2.5)*2.5); }
     let sets=ex.sets;
     if(typeof ex.sets==="number"){ sets=Math.max(2,Math.min(6,ex.sets+setAdj+lvlSets)); }
@@ -1620,7 +1652,7 @@ function ExerciseRowCollapsed({ex,dayIdx,sDate,log,idx,onOpen,onReplace,doneSess
   );
 }
 
-function ExerciseFocus({ex,dayIdx,sDate,log,onLogSet,onClose,onNext,hasNext,idx,count,onDetail}) {
+function ExerciseFocus({ex,dayIdx,sDate,log,onLogSet,onClose,onNext,hasNext,idx,count,onDetail,lastPerf}) {
   const plan=setPlanFor(ex);const n=plan.length;
   const lk=`${sDate}_${ex.id}`;
   const [done,setDone]=useState(()=>plan.map((_,i)=>!!(log[`${lk}_s${i}`]&&log[`${lk}_s${i}`].done)));
@@ -1629,6 +1661,8 @@ function ExerciseFocus({ex,dayIdx,sDate,log,onLogSet,onClose,onNext,hasNext,idx,
   // reglage, aucune montee en charge reelle ne pouvait etre enregistree.
   const [loads,setLoads]=useState(()=>plan.map((s,i)=>{const e=log[`${lk}_s${i}`];return (e&&e.weight!=null)?Number(e.weight):Number(s.w)||0;}));
   const [reps,setReps]=useState(()=>plan.map((s,i)=>{const e=log[`${lk}_s${i}`];return (e&&e.reps!=null)?Number(e.reps):(repsNum(s.reps)||repsNum(ex.reps)||8);}));
+  // RPE ressenti pour CET exercice, demande une fois toutes les series faites.
+  const [rpeVal,setRpeVal]=useState(()=>{const e=log[`${lk}_rpe`];return e&&e.rpe?Number(e.rpe):null;});
   const [resting,setResting]=useState(0);
   const [restTotal,setRestTotal]=useState(0);
   const restRef=useRef(null);
@@ -1733,6 +1767,25 @@ function ExerciseFocus({ex,dayIdx,sDate,log,onLogSet,onClose,onNext,hasNext,idx,
                 </div>
               ))}
             </div>
+            {/* Le RPE est la seule donnee que l'application ne pouvait pas deduire, et c'est
+                celle qui determine la charge de la prochaine seance. Demande une fois, ici. */}
+            <div>
+              <div style={{fontSize:12,fontWeight:600,color:C.ink4,textTransform:"uppercase",letterSpacing:".1em",marginBottom:10,textAlign:"center"}}>Difficulté ressentie</div>
+              <div style={{display:"flex",gap:7}}>
+                {[6,7,8,9,10].map(v=>{
+                  const on=rpeVal===v;
+                  return (
+                    <Tap key={v} onTap={()=>{setRpeVal(v);onLogSet(`${lk}_rpe`,{rpe:v,date:todayKey()});play("clic");}}
+                      style={{flex:1,padding:"14px 0",borderRadius:13,background:on?C.blue:C.s1,border:`1px solid ${on?C.blue:C.s3}`,display:"flex",alignItems:"center",justifyContent:"center",transition:`all 160ms ${EO}`}}>
+                      <span style={{fontSize:17,fontWeight:700,color:on?"#000":C.ink3}}>{v}</span>
+                    </Tap>
+                  );
+                })}
+              </div>
+              <div style={{fontSize:12,color:rpeVal?C.ink3:C.ink4,marginTop:9,textAlign:"center",minHeight:17}}>
+                {rpeVal?RPE_LABEL[rpeVal]:"Combien de répétitions te restait-il ?"}
+              </div>
+            </div>
             <div>
               <Tap onTap={onClose} style={{padding:"18px",borderRadius:16,background:C.green,display:"flex",alignItems:"center",justifyContent:"center"}}>
                 <span style={{fontSize:17,fontWeight:700,color:"#000"}}>Retour à la liste</span>
@@ -1767,6 +1820,15 @@ function ExerciseFocus({ex,dayIdx,sDate,log,onLogSet,onClose,onNext,hasNext,idx,
               <span style={{fontSize:12,fontWeight:600,color:C.ink4,textTransform:"uppercase",letterSpacing:".1em",width:56,textAlign:"center"}}>Reps</span>
               {step("+",()=>setReps(r=>r.map((v,i)=>i===cur?v+1:v)))}
             </div>
+            {prevIdx<0&&lastPerf&&lastPerf.kg>0&&(
+              <div style={{background:C.s1,borderRadius:14,padding:"12px 15px",display:"flex",justifyContent:"space-between",alignItems:"center",gap:10}}>
+                <span style={{fontSize:13,color:C.ink4}}>La dernière fois</span>
+                <span style={{fontSize:15,fontWeight:600,color:C.ink,fontVariantNumeric:"tabular-nums"}}>
+                  {lastPerf.kg} kg{lastPerf.rpe?` · RPE ${lastPerf.rpe}`:""}
+                  {curLoad>lastPerf.kg?<span style={{color:C.green}}> → +{Math.round((curLoad-lastPerf.kg)*10)/10} kg</span>:null}
+                </span>
+              </div>
+            )}
             {prevIdx>=0&&(
               <div style={{background:C.s1,borderRadius:14,padding:"12px 15px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
                 <span style={{fontSize:13,color:C.ink4}}>Série précédente</span>
@@ -2907,7 +2969,7 @@ function SettingsTab({user,excluded,onToggleExclude,onSignOut,onReset,onOpenLibr
           <span style={{fontSize:17,color:C.red}}>›</span>
         </Tap>
       </div>
-      <div style={{fontSize:12,color:C.ink4,textAlign:"center",marginTop:28}}>SŌMA · {"S"+weekNumber()} · {DB.length} exercices · build 23.63a</div>
+      <div style={{fontSize:12,color:C.ink4,textAlign:"center",marginTop:28}}>SŌMA · {"S"+weekNumber()} · {DB.length} exercices · build 23.64a</div>
     </div>
   );
 }
@@ -3328,6 +3390,7 @@ export default function SomaApp() {
       running:!!st.running,updated_at:new Date().toISOString(),
     },{onConflict:"user_id"}).then(({error})=>{ if(error) console.error("SB clock:",error.message); });
   },[user]);
+  const perfRef=useRef({});
   const clock=useStopwatch(clockPersist);
   const rest=useCountdown(()=>setShowRestFull(true));
   // Photos : la base ne contient que des chemins Storage, l'affichage passe par des URL
@@ -3350,6 +3413,9 @@ export default function SomaApp() {
     window.addEventListener("pointerdown",on,{once:false});
     return()=>window.removeEventListener("pointerdown",on);
   },[]);
+  // Index des dernieres performances reelles, qui alimente la surcharge progressive.
+  const perf=useMemo(()=>perfIndex(sessions),[sessions]);
+  useEffect(()=>{perfRef.current=perf;},[perf]);
   const avatarPath=profile&&profile.avatar;
   useEffect(()=>{ let alive=true; (async()=>{
     if(!avatarPath){ if(alive) setAvatarUrl(""); return; }
@@ -3357,7 +3423,7 @@ export default function SomaApp() {
     if(alive) setAvatarUrl(u.a||"");
   })(); return()=>{alive=false;}; },[avatarPath]);
   const wk=weekNumber();
-  const viewSchedule=useMemo(()=>{let s=autoRotate?schedule.map(d=>rotateDay(d,wk)):schedule;const eq=profile?.equipment;if(eq&&eq.length)s=s.map(d=>adaptEquip(d,eq));const g=profile?.goal;if(g&&g!=="hybride")s=s.map(d=>adaptGoal(d,g));s=s.map(d=>personalizeDay(d,profile,progWeekOf(profile?.program_start)));const _mp=weeklyModePlan(s,profile,progWeekOf(profile?.program_start));s=s.map((d,i)=>(d&&d.salle)?{...d,recommendedMode:(_mp[i]&&_mp[i].mode)||"classique",circuit:(_mp[i]&&_mp[i].circuit)||false}:d);return s;},[schedule,autoRotate,wk,profile]);
+  const viewSchedule=useMemo(()=>{let s=autoRotate?schedule.map(d=>rotateDay(d,wk)):schedule;const eq=profile?.equipment;if(eq&&eq.length)s=s.map(d=>adaptEquip(d,eq));const g=profile?.goal;if(g&&g!=="hybride")s=s.map(d=>adaptGoal(d,g));s=s.map(d=>personalizeDay(d,profile,progWeekOf(profile?.program_start),perfRef.current));const _mp=weeklyModePlan(s,profile,progWeekOf(profile?.program_start));s=s.map((d,i)=>(d&&d.salle)?{...d,recommendedMode:(_mp[i]&&_mp[i].mode)||"classique",circuit:(_mp[i]&&_mp[i].circuit)||false}:d);return s;},[schedule,autoRotate,wk,profile]);
 
 
   // ── Auth listener ──
@@ -3608,7 +3674,10 @@ export default function SomaApp() {
       // La structure du jour (superset, circuit, tag EMOM/AMRAP) n'etait PAS sauvegardee :
       // une seance close se reaffichait donc integralement a plat, en classique, quel qu'ait
       // ete son agencement reel. On la conserve avec l'exercice.
+      // RPE ressenti, saisi en fin d'exercice : c'est lui qui pilote la charge de la prochaine fois.
+      const rpeLog=log[`${sDate}_${ex.id}_rpe`];
       return{id:ex.id,n:ex.n||ex.name,m:ex.m||ex.muscle,weight:topWeight,reps:defReps,completedSets,setsDetail,
+        ...(rpeLog&&rpeLog.rpe?{rpe:Number(rpeLog.rpe)}:{}),
         ...(ex.groupType?{groupType:ex.groupType,circuitId:ex.circuitId,circuitPos:ex.circuitPos,circuitSize:ex.circuitSize,groupTours:ex.groupTours}:{}),
         ...(ex.modeTag?{modeTag:ex.modeTag}:{})};
     });
@@ -3754,7 +3823,7 @@ export default function SomaApp() {
       exercises:dex,abs:[],
     };
   })():null;
-  const day0=doneDay||(isBeforeProgramStart?{...REST_TPL,day:rawDay0?.day}:(isViewingToday&&rawDay0?.salle&&pendingTemplate)?(()=>{let c={...pendingTemplate,day:rawDay0.day};if(profile?.equipment?.length)c=adaptEquip(c,profile.equipment);c=personalizeDay(c,profile,sessionWeek);return c;})():rawDay0);
+  const day0=doneDay||(isBeforeProgramStart?{...REST_TPL,day:rawDay0?.day}:(isViewingToday&&rawDay0?.salle&&pendingTemplate)?(()=>{let c={...pendingTemplate,day:rawDay0.day};if(profile?.equipment?.length)c=adaptEquip(c,profile.equipment);c=personalizeDay(c,profile,sessionWeek,perf);return c;})():rawDay0);
   // Seance "aujourd'hui" pour la page Accueil : DOIT utiliser la meme logique de sequence que day0 ci-dessus,
   // independamment de l'onglet jour actuellement affiche (dayIdx peut pointer vers un autre jour que aujourd'hui).
   const todaySessionForHome=(()=>{
@@ -3766,7 +3835,7 @@ export default function SomaApp() {
     if(!trRaw?.salle||programDone||!pendingTemplate) return trRaw;
     let c={...pendingTemplate,day:trRaw.day};
     if(profile?.equipment?.length) c=adaptEquip(c,profile.equipment);
-    c=personalizeDay(c,profile,sessionWeek);
+    c=personalizeDay(c,profile,sessionWeek,perf);
     return c;
   })();
   const effMode=isDayDone?(doneSession?.mode||"classique"):(modeOverride||day0?.recommendedMode||"classique");
@@ -4032,7 +4101,7 @@ const NAV=[{id:"home",l:"Accueil"},{id:"seance",l:"Séances"},{id:"stats",l:"Sta
       {/* Overlays plein ecran sortis du wrapper anime (position:fixed casse sous un ancetre avec transform) */}
       {focusIdx!=null&&exos[focusIdx]&&(
         <ExerciseFocus key={exos[focusIdx].id} ex={exos[focusIdx]} idx={focusIdx} count={exos.length} dayIdx={dayIdx} sDate={sDate}
-          log={log} onLogSet={saveLog} onDetail={e=>setDetailEx(e)}
+          log={log} onLogSet={saveLog} onDetail={e=>setDetailEx(e)} lastPerf={perf[exos[focusIdx].id]}
           onClose={()=>setFocusIdx(null)} hasNext={focusIdx<exos.length-1} onNext={()=>{
             const _n=exos[focusIdx+1];
             if(_n&&_n.circuitId){
