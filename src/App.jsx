@@ -753,6 +753,51 @@ const fmtMSS = s => `${String(Math.floor(s/60)).padStart(2,"0")}:${String(s%60).
 const fmtDur = s => s>=3600?`${Math.floor(s/3600)}h${String(Math.floor((s%3600)/60)).padStart(2,"0")}m`:`${Math.floor(s/60)}m${String(s%60).padStart(2,"0")}s`;
 const orm = (kg,reps) => kg>0?Math.round(kg*(1+(parseFloat(String(reps).split("–")[0])||8)/30)):null;
 
+// ─── FILE D'ATTENTE DES ECRITURES ───────────────────────────────────────────
+// Depuis le passage au tout-serveur, une coupure reseau en pleine seance faisait perdre
+// les series des dernieres secondes : l'ecriture partait, echouait, et personne ne la
+// rejouait. Toute ecriture passe desormais par cette file, rejouee automatiquement au
+// retour du reseau avec un repli exponentiel. Les ecritures repetitives (log en cours,
+// configuration) sont dedoublonnees par cle : seule la derniere version compte.
+const OUTBOX=[];
+let outboxTimer=null,outboxBusy=false;
+const outboxSubs=new Set();
+const outboxNotify=()=>{outboxSubs.forEach(f=>{try{f(OUTBOX.length);}catch(_e){}});};
+const outboxSchedule=(ms)=>{clearTimeout(outboxTimer);outboxTimer=setTimeout(outboxFlush,ms);};
+const enqueue=(key,label,run)=>{
+  const job={key,label,run,tries:0};
+  if(key){
+    const i=OUTBOX.findIndex(j=>j.key===key);
+    if(i>=0){ job.tries=OUTBOX[i].tries; OUTBOX[i]=job; outboxNotify(); outboxSchedule(300); return; }
+  }
+  OUTBOX.push(job); outboxNotify(); outboxSchedule(300);
+};
+async function outboxFlush(){
+  if(outboxBusy||!OUTBOX.length) return;
+  if(typeof navigator!=="undefined"&&navigator.onLine===false){ outboxSchedule(5000); return; }
+  outboxBusy=true;
+  while(OUTBOX.length){
+    const job=OUTBOX[0];
+    try{
+      const res=await job.run();
+      if(res&&res.error) throw new Error(res.error.message||"erreur");
+      OUTBOX.shift(); outboxNotify();
+    }catch(e){
+      job.tries=(job.tries||0)+1;
+      console.error("outbox "+job.label+":",e&&e.message);
+      outboxBusy=false;
+      // Repli exponentiel plafonne a 30 s : inutile de marteler un reseau absent.
+      outboxSchedule(Math.min(30000,1000*Math.pow(2,Math.min(5,job.tries))));
+      return;
+    }
+  }
+  outboxBusy=false;
+}
+if(typeof window!=="undefined"){
+  window.addEventListener("online",()=>outboxSchedule(200));
+  document.addEventListener("visibilitychange",()=>{ if(document.visibilityState==="visible") outboxSchedule(200); });
+}
+
 // ─── SIGNAUX SONORES ────────────────────────────────────────────────────────
 // Un son = un sens. L'application n'avait qu'un seul timbre pour la fin d'un repos,
 // le changement de minute EMOM et la fin d'un bloc : trois evenements tres differents
@@ -2969,7 +3014,7 @@ function SettingsTab({user,excluded,onToggleExclude,onSignOut,onReset,onOpenLibr
           <span style={{fontSize:17,color:C.red}}>›</span>
         </Tap>
       </div>
-      <div style={{fontSize:12,color:C.ink4,textAlign:"center",marginTop:28}}>SŌMA · {"S"+weekNumber()} · {DB.length} exercices · build 23.64a</div>
+      <div style={{fontSize:12,color:C.ink4,textAlign:"center",marginTop:28}}>SŌMA · {"S"+weekNumber()} · {DB.length} exercices · build 23.65a</div>
     </div>
   );
 }
@@ -3382,15 +3427,19 @@ export default function SomaApp() {
   // le temps ecoule etant recalcule a partir de started_at.
   const clockPersist=useCallback((st)=>{
     const id=user?.id; if(!id) return;
-    if(!st){ supabase.from("active_session").delete().eq("user_id",id).then(({error})=>{ if(error) console.error("SB clock del:",error.message); }); return; }
-    supabase.from("active_session").upsert({
+    if(!st){ enqueue("clock","chrono",()=>supabase.from("active_session").delete().eq("user_id",id)); return; }
+    enqueue("clock","chrono",()=>supabase.from("active_session").upsert({
       user_id:id,date:todayKey(),
       started_at:st.startedAt?new Date(st.startedAt).toISOString():null,
       accumulated_seconds:Math.round(Number(st.acc)||0),
       running:!!st.running,updated_at:new Date().toISOString(),
-    },{onConflict:"user_id"}).then(({error})=>{ if(error) console.error("SB clock:",error.message); });
+    },{onConflict:"user_id"}));
   },[user]);
   const perfRef=useRef({});
+  // Nombre d'ecritures encore en attente d'envoi : sans cet indicateur, rien ne distingue
+  // une seance enregistree d'une seance qui n'a pas encore quitte le telephone.
+  const[pending,setPending]=useState(0);
+  useEffect(()=>{ outboxSubs.add(setPending); return()=>{outboxSubs.delete(setPending);}; },[]);
   const clock=useStopwatch(clockPersist);
   const rest=useCountdown(()=>setShowRestFull(true));
   // Photos : la base ne contient que des chemins Storage, l'affichage passe par des URL
@@ -3507,11 +3556,11 @@ export default function SomaApp() {
     const longest=Math.max(cnt,longestRef.current||0);
     longestRef.current=longest;
     const dates=(sess||[]).map(s=>s.date).filter(Boolean).sort();
-    supabase.from("streaks").upsert({
+    enqueue("streak","série",()=>supabase.from("streaks").upsert({
       user_id:id,current_streak:cnt,longest_streak:longest,
       last_session_date:dates[dates.length-1]||null,
       total_sessions:(sess||[]).length,updated_at:new Date().toISOString(),
-    },{onConflict:"user_id"}).then(({error})=>{ if(error) console.error("SB streak:",error.message); });
+    },{onConflict:"user_id"}));
   },[user]);
 
   function computeStreak(sess){
@@ -3547,15 +3596,13 @@ export default function SomaApp() {
   const flushCfg=useCallback((uid)=>{
     const patch=cfgBuf.current; cfgBuf.current={};
     if(!uid||!Object.keys(patch).length) return;
-    supabase.from("profiles").upsert({id:uid,...patch,updated_at:new Date().toISOString()},{onConflict:"id"})
-      .then(({error})=>{ if(error) console.error("SB config:",error.message); });
+    enqueue("cfg","config",()=>supabase.from("profiles").upsert({id:uid,...patch,updated_at:new Date().toISOString()},{onConflict:"id"}));
   },[]);
 
   const flushLog=useCallback((uid,sDateKey)=>{
     const payload=logBuf.current; logBuf.current=null;
     if(!uid||payload==null) return;
-    supabase.from("active_session").upsert({user_id:uid,date:sDateKey,log:payload,updated_at:new Date().toISOString()},{onConflict:"user_id"})
-      .then(({error})=>{ if(error) console.error("SB log:",error.message); });
+    enqueue("log","log des séries",()=>supabase.from("active_session").upsert({user_id:uid,date:sDateKey,log:payload,updated_at:new Date().toISOString()},{onConflict:"user_id"}));
   },[]);
 
   const persist = useCallback((uid,updates)=>{
@@ -3724,7 +3771,9 @@ export default function SomaApp() {
     setShowReport(entry);
     // 4. Supabase en arrière-plan
     if(uid){
-      supabase.from("sessions").upsert({
+      // exercises/feedback en JSON natif : JSON.stringify dans une colonne jsonb produisait
+      // une CHAINE de JSON, inexploitable en SQL sans deballage. Le lecteur accepte les deux.
+      enqueue(`session:${sDate}`,"séance",()=>supabase.from("sessions").upsert({
         user_id:uid,date:sDate,week:"S"+wk,
         day:day.day,day_label:entry.dayLabel,
         session_type:entry.dayLabel,
@@ -3732,18 +3781,20 @@ export default function SomaApp() {
         mode:sessionMode,
         total_kg:Math.round(totalKg),total_sets:totalSets,
         duration_seconds:durationSec,score,completed:true,
-        exercises:JSON.stringify(exercisesData),
-        feedback:JSON.stringify(fb),
+        exercises:exercisesData,
+        feedback:fb,
         notes:fb.notes||""
-      },{onConflict:"user_id,date"}).then(({error:e})=>{
-        if(e) console.error("SB session:",e.message);
-      });
-      supabase.from("personal_bests").upsert(
-        exercisesData.filter(e=>e.weight>0).map(e=>({
+      },{onConflict:"user_id,date"}));
+      // Un record ne se remplace que s'il est BATTU. L'upsert ecrasait sans comparer : la
+      // seance du 30/07 avait ainsi detruit trois records (16 -> 10 kg). Et les reps etaient
+      // codees a 8 quel que soit le reel, donc tous les 1RM estimes etaient faux.
+      const pbRows=exercisesData
+        .filter(e=>e.weight>0&&e.completedSets>0&&e.weight>(Number(weights[e.id])||0))
+        .map(e=>({
           user_id:uid,exercise_id:e.id,exercise_name:e.n||e.name||"",
-          weight_kg:e.weight,reps:8,one_rm:orm(e.weight,"8"),achieved_at:sDate
-        })),{onConflict:"user_id,exercise_id"}
-      ).then(({error:e})=>{ if(e) console.error("SB pb:",e.message); });
+          weight_kg:e.weight,reps:e.reps||8,one_rm:orm(e.weight,String(e.reps||8)),achieved_at:sDate
+        }));
+      if(pbRows.length) enqueue(`pb:${sDate}`,"records",()=>supabase.from("personal_bests").upsert(pbRows,{onConflict:"user_id,exercise_id"}));
     }
   };
 
@@ -3888,6 +3939,7 @@ const NAV=[{id:"home",l:"Accueil"},{id:"seance",l:"Séances"},{id:"stats",l:"Sta
             <div style={{fontSize:10,fontWeight:600,color:C.ink4,letterSpacing:".16em",textTransform:"uppercase"}}>{"S"+wk+" · "}{user?.user_metadata?.name||"Athlète"}</div>
           </div>
           <div style={{display:"flex",alignItems:"center",gap:12}}>
+            {pending>0&&<span title="Enregistrement en attente de réseau" style={{fontSize:12,fontWeight:600,color:C.ink3,background:C.s2,padding:"3px 10px",borderRadius:980,marginRight:8}}>⟳ {pending}</span>}
             {sessionActive&&(clock.running||clock.sec>0)&&<span style={{fontSize:15,fontWeight:700,color:C.red}}>{fmtDur(clock.sec)}</span>}
             {streak>0&&<span style={{fontSize:13,fontWeight:600,color:C.ink,padding:"4px 12px",borderRadius:980,background:C.s2}}>{streak}j</span>}
             {sbReady&&<div style={{width:6,height:6,borderRadius:"50%",background:C.green}}/>}
