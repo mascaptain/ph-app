@@ -1049,7 +1049,7 @@ function useCountUp(target,duration=1200) {
 function Tap({children,onTap,style,disabled}) {
   const[p,setP]=useState(false);
   return(
-    <div onPointerDown={()=>!disabled&&setP(true)} onPointerUp={()=>{setP(false);!disabled&&onTap?.();}} onPointerLeave={()=>setP(false)}
+    <div onPointerDown={()=>!disabled&&setP(true)} onPointerUp={(e)=>{setP(false);!disabled&&onTap?.(e);}} onPointerLeave={()=>setP(false)}
       style={{...style,transform:p&&!disabled?"scale(0.97)":"scale(1)",transition:`transform ${DUR.btn} ${EO}`,cursor:disabled?"default":"pointer",WebkitTapHighlightColor:"transparent",userSelect:"none"}}>
       {children}
     </div>
@@ -1251,7 +1251,7 @@ const setPlanFor=(ex)=>{
 };
 const repsNum=(r)=>{const m=String(r||"").match(/\d+/);return m?parseInt(m[0]):0;};
 
-function HomeTab({profile,streak,sessions,weights,todaySession,onStartToday,accent,trainingDaysPerWeek}) {
+function HomeTab({profile,streak,sessions,weights,todaySession,onStartToday,accent,trainingDaysPerWeek,weighIns,onSaveWeighIn}) {
   const now=new Date();
   const wk=(()=>{const d=new Date(now);const day=(d.getDay()+6)%7;d.setDate(d.getDate()-day);d.setHours(0,0,0,0);return d;})();
   const weekSessions=sessions.filter(s=>{const sd=new Date(s.date);return sd>=wk;});
@@ -1303,6 +1303,7 @@ function HomeTab({profile,streak,sessions,weights,todaySession,onStartToday,acce
       <Stat v={fmtMin(weekMin)} l="Temps semaine" sub="d'entraînement"/>
       <Stat v={totalSessions} l="Total" sub="séances faites"/>
     </div>
+    {onSaveWeighIn&&<WeighInCard weighIns={weighIns} onSave={onSaveWeighIn}/>}
     {showBilan&&<div style={{background:C.s1,borderRadius:16,padding:"16px",marginBottom:12}}>
       <div style={{fontSize:11,fontWeight:700,color:C.ink4,textTransform:"uppercase",letterSpacing:".1em",marginBottom:10}}>Bilan vs semaine dernière</div>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
@@ -1618,7 +1619,7 @@ function CircuitPlayer({mode,exos,onClose,defMin,blocks,onAllDone,startBlock,log
       </div>
     </div>);
 }
-function ExerciseRowCollapsed({ex,dayIdx,sDate,log,idx,onOpen,onReplace,doneSession}) {
+function ExerciseRowCollapsed({ex,dayIdx,sDate,log,idx,onOpen,onReplace,doneSession,onOriginY}) {
   const plan=setPlanFor(ex);const n=plan.length;
   // Si la journee est deja enregistree (doneSession), c'est la SOURCE DE VERITE - ne jamais se fier
   // au log local qui peut etre incomplet/absent (ex: seance corrigee manuellement en base).
@@ -1646,7 +1647,13 @@ function ExerciseRowCollapsed({ex,dayIdx,sDate,log,idx,onOpen,onReplace,doneSess
   const restLbl=ex.rest>0?(ex.rest>=60?fmtMSS(ex.rest):`${ex.rest}s`):null;
   return (
     <div style={{display:"flex",alignItems:"center",gap:12,background:C.s1,borderRadius:14,padding:"12px 14px",marginBottom:10,border:`1px solid ${allDone?C.green:C.s3}`,animation:`fadeSlideIn 280ms ${EO} ${idx*35}ms both`}}>
-      <Tap onTap={onOpen} style={{flex:1,minWidth:0,display:"flex",alignItems:"center",gap:12}}>
+      <Tap onTap={(e)=>{
+        // On note la position verticale de la carte avant d'ouvrir : l'ecran plein
+        // s'agrandira depuis cet endroit plutot que depuis le centre.
+        try{ const r=e&&e.currentTarget&&e.currentTarget.getBoundingClientRect&&e.currentTarget.getBoundingClientRect();
+             if(r&&onOriginY) onOriginY(Math.max(0,Math.min(100,Math.round((r.top+r.height/2)/window.innerHeight*100)))); }catch(_e){}
+        onOpen&&onOpen();
+      }} style={{flex:1,minWidth:0,display:"flex",alignItems:"center",gap:12}}>
         <div style={{width:44,height:44,borderRadius:12,background:allDone?C.greenDim:C.s2,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
           {allDone?(
             <span style={{fontSize:18,fontWeight:700,color:C.green}}>✓</span>
@@ -1668,7 +1675,11 @@ function ExerciseRowCollapsed({ex,dayIdx,sDate,log,idx,onOpen,onReplace,doneSess
   );
 }
 
-function ExerciseFocus({ex,dayIdx,sDate,log,onLogSet,onClose,onNext,hasNext,idx,count,onDetail,lastPerf}) {
+function ExerciseFocus({ex,dayIdx,sDate,log,onLogSet,onClose,onNext,hasNext,idx,count,onDetail,lastPerf,originY}) {
+  // Fermeture animee : le composant reste monte le temps de l'animation de sortie, sinon
+  // l'ecran disparaissait d'un coup et on perdait le lien avec la liste d'ou l'on venait.
+  const [closing,setClosing]=useState(false);
+  const leave=useCallback((after)=>{setClosing(true);setTimeout(()=>{(after||onClose)();},200);},[onClose]);
   const plan=setPlanFor(ex);const n=plan.length;
   const lk=`${sDate}_${ex.id}`;
   const [done,setDone]=useState(()=>plan.map((_,i)=>!!(log[`${lk}_s${i}`]&&log[`${lk}_s${i}`].done)));
@@ -1718,7 +1729,8 @@ function ExerciseFocus({ex,dayIdx,sDate,log,onLogSet,onClose,onNext,hasNext,idx,
     <div style={{display:"flex",gap:6,justifyContent:"center"}}>
       {plan.map((_,i)=>(
         <div key={i} style={{width:done[i]?9:7,height:done[i]?9:7,borderRadius:"50%",
-          background:done[i]?C.green:(i===cur?C.ink4:C.s4),transition:`all 200ms ${EO}`}}/>
+          background:done[i]?C.green:(i===cur?C.ink4:C.s4),transition:`all 200ms ${EO}`,
+          animation:done[i]?`popIn 260ms ${EO} both`:"none"}}/>
       ))}
     </div>
   );
@@ -1733,10 +1745,13 @@ function ExerciseFocus({ex,dayIdx,sDate,log,onLogSet,onClose,onNext,hasNext,idx,
   const restPct=restTotal>0?(restTotal-resting)/restTotal:0;
   const RING=54,CIRC=2*Math.PI*RING;
   return (
-    <div style={{position:"fixed",inset:0,background:C.bg,zIndex:Z.fullscreen,display:"flex",flexDirection:"column",alignItems:"center",fontFamily:F,paddingTop:"env(safe-area-inset-top)",paddingBottom:"env(safe-area-inset-bottom)",animation:`sheetIn ${DUR.modal} ${ED} both`}}>
+    <div style={{position:"fixed",inset:0,background:C.bg,zIndex:Z.fullscreen,display:"flex",flexDirection:"column",alignItems:"center",fontFamily:F,paddingTop:"env(safe-area-inset-top)",paddingBottom:"env(safe-area-inset-bottom)",
+      // L'ecran s'ouvre depuis la HAUTEUR de la carte touchee : on comprend d'ou l'on vient.
+      transformOrigin:`50% ${originY!=null?originY:50}%`,
+      animation:closing?`sheetOut 200ms ${EO} both`:`sheetIn ${DUR.modal} ${ED} both`}}>
     <div style={{width:"100%",maxWidth:600,display:"flex",flexDirection:"column",flex:1,minHeight:0}}>
       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"16px 20px"}}>
-        <Tap onTap={onClose} style={{width:40,height:40,borderRadius:10,background:C.s2,display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{fontSize:20,color:C.ink3}}>‹</span></Tap>
+        <Tap onTap={()=>leave()} style={{width:40,height:40,borderRadius:10,background:C.s2,display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{fontSize:20,color:C.ink3}}>‹</span></Tap>
         <span style={{fontSize:13,fontWeight:600,color:C.ink4,textTransform:"uppercase",letterSpacing:".1em"}}>Exercice {idx+1}/{count}</span>
         <Tap onTap={()=>onDetail&&onDetail(ex)} style={{width:40,height:40,borderRadius:10,background:C.s2,display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{fontSize:15,fontWeight:700,color:C.blue}}>i</span></Tap>
       </div>
@@ -1747,8 +1762,8 @@ function ExerciseFocus({ex,dayIdx,sDate,log,onLogSet,onClose,onNext,hasNext,idx,
         {/* REPOS — il occupe l'ecran au lieu de se cacher sous la liste : on ne l'ecourte plus par distraction */}
         {resting>0?(
           <div style={{flex:1,display:"flex",flexDirection:"column",justifyContent:"center",alignItems:"center",gap:22,padding:"20px 0"}}>
-            <div style={{fontSize:12,fontWeight:600,color:C.ink4,textTransform:"uppercase",letterSpacing:".12em"}}>Récupération</div>
-            <div style={{position:"relative",width:132,height:132}}>
+            <div style={{fontSize:12,fontWeight:600,color:C.ink4,textTransform:"uppercase",letterSpacing:".12em",animation:`dropIn 240ms ${EO} both`}}>Récupération</div>
+            <div style={{position:"relative",width:132,height:132,animation:`riseIn 300ms ${EO} 60ms both`}}>
               <svg width="132" height="132" viewBox="0 0 132 132" style={{transform:"rotate(-90deg)"}}>
                 <circle cx="66" cy="66" r={RING} fill="none" stroke={C.s2} strokeWidth="9"/>
                 <circle cx="66" cy="66" r={RING} fill="none" stroke={C.green} strokeWidth="9" strokeLinecap="round"
@@ -1758,7 +1773,7 @@ function ExerciseFocus({ex,dayIdx,sDate,log,onLogSet,onClose,onNext,hasNext,idx,
                 <span style={{fontSize:34,fontWeight:700,color:C.ink,letterSpacing:"-.03em",fontVariantNumeric:"tabular-nums"}}>{fmtMSS(resting)}</span>
               </div>
             </div>
-            <div style={{textAlign:"center"}}>
+            <div style={{textAlign:"center",animation:`riseIn 300ms ${EO} 140ms both`}}>
               <div style={{fontSize:12,fontWeight:600,color:C.ink4,textTransform:"uppercase",letterSpacing:".1em",marginBottom:5}}>Ensuite</div>
               <div style={{fontSize:18,fontWeight:700,color:C.ink}}>Série {cur+1} · {curLoad>0?`${curLoad} kg`:"Poids du corps"} × {curReps}</div>
             </div>
@@ -1804,10 +1819,10 @@ function ExerciseFocus({ex,dayIdx,sDate,log,onLogSet,onClose,onNext,hasNext,idx,
               </div>
             </div>
             <div>
-              <Tap onTap={onClose} style={{padding:"18px",borderRadius:16,background:C.green,display:"flex",alignItems:"center",justifyContent:"center"}}>
+              <Tap onTap={()=>leave()} style={{padding:"18px",borderRadius:16,background:C.green,display:"flex",alignItems:"center",justifyContent:"center"}}>
                 <span style={{fontSize:17,fontWeight:700,color:"#000"}}>Retour à la liste</span>
               </Tap>
-              {hasNext&&<Tap onTap={onNext} style={{marginTop:10,padding:"15px",borderRadius:14,background:"transparent",border:`1px solid ${C.div}`,display:"flex",alignItems:"center",justifyContent:"center"}}>
+              {hasNext&&<Tap onTap={()=>leave(onNext)} style={{marginTop:10,padding:"15px",borderRadius:14,background:"transparent",border:`1px solid ${C.div}`,display:"flex",alignItems:"center",justifyContent:"center"}}>
                 <span style={{fontSize:15,fontWeight:600,color:C.ink3}}>Enchaîner sur le suivant →</span>
               </Tap>}
             </div>
@@ -2160,6 +2175,86 @@ function SessionReport({session,sessions,trainingDaysPerWeek,photoUrl,onClose,on
 }
 
 // ─── WEEK SUMMARY ─────────────────────────────────────────────────────────────
+// Lundi de la semaine d'une date : sert de cle de semaine pour la pesee.
+const mondayOf=(d)=>{const t=(typeof d==="string")?new Date(d+"T00:00:00"):new Date(d);const dow=(t.getDay()+6)%7;t.setDate(t.getDate()-dow);return localDateKey(t);};
+
+// Pesee de debut de semaine. Proposee tant qu'aucune pesee n'existe pour la semaine en
+// cours : on ne rate pas le suivi parce qu'on a ouvert l'app un mardi.
+function WeighInCard({weighIns,onSave}) {
+  const wk=mondayOf(new Date());
+  const done=(weighIns||[]).find(w=>mondayOf(w.date)===wk);
+  const last=(weighIns||[]).slice().sort((a,b)=>String(a.date).localeCompare(String(b.date))).pop();
+  const [val,setVal]=useState(()=>done?String(done.weight_kg):(last?String(last.weight_kg):""));
+  const [saved,setSaved]=useState(false);
+  if(done&&!saved) {
+    const delta=last&&last.date!==done.date?null:null;
+    return (
+      <div style={{background:C.s1,borderRadius:16,padding:"14px 16px",marginBottom:12,display:"flex",justifyContent:"space-between",alignItems:"center",gap:10}}>
+        <div>
+          <div style={{fontSize:12,fontWeight:600,color:C.ink4,textTransform:"uppercase",letterSpacing:".1em"}}>Poids de la semaine</div>
+          <div style={{fontSize:13,color:C.ink3,marginTop:3}}>Pesée enregistrée {fmtDateShort(done.date)}{delta}</div>
+        </div>
+        <span style={{fontSize:22,fontWeight:700,color:C.ink,fontVariantNumeric:"tabular-nums"}}>{Number(done.weight_kg)} kg</span>
+      </div>
+    );
+  }
+  return (
+    <div style={{background:C.s1,borderRadius:16,padding:"16px",marginBottom:12,animation:`riseIn 320ms ${EO} both`}}>
+      <div style={{fontSize:12,fontWeight:600,color:C.ink4,textTransform:"uppercase",letterSpacing:".1em",marginBottom:4}}>Pesée de la semaine</div>
+      <div style={{fontSize:13,color:C.ink3,marginBottom:12}}>Une fois par semaine suffit — de préférence le lundi, à jeun.</div>
+      <div style={{display:"flex",gap:10,alignItems:"center"}}>
+        <input type="number" inputMode="decimal" step="0.1" value={val} onChange={e=>setVal(e.target.value)} placeholder="kg"
+          style={{flex:1,height:48,borderRadius:12,border:`1px solid ${C.s4}`,background:C.bg,color:C.ink,fontSize:17,fontWeight:600,fontFamily:F,padding:"0 14px",outline:"none",boxSizing:"border-box"}}/>
+        <Tap onTap={()=>{const n=parseFloat(String(val).replace(",","."));if(!(n>20&&n<300))return;onSave(n);setSaved(true);play("clic");buzz(18);}}
+          style={{padding:"0 22px",height:48,borderRadius:12,background:C.blue,display:"flex",alignItems:"center"}}>
+          <span style={{fontSize:16,fontWeight:700,color:"#000"}}>Enregistrer</span>
+        </Tap>
+      </div>
+    </div>
+  );
+}
+
+// Courbe de poids : trace simple, sans bibliotheque, avec la tendance chiffree.
+function WeightChart({weighIns,accent}) {
+  const pts=(weighIns||[]).slice().sort((a,b)=>String(a.date).localeCompare(String(b.date)))
+    .map(w=>({d:w.date,v:Number(w.weight_kg)})).filter(x=>x.v>0);
+  if(pts.length<2) return (
+    <div style={{background:C.s1,borderRadius:16,padding:"18px",marginBottom:16}}>
+      <div style={{fontSize:14,fontWeight:600,color:C.ink,marginBottom:4}}>Progression du poids</div>
+      <div style={{fontSize:13,color:C.ink4}}>Une deuxième pesée et la courbe apparaît.</div>
+    </div>
+  );
+  const W=600,H=140,PAD=8;
+  const vs=pts.map(p=>p.v);
+  const min=Math.min(...vs),max=Math.max(...vs);
+  const span=(max-min)||1;
+  const x=(i)=>PAD+(i/(pts.length-1))*(W-PAD*2);
+  const y=(v)=>PAD+(1-(v-min)/span)*(H-PAD*2);
+  const line=pts.map((p,i)=>`${i?"L":"M"}${x(i).toFixed(1)},${y(p.v).toFixed(1)}`).join(" ");
+  const area=`${line} L${x(pts.length-1).toFixed(1)},${H} L${x(0).toFixed(1)},${H} Z`;
+  const first=pts[0].v,lastV=pts[pts.length-1].v,delta=Math.round((lastV-first)*10)/10;
+  return (
+    <div style={{background:C.s1,borderRadius:16,padding:"18px",marginBottom:16}}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",marginBottom:2}}>
+        <span style={{fontSize:14,fontWeight:600,color:C.ink}}>Progression du poids</span>
+        <span style={{fontSize:20,fontWeight:700,color:C.ink,fontVariantNumeric:"tabular-nums"}}>{lastV} kg</span>
+      </div>
+      <div style={{fontSize:12,color:C.ink4,marginBottom:12}}>
+        {pts.length} pesées · {delta===0?"stable":`${delta>0?"+":""}${delta} kg`} depuis {fmtDateShort(pts[0].d)}
+      </div>
+      <svg viewBox={`0 0 ${W} ${H}`} width="100%" height={H} preserveAspectRatio="none" style={{display:"block",overflow:"visible"}}>
+        <path d={area} fill={C.greenDim}/>
+        <path d={line} fill="none" stroke={accent||C.green} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
+        <circle cx={x(pts.length-1)} cy={y(lastV)} r="4.5" fill={accent||C.green}/>
+      </svg>
+      <div style={{display:"flex",justifyContent:"space-between",fontSize:11,color:C.ink4,marginTop:8,fontVariantNumeric:"tabular-nums"}}>
+        <span>{fmtDateShort(pts[0].d)} · {first} kg</span>
+        <span>{fmtDateShort(pts[pts.length-1].d)}</span>
+      </div>
+    </div>
+  );
+}
+
 function WeekSummary({sessions,accent,trainingDaysPerWeek}) {
   const days=["LUN","MAR","MER","JEU","VEN","SAM","DIM"];
   const today=new Date();
@@ -2911,7 +3006,7 @@ function SettingsTab({user,excluded,onToggleExclude,onSignOut,onReset,onOpenLibr
           <span style={{fontSize:17,color:C.red}}>›</span>
         </Tap>
       </div>
-      <div style={{fontSize:12,color:C.ink4,textAlign:"center",marginTop:28}}>SŌMA · {"S"+weekNumber()} · {DB.length} exercices · build 23.69a</div>
+      <div style={{fontSize:12,color:C.ink4,textAlign:"center",marginTop:28}}>SŌMA · {"S"+weekNumber()} · {DB.length} exercices · build 23.70a</div>
     </div>
   );
 }
@@ -2926,7 +3021,7 @@ function TabContent({tab,prevTab,children}) {
     return ci>pi?1:-1;
   },[tab,prevTab]);
   return(
-    <div key={tab} style={{animation:`slideTab${dir>0?"Right":"Left"} ${DUR.page} ${EO} both`}}>
+    <div key={tab} style={{animation:`slideTab${dir>0?"Right":"Left"} 320ms ${EO} both`}}>
       {children}
     </div>
   );
@@ -3364,6 +3459,18 @@ export default function SomaApp() {
     },{onConflict:"user_id"}));
   },[user]);
   const perfRef=useRef({});
+  // Hauteur (en % de l'ecran) de la carte touchee, pour que le plein ecran s'ouvre de la.
+  const[focusOrigin,setFocusOrigin]=useState(50);
+  const[weighIns,setWeighIns]=useState([]);
+  const saveWeighIn=useCallback((kg)=>{
+    const id=user?.id; if(!id||!(kg>0)) return;
+    const date=todayKey();
+    setWeighIns(prev=>[...prev.filter(w=>w.date!==date),{date,weight_kg:kg}]);
+    // La pesee fait autorite sur le poids du profil : c'est lui qui echelonne le moteur.
+    updateConfigRef.current&&updateConfigRef.current({weight_kg:kg});
+    enqueue(`weigh:${date}`,"pesée",()=>supabase.from("weigh_ins").upsert({user_id:id,date,weight_kg:kg},{onConflict:"user_id,date"}));
+  },[user]);
+  const updateConfigRef=useRef(null);
   // Nombre d'ecritures encore en attente d'envoi : sans cet indicateur, rien ne distingue
   // une seance enregistree d'une seance qui n'a pas encore quitte le telephone.
   const[pending,setPending]=useState(0);
@@ -3424,14 +3531,16 @@ export default function SomaApp() {
     await migrateLocalToServer(uid);
     // Le serveur est desormais la seule source. Plus aucune lecture locale.
     try{
-      const[{data:sess},{data:pbs},{data:strData},{data:prof},{data:act}]=await Promise.all([
+      const[{data:sess},{data:pbs},{data:strData},{data:prof},{data:act},{data:wis}]=await Promise.all([
         supabase.from("sessions").select("*").eq("user_id",uid).order("date",{ascending:false}),
         supabase.from("personal_bests").select("*").eq("user_id",uid),
         supabase.from("streaks").select("*").eq("user_id",uid).maybeSingle(),
         supabase.from("profiles").select("*").eq("id",uid).maybeSingle(),
         supabase.from("active_session").select("*").eq("user_id",uid).maybeSingle(),
+        supabase.from("weigh_ins").select("date,weight_kg").eq("user_id",uid).order("date",{ascending:true}),
       ]);
       setProfile(prof||null);
+      setWeighIns(wis||[]);
       if(prof){
         if(Array.isArray(prof.schedule)&&prof.schedule.length) setSchedule(prof.schedule);
         if(Array.isArray(prof.excluded)) setExcluded(prof.excluded);
@@ -3589,6 +3698,7 @@ export default function SomaApp() {
     persist(user?.id,{profile:next});
     return (async()=>{ try{ const{error}=await supabase.from("profiles").upsert({id:user?.id,goal:next.goal,level:next.level,equipment:next.equipment,frequency:next.frequency,weight_kg:next.weight_kg,sex:next.sex,height_cm:next.height_cm,age:next.age,program_start:next.program_start,rms:next.rms,avatar:next.avatar,photos:next.photos,session_index:next.session_index,total_sessions:next.total_sessions,pinned_pbs:next.pinned_pbs,active_skills:next.active_skills,updated_at:new Date().toISOString()},{onConflict:"id"}); if(error)console.error("profile save",error.message); return {error}; }catch(e){ console.error("profile save",e); return {error:e}; } })();
   },[persist,user,profile]);
+  useEffect(()=>{updateConfigRef.current=updateConfig;},[updateConfig]);
 
   const switchTab=useCallback(id=>{setPrevTab(tab);setTab(id);if(id==="seance"){const ti=todayIdx();setDayIdx(cur=>cur===ti?cur:ti);}try{window.scrollTo(0,0);}catch(_e){}},[tab]);
   useEffect(()=>{ if(focusIdx!=null){ try{window.scrollTo({top:0,behavior:"auto"});}catch(_e){try{window.scrollTo(0,0);}catch(__e){}} } },[focusIdx]);
@@ -3872,8 +3982,13 @@ const NAV=[{id:"home",l:"Accueil"},{id:"seance",l:"Séances"},{id:"stats",l:"Sta
         @keyframes slideUp{from{transform:translateY(40px);opacity:0}to{transform:none;opacity:1}}
         @keyframes fadeSlideIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
         @keyframes fadeUp{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:none}}
-        @keyframes slideTabRight{from{opacity:0;transform:translateX(24px)}to{opacity:1;transform:none}}
-        @keyframes slideTabLeft{from{opacity:0;transform:translateX(-24px)}to{opacity:1;transform:none}}
+        @keyframes slideTabRight{from{opacity:0;transform:translateX(40px) scale(.98)}to{opacity:1;transform:none}}
+        @keyframes slideTabLeft{from{opacity:0;transform:translateX(-40px) scale(.98)}to{opacity:1;transform:none}}
+        @keyframes sheetOut{from{opacity:1;transform:none}to{opacity:0;transform:translateY(22px) scale(.98)}}
+        @keyframes riseIn{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
+        @keyframes dropIn{from{opacity:0;transform:translateY(-14px)}to{opacity:1;transform:none}}
+        @keyframes popIn{0%{transform:scale(.7);opacity:.4}60%{transform:scale(1.14)}100%{transform:scale(1);opacity:1}}
+        @keyframes shimmer{from{background-position:-360px 0}to{background-position:360px 0}}
         @keyframes pulse{0%,100%{opacity:.3;transform:scale(.8)}50%{opacity:1;transform:scale(1.2)}}
         textarea::placeholder,input::placeholder{color:${C.ink4};}
         ::-webkit-scrollbar{display:none;}
@@ -3932,7 +4047,7 @@ const NAV=[{id:"home",l:"Accueil"},{id:"seance",l:"Séances"},{id:"stats",l:"Sta
       {/* CONTENT */}
       <div style={{paddingBottom:80}}>
         <TabContent tab={tab} prevTab={prevTab}>
-          {tab==="home"&&<HomeTab profile={profile} streak={streak} sessions={sessions} weights={weights} todaySession={todaySessionForHome} accent={accent} trainingDaysPerWeek={trainingDaysPerWeek} onStartToday={()=>{setDayIdx(todayIdx());switchTab("seance");}}/>}
+          {tab==="home"&&<HomeTab profile={profile} streak={streak} sessions={sessions} weights={weights} todaySession={todaySessionForHome} accent={accent} trainingDaysPerWeek={trainingDaysPerWeek} weighIns={weighIns} onSaveWeighIn={saveWeighIn} onStartToday={()=>{setDayIdx(todayIdx());switchTab("seance");}}/>}
           {tab==="seance"&&(
             <div style={{padding:"16px 20px 0",maxWidth:600,margin:"0 auto"}}>
               {isRest?(
@@ -4046,7 +4161,7 @@ const NAV=[{id:"home",l:"Accueil"},{id:"seance",l:"Séances"},{id:"stats",l:"Sta
                         <div style={{paddingLeft:12,borderLeft:`2px solid ${C.s3}`}}>
                           {blk.items.map(({ex,idx})=>(
                             <ExerciseRowCollapsed key={ex.id} ex={ex} idx={idx} dayIdx={dayIdx} sDate={sDate} log={log} doneSession={doneSession}
-                              onOpen={()=>{if(locked)return;if(sessionMode!=="classique"){setShowCircuit(true);return;}const _e=exos[idx];if(_e&&_e.circuitId){const _g=exos.filter(e=>e.circuitId===_e.circuitId);setSupBlock({label:_e.m||"Superset",kind:_g.length>=3?"circuit":"superset",exercises:_g,restSec:90,tours:(_g[0]&&(_g[0].groupTours||_g[0].sets))||4});}else{setFocusIdx(idx);}}} onReplace={e=>setShowPicker(e)}/>
+                              onOpen={()=>{if(locked)return;if(sessionMode!=="classique"){setShowCircuit(true);return;}const _e=exos[idx];if(_e&&_e.circuitId){const _g=exos.filter(e=>e.circuitId===_e.circuitId);setSupBlock({label:_e.m||"Superset",kind:_g.length>=3?"circuit":"superset",exercises:_g,restSec:90,tours:(_g[0]&&(_g[0].groupTours||_g[0].sets))||4});}else{setFocusIdx(idx);}}} onReplace={e=>setShowPicker(e)} onOriginY={setFocusOrigin}/>
                           ))}
                         </div>
                       </div>
@@ -4072,7 +4187,7 @@ const NAV=[{id:"home",l:"Accueil"},{id:"seance",l:"Séances"},{id:"stats",l:"Sta
               )}
             </div>
           )}
-          {tab==="stats"&&<><StatsTab sessions={sessions} weights={weights} accent={accent} trainingDaysPerWeek={trainingDaysPerWeek} pinnedPBs={profile?.pinned_pbs} onManagePBs={()=>setShowPBManager(true)} activeSkills={profile?.active_skills} onManageSkills={()=>setShowSkillManager(true)} onOpenRewards={()=>setShowRewardsManager(true)}/><HistoryTab sessions={sessions} onSelect={setShowReport} accent={accent} onOpenPhotos={()=>setShowPhotos(true)} photos={photos} urls={photoUrls}/></>}
+          {tab==="stats"&&<><div style={{padding:"20px 20px 0",maxWidth:600,margin:"0 auto"}}><WeightChart weighIns={weighIns} accent={accent}/></div><StatsTab sessions={sessions} weights={weights} accent={accent} trainingDaysPerWeek={trainingDaysPerWeek} pinnedPBs={profile?.pinned_pbs} onManagePBs={()=>setShowPBManager(true)} activeSkills={profile?.active_skills} onManageSkills={()=>setShowSkillManager(true)} onOpenRewards={()=>setShowRewardsManager(true)}/><HistoryTab sessions={sessions} onSelect={setShowReport} accent={accent} onOpenPhotos={()=>setShowPhotos(true)} photos={photos} urls={photoUrls}/></>}
           {tab==="settings"&&<SettingsTab user={user} excluded={excluded} onToggleExclude={toggleExclude} onOpenLibrary={()=>setShowLibrary(true)} profile={profile} schedule={schedule} avatarUrl={avatarUrl} onUpdateConfig={updateConfig} onOpenScheduleEditor={()=>setShowSched(true)} onRedoOnboarding={()=>setShowOnboardingRedo(true)}
             onSignOut={async()=>{await supabase.auth.signOut();setUser(null);setLog({});setWeights({});setSessions([]);setExcluded([]);setStreak(0);}}
             onReset={async()=>{
@@ -4102,7 +4217,7 @@ const NAV=[{id:"home",l:"Accueil"},{id:"seance",l:"Séances"},{id:"stats",l:"Sta
       {/* Overlays plein ecran sortis du wrapper anime (position:fixed casse sous un ancetre avec transform) */}
       {focusIdx!=null&&exos[focusIdx]&&(
         <ExerciseFocus key={exos[focusIdx].id} ex={exos[focusIdx]} idx={focusIdx} count={exos.length} dayIdx={dayIdx} sDate={sDate}
-          log={log} onLogSet={saveLog} onDetail={e=>setDetailEx(e)} lastPerf={perf[exos[focusIdx].id]}
+          log={log} onLogSet={saveLog} onDetail={e=>setDetailEx(e)} lastPerf={perf[exos[focusIdx].id]} originY={focusOrigin}
           onClose={()=>setFocusIdx(null)} hasNext={focusIdx<exos.length-1} onNext={()=>{
             const _n=exos[focusIdx+1];
             if(_n&&_n.circuitId){
