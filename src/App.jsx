@@ -1823,13 +1823,18 @@ function SessionReport({session,sessions,trainingDaysPerWeek,photoUrl,onClose,on
 }
 
 // ─── WEEK SUMMARY ─────────────────────────────────────────────────────────────
-function WeekSummary({sessions,accent}) {
+function WeekSummary({sessions,accent,trainingDaysPerWeek}) {
   const days=["LUN","MAR","MER","JEU","VEN","SAM","DIM"];
   const today=new Date();
   const dow=today.getDay()===0?6:today.getDay()-1;
   const weekDates=Array.from({length:7},(_,i)=>{const d=new Date(today);d.setDate(today.getDate()-dow+i);return localDateKey(d);});
   const thisWeek=sessions.filter(s=>weekDates.includes(s.date));
   const weekVol=thisWeek.reduce((a,s)=>a+(s.totalKg||0),0);
+  // Temps d'entrainement cumule de la semaine : le volume seul ne dit rien de la charge
+  // de travail reelle d'une semaine ou les seances sont courtes et denses.
+  const weekMin=Math.round(thisWeek.reduce((a,s)=>a+(Number(s.duration)||0),0)/60);
+  const weekTime=weekMin>=60?`${Math.floor(weekMin/60)}h${String(weekMin%60).padStart(2,"0")}`:`${weekMin}`;
+  const target=trainingDaysPerWeek||5;
   return(
     <div style={{background:C.s1,borderRadius:20,padding:"20px",marginBottom:16}}>
       <div style={{fontSize:11,fontWeight:600,color:C.ink4,textTransform:"uppercase",letterSpacing:".1em",marginBottom:16}}>Cette semaine</div>
@@ -1848,8 +1853,9 @@ function WeekSummary({sessions,accent}) {
         })}
       </div>
       <div style={{display:"flex",gap:20,borderTop:`1px solid ${C.s3}`,paddingTop:14}}>
-        <div><div style={{fontSize:22,fontWeight:700,color:C.ink}}>{thisWeek.length}<span style={{fontSize:13,fontWeight:400,color:C.ink4}}>/5</span></div><div style={{fontSize:11,color:C.ink4}}>Séances</div></div>
+        <div><div style={{fontSize:22,fontWeight:700,color:C.ink}}>{thisWeek.length}<span style={{fontSize:13,fontWeight:400,color:C.ink4}}>/{target}</span></div><div style={{fontSize:11,color:C.ink4}}>Séances</div></div>
         {weekVol>0&&<div><div style={{fontSize:22,fontWeight:700,color:C.ink}}>{Math.round(weekVol/1000*10)/10}<span style={{fontSize:13,fontWeight:400,color:C.ink4}}>t</span></div><div style={{fontSize:11,color:C.ink4}}>Volume</div></div>}
+        {weekMin>0&&<div><div style={{fontSize:22,fontWeight:700,color:C.ink}}>{weekTime}<span style={{fontSize:13,fontWeight:400,color:C.ink4}}>{weekMin>=60?"":"min"}</span></div><div style={{fontSize:11,color:C.ink4}}>Temps</div></div>}
       </div>
     </div>
   );
@@ -1996,7 +2002,7 @@ function StatsTab({sessions,weights,accent,onOpenPhotos,pinnedPBs,onManagePBs,ac
   return(
     <div style={{padding:"20px 20px 16px",maxWidth:600,margin:"0 auto",fontFamily:F}}>
       
-      <WeekSummary sessions={sessions} accent={accent}/>
+      <WeekSummary sessions={sessions} accent={accent} trainingDaysPerWeek={trainingDaysPerWeek}/>
       <SkillsOctagon sessions={sessions}/>
       {/* Hero card: volume total, mise en avant */}
       <div style={{background:C.blueDim,border:`1px solid ${C.blue}`,borderRadius:18,padding:"20px",marginBottom:10,display:"flex",alignItems:"center",gap:16}}>
@@ -2577,7 +2583,7 @@ function SettingsTab({user,excluded,onToggleExclude,onSignOut,onReset,onOpenLibr
           <span style={{fontSize:17,color:C.red}}>›</span>
         </Tap>
       </div>
-      <div style={{fontSize:12,color:C.ink4,textAlign:"center",marginTop:28}}>SŌMA · {"S"+weekNumber()} · {DB.length} exercices · build 23.55a</div>
+      <div style={{fontSize:12,color:C.ink4,textAlign:"center",marginTop:28}}>SŌMA · {"S"+weekNumber()} · {DB.length} exercices · build 23.56a</div>
     </div>
   );
 }
@@ -3363,7 +3369,24 @@ export default function SomaApp() {
   const doneSession=isDayDone?sessions.find(s=>s.date===tabDate):null;
   const isBeforeProgramStart=!!(profile?.program_start&&tabDate<profile.program_start);
   const pendingTemplate=(!programDone&&!isBeforeProgramStart)?pendingSessionFor(profile?.goal||"hybride",sessionIndex,profile?.equipment):null;
-  const day0=isBeforeProgramStart?{...REST_TPL,day:rawDay0?.day}:(isViewingToday&&rawDay0?.salle&&pendingTemplate)?(()=>{let c={...pendingTemplate,day:rawDay0.day};if(profile?.equipment?.length)c=adaptEquip(c,profile.equipment);c=personalizeDay(c,profile,sessionWeek);return c;})():rawDay0;
+  // Une journee DEJA ENREGISTREE s'affiche telle qu'elle a ete faite : intitule, muscles et
+  // exercices viennent de la seance sauvegardee, qui est la seule verite sur ce qui s'est passe
+  // ce jour-la. Auparavant l'entete etait toujours recalculee - depuis la seance suivante en
+  // attente si on etait sur aujourd'hui, sinon depuis le planning hebdomadaire fige. Une
+  // journee travaillee pouvait donc s'afficher sous le nom d'une autre seance, et carrement en
+  // "Recuperation / Generer une seance legere" quand le planning disait Repos ce jour-la.
+  const doneDay=(isDayDone&&doneSession)?(()=>{
+    const dex=doneSession.exercises||[];
+    const mus=[...new Set(dex.map(e=>e&&e.m).filter(Boolean))].slice(0,3).join(" · ");
+    return{
+      day:rawDay0?.day||doneSession.day||"",
+      label:doneSession.dayLabel||doneSession.day_label||doneSession.session_type||"Séance",
+      muscle:mus||rawDay0?.muscle||"",
+      salle:rawDay0?.salle||"full",
+      exercises:dex,abs:[],
+    };
+  })():null;
+  const day0=doneDay||(isBeforeProgramStart?{...REST_TPL,day:rawDay0?.day}:(isViewingToday&&rawDay0?.salle&&pendingTemplate)?(()=>{let c={...pendingTemplate,day:rawDay0.day};if(profile?.equipment?.length)c=adaptEquip(c,profile.equipment);c=personalizeDay(c,profile,sessionWeek);return c;})():rawDay0);
   // Seance "aujourd'hui" pour la page Accueil : DOIT utiliser la meme logique de sequence que day0 ci-dessus,
   // independamment de l'onglet jour actuellement affiche (dayIdx peut pointer vers un autre jour que aujourd'hui).
   const todaySessionForHome=(()=>{
@@ -3380,7 +3403,9 @@ export default function SomaApp() {
   })();
   const effMode=isDayDone?(doneSession?.mode||"classique"):(modeOverride||day0?.recommendedMode||"classique");
   const sessionMode=effMode;
-  const day=applyMode(day0,effMode,profile,sessionWeek,dayIdx,dayCons);
+  // Une journee close n'est pas re-derivee : applyMode regenererait un metcon (blocs, tours,
+  // exercices tires au sort) par-dessus une seance deja faite.
+  const day=isDayDone?day0:applyMode(day0,effMode,profile,sessionWeek,dayIdx,dayCons);
   const sDate=tabDate;
   const isPastMissed=!!(day?.salle&&!isDayDone&&new Date(sDate+"T00:00:00")<new Date(new Date().toDateString()));
   const locked=isDayDone||isPastMissed;
