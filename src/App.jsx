@@ -720,15 +720,113 @@ function beep() {
 // Un setInterval est suspendu par le navigateur des que l'app passe en arriere-plan
 // (ecran eteint, autre application) et perdu a chaque rechargement : le temps ecoule
 // est donc recalcule a partir de l'heure de depart, ce qui reste juste dans tous les cas.
-const CLOCK_KEY="soma_clock";
-const readClock=()=>{try{const r=JSON.parse(localStorage.getItem(CLOCK_KEY)||"null");if(!r||typeof r!=="object")return null;if(r.day&&r.day!==todayKey())return null;return r;}catch(_e){return null;}};
-const writeClock=(s)=>{try{if(s)localStorage.setItem(CLOCK_KEY,JSON.stringify(s));else localStorage.removeItem(CLOCK_KEY);}catch(_e){}};
 const clockSec=(s)=>{ if(!s) return 0; const acc=Number(s.acc)||0; const live=(s.running&&s.startedAt)?Math.max(0,Math.floor((Date.now()-s.startedAt)/1000)):0; return acc+live; };
 
-function useStopwatch() {
-  // Rehydrate au montage : une seance en cours survit a un rechargement de page.
-  const[st,setSt]=useState(readClock);
+// ─── PHOTOS : Supabase Storage, bucket prive ────────────────────────────────
+// Une image encodee en base64 dans une colonne jsonb ne passe pas a l'echelle et
+// n'est de toute facon jamais partie du telephone. Les fichiers vivent dans Storage,
+// la base ne garde que leur chemin.
+const PHOTO_BUCKET="progress";
+const photoPath=(uid,date)=>`${uid}/${date}.jpg`;
+const uploadPhoto=async(uid,date,blob)=>{
+  const path=photoPath(uid,date);
+  const{error}=await supabase.storage.from(PHOTO_BUCKET).upload(path,blob,{upsert:true,contentType:(blob&&blob.type)||"image/jpeg"});
+  if(error) throw error;
+  return path;
+};
+const removePhoto=async(path)=>{ if(!path) return; try{await supabase.storage.from(PHOTO_BUCKET).remove([path]);}catch(_e){} };
+const dataUrlToBlob=async(d)=>{ const r=await fetch(d); return await r.blob(); };
+// Bucket prive : l'affichage passe par des URL signees, regenerees a chaque chargement.
+const signPhotos=async(map)=>{
+  const entries=Object.entries(map||{}).filter(([,p])=>typeof p==="string"&&p&&p.indexOf("data:")!==0);
+  if(!entries.length) return {};
+  try{
+    const{data,error}=await supabase.storage.from(PHOTO_BUCKET).createSignedUrls(entries.map(([,p])=>p),3600);
+    if(error||!data) return {};
+    const out={};
+    entries.forEach(([d],i)=>{ const s=data[i]; if(s&&s.signedUrl) out[d]=s.signedUrl; });
+    return out;
+  }catch(_e){ return {}; }
+};
+
+// ─── MIGRATION UNIQUE : localStorage -> serveur ─────────────────────────────
+// Reprend ce qui n'a jamais quitte l'appareil (planning, log en cours, photos de
+// progression, avatar), l'envoie sur le serveur, puis vide le stockage local.
+// Aucun drapeau "deja migre" n'est necessaire : une fois les cles purgees, un second
+// passage ne trouve plus rien et ne fait rien.
+const purgeLegacy=(uid)=>{
+  try{
+    const ls=window.localStorage;
+    const kill=["soma_photos","soma_clock",`soma_${uid}`,"soma_avatar_"+uid];
+    Object.keys(ls).forEach(k=>{ if(k.indexOf("soma_avatar_")===0) kill.push(k); });
+    kill.forEach(k=>{ try{ls.removeItem(k);}catch(_e){} });
+  }catch(_e){}
+  try{ sessionStorage.removeItem("sw"); }catch(_e){}
+};
+
+const migrateLocalToServer=async(uid)=>{
+  let ls; try{ ls=window.localStorage; }catch(_e){ return; }
+  if(!ls) return;
+  try{
+    const raw=ls.getItem(`soma_${uid}`);
+    const local=raw?JSON.parse(raw):{};
+    const patch={};
+    if(Array.isArray(local.schedule)&&local.schedule.length) patch.schedule=local.schedule;
+    if(Array.isArray(local.excluded))  patch.excluded=local.excluded;
+    if(Array.isArray(local.favorites)) patch.favorites=local.favorites;
+    if(Array.isArray(local.supersets)) patch.supersets=local.supersets;
+    if(local.weights&&typeof local.weights==="object") patch.weights=local.weights;
+    if(typeof local.accent==="string")     patch.accent=local.accent;
+    if(typeof local.autoRotate==="boolean")patch.auto_rotate=local.autoRotate;
+
+    // Photos : base64 local -> fichiers dans Storage, la base ne garde que le chemin.
+    // Ces images n'existent NULLE PART ailleurs : au moindre echec d'envoi on renonce a
+    // purger, quitte a retenter au prochain lancement. Ne jamais effacer ce qu'on n'a pas su sauver.
+    let photoMap=null, photosPerdues=false;
+    try{
+      const pm=JSON.parse(ls.getItem("soma_photos")||"{}");
+      const dates=Object.keys(pm).filter(d=>typeof pm[d]==="string"&&pm[d].indexOf("data:")===0);
+      if(dates.length){
+        photoMap={};
+        for(const d of dates){
+          try{ photoMap[d]=await uploadPhoto(uid,d,await dataUrlToBlob(pm[d])); }
+          catch(e){ photosPerdues=true; console.error("migration photo",d,e&&e.message); }
+        }
+      }
+    }catch(_e){ photosPerdues=true; }
+    if(photoMap&&Object.keys(photoMap).length){
+      const{data:cur}=await supabase.from("profiles").select("photos").eq("id",uid).maybeSingle();
+      patch.photos={...((cur&&cur.photos)||{}),...photoMap};
+    }
+    const av=ls.getItem("soma_avatar_"+uid);
+    if(av&&av.indexOf("data:")===0){
+      try{ patch.avatar=await uploadPhoto(uid,"avatar",await dataUrlToBlob(av)); }catch(_e){}
+    }
+    if(Object.keys(patch).length){
+      const{error}=await supabase.from("profiles").upsert({id:uid,...patch,updated_at:new Date().toISOString()},{onConflict:"id"});
+      // En cas d'echec on NE purge PAS : mieux vaut retenter au prochain lancement
+      // que de detruire des donnees qui n'existent nulle part ailleurs.
+      if(error){ console.error("migration config:",error.message); return; }
+    }
+    if(local.log&&typeof local.log==="object"&&Object.keys(local.log).length){
+      const{error}=await supabase.from("active_session").upsert({user_id:uid,date:todayKey(),log:local.log,updated_at:new Date().toISOString()},{onConflict:"user_id"});
+      if(error){ console.error("migration log:",error.message); return; }
+    }
+    if(photosPerdues){ console.warn("migration : photos non transferees, stockage local conserve"); return; }
+    purgeLegacy(uid);
+  }catch(e){ console.error("migration",e); }
+};
+
+// Chrono pilote de l'exterieur : l'etat est persiste cote serveur (table active_session)
+// par le composant parent. Une seance peut donc etre commencee sur un appareil et
+// terminee sur un autre, et survit a un rechargement.
+function useStopwatch(onPersist) {
+  const[st,setSt]=useState(null);
   const[,tick]=useState(0);
+  const stRef=useRef(null);
+  const persistRef=useRef(onPersist);
+  useEffect(()=>{persistRef.current=onPersist;},[onPersist]);
+  useEffect(()=>{stRef.current=st;},[st]);
   const sec=clockSec(st);
   const running=!!(st&&st.running);
   useEffect(()=>{
@@ -740,13 +838,14 @@ function useStopwatch() {
     window.addEventListener("focus",sync);
     return()=>{clearInterval(id);document.removeEventListener("visibilitychange",sync);window.removeEventListener("focus",sync);};
   },[running]);
-  // Persistance faite dans un effet, jamais dans les updaters (qui doivent rester purs).
-  useEffect(()=>{writeClock(st);},[st]);
-  const start=useCallback(()=>setSt({startedAt:Date.now(),acc:0,running:true,day:todayKey()}),[]);
-  const resume=useCallback(()=>setSt(prev=>({startedAt:Date.now(),acc:clockSec(prev),running:true,day:(prev&&prev.day)||todayKey()})),[]);
-  const stop=useCallback(()=>setSt(prev=>prev?{startedAt:null,acc:clockSec(prev),running:false,day:prev.day}:prev),[]);
-  const reset=useCallback(()=>setSt(null),[]);
-  return{sec,running,start,resume,stop,reset};
+  const apply=useCallback((next)=>{setSt(next);stRef.current=next;if(persistRef.current)persistRef.current(next);},[]);
+  const start=useCallback(()=>apply({startedAt:Date.now(),acc:0,running:true,day:todayKey()}),[apply]);
+  const resume=useCallback(()=>apply({startedAt:Date.now(),acc:clockSec(stRef.current),running:true,day:(stRef.current&&stRef.current.day)||todayKey()}),[apply]);
+  const stop=useCallback(()=>{const p=stRef.current;if(!p)return;apply({startedAt:null,acc:clockSec(p),running:false,day:p.day});},[apply]);
+  const reset=useCallback(()=>apply(null),[apply]);
+  // Rehydratation depuis le serveur : ne doit PAS re-declencher une ecriture.
+  const hydrate=useCallback((next)=>{setSt(next);stRef.current=next;},[]);
+  return{sec,running,start,resume,stop,reset,hydrate};
 }
 
 function useCountdown(onDone) {
@@ -1582,11 +1681,11 @@ function FeedbackSheet({onClose,onSave}) {
 }
 
 // ─── SESSION REPORT ───────────────────────────────────────────────────────────
-function SessionReport({session,sessions,trainingDaysPerWeek,onClose,onDelete}) {
+function SessionReport({session,sessions,trainingDaysPerWeek,photoUrl,onClose,onDelete}) {
   if(!session) return null;
   const{totalKg=0,totalSets=0,duration=0,exercises=[],date="",dayLabel="",feedback,sessionIndex=0}=session;
   const score=computeScore(totalKg,totalSets,feedback);
-  const photo=(()=>{try{return JSON.parse(localStorage.getItem("soma_photos")||"{}")[date]||null;}catch(_e){return null;}})();
+  const photo=photoUrl||null;
   const animScore=useCountUp(score,1200);
   const animKg=useCountUp(Math.round(totalKg/1000*10)/10*10,1400);
   const animSets=useCountUp(totalSets,1000);
@@ -2127,14 +2226,43 @@ function SkillManagerSheet({activeSkills,onSave,onClose}) {
   );
 }
 
-function PhotoProgress({onClose,onSavePhotos}) {
-  const [photos,setPhotos]=useState(()=>{try{return JSON.parse(localStorage.getItem("soma_photos")||"{}");}catch(_e){return {};}});
+// photos : { date -> chemin dans Storage }, urls : { date -> URL signee } (bucket prive).
+function PhotoProgress({uid,photos,urls,onSavePhotos,onClose}) {
   const [date,setDate]=useState(todayKey());
+  const [busy,setBusy]=useState(false);
+  const [err,setErr]=useState("");
   const _pf=useRef(null);
-  const save=(map)=>{try{localStorage.setItem("soma_photos",JSON.stringify(map));}catch(_e){} setPhotos({...map}); onSavePhotos&&onSavePhotos(map);};
-  const onPhoto=(e)=>{const f=e.target.files&&e.target.files[0];if(!f)return;const rd=new FileReader();rd.onload=()=>{const im=new Image();im.onload=()=>{const mx=520;const sc=Math.min(1,mx/Math.max(im.width,im.height));const cw=Math.round(im.width*sc),ch=Math.round(im.height*sc);const cv=document.createElement("canvas");cv.width=cw;cv.height=ch;cv.getContext("2d").drawImage(im,0,0,cw,ch);const next={...photos,[date]:cv.toDataURL("image/jpeg",0.72)};save(next);};im.src=rd.result;};rd.readAsDataURL(f);e.target.value="";};
-  const del=(d)=>{const next={...photos};delete next[d];save(next);};
-  const keys=Object.keys(photos).sort();
+  const onPhoto=(e)=>{
+    const f=e.target.files&&e.target.files[0];
+    e.target.value="";
+    if(!f||!uid) return;
+    setErr("");setBusy(true);
+    const rd=new FileReader();
+    rd.onload=()=>{
+      const im=new Image();
+      im.onload=()=>{
+        // Redimensionnement avant envoi : inutile de televerser 4 Mo pour une vignette.
+        const mx=520;const sc=Math.min(1,mx/Math.max(im.width,im.height));
+        const cw=Math.round(im.width*sc),ch=Math.round(im.height*sc);
+        const cv=document.createElement("canvas");cv.width=cw;cv.height=ch;
+        cv.getContext("2d").drawImage(im,0,0,cw,ch);
+        cv.toBlob(async(blob)=>{
+          if(!blob){setBusy(false);setErr("Image illisible.");return;}
+          try{
+            const path=await uploadPhoto(uid,date,blob);
+            await onSavePhotos({...photos,[date]:path});
+          }catch(ex){ setErr("Envoi impossible. Reessaie."); console.error("upload photo",ex&&ex.message); }
+          setBusy(false);
+        },"image/jpeg",0.72);
+      };
+      im.onerror=()=>{setBusy(false);setErr("Image illisible.");};
+      im.src=rd.result;
+    };
+    rd.onerror=()=>{setBusy(false);setErr("Lecture impossible.");};
+    rd.readAsDataURL(f);
+  };
+  const del=async(d)=>{ const next={...photos};const path=next[d];delete next[d];await onSavePhotos(next);await removePhoto(path); };
+  const keys=Object.keys(photos||{}).sort();
   const first=keys[0],last=keys[keys.length-1];
   const gap=(first&&last&&first!==last)?Math.round((new Date(last)-new Date(first))/86400000):0;
   return (
@@ -2152,7 +2280,9 @@ function PhotoProgress({onClose,onSavePhotos}) {
             <input type="date" value={date} max={todayKey()} onChange={e=>setDate(e.target.value)} style={{flex:1,height:44,borderRadius:10,border:`1px solid ${C.s4}`,background:C.s2,color:C.ink,fontSize:15,fontFamily:F,padding:"0 12px",outline:"none",boxSizing:"border-box"}}/>
           </div>
           <Tap onTap={()=>_pf.current&&_pf.current.click()} style={{display:"flex",alignItems:"center",justifyContent:"center",gap:8,height:48,borderRadius:12,background:C.blue}}><span style={{fontSize:15,fontWeight:700,color:"#000"}}>Choisir une photo</span></Tap><input ref={_pf} type="file" accept="image/*" onChange={onPhoto} style={{display:"none"}}/>
-          <div style={{fontSize:11,color:C.ink4,marginTop:10,lineHeight:1.5}}>La photo est enregistrée sur cet appareil. Tu peux en ajouter une après coup pour n'importe quelle date.</div>
+          <div style={{fontSize:11,color:err?C.red:C.ink4,marginTop:10,lineHeight:1.5}}>
+            {err?err:busy?"Envoi en cours…":"La photo est enregistrée sur ton compte et visible depuis tous tes appareils. Tu peux en ajouter une après coup pour n'importe quelle date."}
+          </div>
         </div>
         {keys.length>=2&&(
           <div style={{background:C.s1,borderRadius:16,padding:"18px",marginBottom:16}}>
@@ -2161,7 +2291,7 @@ function PhotoProgress({onClose,onSavePhotos}) {
             <div style={{display:"flex",gap:10}}>
               {[["Avant",first],["Après",last]].map(([lbl,d])=>(
                 <div key={d} style={{flex:1}}>
-                  <div style={{borderRadius:12,overflow:"hidden",background:C.s2,aspectRatio:"3/4"}}><img src={photos[d]} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/></div>
+                  <div style={{borderRadius:12,overflow:"hidden",background:C.s2,aspectRatio:"3/4"}}><img src={(urls||{})[d]} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/></div>
                   <div style={{fontSize:11,fontWeight:600,color:C.ink3,marginTop:6,textAlign:"center"}}>{lbl} · {d.slice(5)}</div>
                 </div>
               ))}
@@ -2175,7 +2305,7 @@ function PhotoProgress({onClose,onSavePhotos}) {
           <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:8}}>
             {[...keys].reverse().map(d=>(
               <div key={d} style={{position:"relative",borderRadius:12,overflow:"hidden",background:C.s2,aspectRatio:"3/4"}}>
-                <img src={photos[d]} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/>
+                <img src={(urls||{})[d]} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/>
                 <div style={{position:"absolute",left:0,right:0,bottom:0,padding:"4px 6px",background:"linear-gradient(transparent,rgba(0,0,0,.75))",fontSize:10,fontWeight:600,color:"#fff"}}>{d.slice(5)}</div>
                 <Tap onTap={()=>del(d)} style={{position:"absolute",top:4,right:4,width:24,height:24,borderRadius:"50%",background:"rgba(0,0,0,.55)",display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{fontSize:12,color:"#fff"}}>✕</span></Tap>
               </div>
@@ -2188,7 +2318,7 @@ function PhotoProgress({onClose,onSavePhotos}) {
   );
 }
 
-function HistoryTab({sessions,onSelect,accent,onOpenPhotos}) {
+function HistoryTab({sessions,onSelect,accent,onOpenPhotos,photos:photoMap,urls}) {
   const[view,setView]=useState(new Date());
   const y=view.getFullYear(),m=view.getMonth();
   const first=new Date(y,m,1).getDay(),days=new Date(y,m+1,0).getDate();
@@ -2199,8 +2329,7 @@ function HistoryTab({sessions,onSelect,accent,onOpenPhotos}) {
   return(
     <div style={{padding:"20px 20px 100px",maxWidth:600,margin:"0 auto",fontFamily:F}}>
       {(()=>{
-        let photos={};try{photos=JSON.parse(localStorage.getItem("soma_photos")||"{}");}catch(_e){}
-        const dates=Object.keys(photos).sort().reverse();
+        const dates=Object.keys(photoMap||{}).sort().reverse();
         return (
           <Tap onTap={onOpenPhotos} style={{display:"block"}}>
             <div style={{background:C.s1,borderRadius:20,padding:"20px",marginBottom:20}}>
@@ -2214,7 +2343,7 @@ function HistoryTab({sessions,onSelect,accent,onOpenPhotos}) {
               {dates.length>0&&<div style={{display:"flex",gap:10,overflowX:"auto",paddingBottom:4}}>
                 {dates.slice(0,12).map(d=>(
                   <div key={d} style={{flexShrink:0,width:84,height:112,borderRadius:14,overflow:"hidden",background:C.s2,position:"relative"}}>
-                    <img src={photos[d]} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/>
+                    <img src={(urls||{})[d]} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/>
                     <div style={{position:"absolute",left:0,right:0,bottom:0,padding:"4px 8px",background:"linear-gradient(transparent,rgba(0,0,0,.75))",fontSize:11,fontWeight:600,color:"#fff"}}>{d.slice(5)}</div>
                   </div>
                 ))}
@@ -2319,7 +2448,7 @@ function ScheduleEditor({schedule,onChange,onReset,onClose,autoRotate,onToggleAu
   );
 }
 
-function SettingsTab({user,excluded,onToggleExclude,onSignOut,onReset,onOpenLibrary,profile,schedule,onUpdateConfig,onOpenScheduleEditor,onRedoOnboarding}) {
+function SettingsTab({user,excluded,onToggleExclude,onSignOut,onReset,onOpenLibrary,profile,schedule,avatarUrl,onUpdateConfig,onOpenScheduleEditor,onRedoOnboarding}) {
   const[showLib,setShowLib]=useState(false);
   const[w,setW]=useState(profile?.weight_kg!=null?String(profile.weight_kg):"");
   const[h,setH]=useState(profile?.height_cm!=null?String(profile.height_cm):"");
@@ -2327,9 +2456,23 @@ function SettingsTab({user,excluded,onToggleExclude,onSignOut,onReset,onOpenLibr
   const[saved,setSaved]=useState(false);
   const[saveErr,setSaveErr]=useState(false);
   const hasChanges=(w?Number(w):null)!==(profile?.weight_kg??null)||(h?Number(h):null)!==(profile?.height_cm??null)||(ag?Number(ag):null)!==(profile?.age??null);
-  const[avatar,setAvatar]=useState(()=>{try{return localStorage.getItem("soma_avatar_"+(user?.id||""))||"";}catch(_e){return"";}});
+  // Avatar : fichier dans Storage, apercu immediat via URL locale le temps de l'envoi.
+  const[avatarPreview,setAvatarPreview]=useState("");
+  const avatar=avatarPreview||avatarUrl||"";
   const avatarRef=useRef(null);
-  const onAvatar=e=>{const f=e.target.files&&e.target.files[0];if(!f)return;const r=new FileReader();r.onload=()=>{const d=r.result;setAvatar(d);try{localStorage.setItem("soma_avatar_"+(user?.id||""),d);}catch(_e){} onUpdateConfig&&onUpdateConfig({avatar:d});};r.readAsDataURL(f);};
+  const onAvatar=e=>{
+    const f=e.target.files&&e.target.files[0];
+    e.target.value="";
+    const uid=user?.id;
+    if(!f||!uid) return;
+    setAvatarPreview(URL.createObjectURL(f));
+    (async()=>{
+      try{
+        const path=await uploadPhoto(uid,"avatar",f);
+        onUpdateConfig&&onUpdateConfig({avatar:path});
+      }catch(ex){ console.error("upload avatar",ex&&ex.message); setAvatarPreview(""); }
+    })();
+  };
   const trainDays=(schedule||[]).map((d,i)=>(d&&d.salle)?i:-1).filter(i=>i>=0);
   return(
     <div style={{padding:"20px 20px 100px",maxWidth:600,margin:"0 auto",fontFamily:F}}>
@@ -2842,8 +2985,33 @@ export default function SomaApp() {
   const[restLabel,setRestLabel]=useState("");
   const[sbReady,setSbReady]=useState(false);
   const[accent,setAccent]=useState(C.blue);
-  const clock=useStopwatch();
+  // L'etat du chrono part sur le serveur a chaque transition (demarrage, pause, reprise).
+  // C'est peu d'ecritures - elles ne se produisent qu'aux transitions, jamais a chaque seconde,
+  // le temps ecoule etant recalcule a partir de started_at.
+  const clockPersist=useCallback((st)=>{
+    const id=user?.id; if(!id) return;
+    if(!st){ supabase.from("active_session").delete().eq("user_id",id).then(({error})=>{ if(error) console.error("SB clock del:",error.message); }); return; }
+    supabase.from("active_session").upsert({
+      user_id:id,date:todayKey(),
+      started_at:st.startedAt?new Date(st.startedAt).toISOString():null,
+      accumulated_seconds:Math.round(Number(st.acc)||0),
+      running:!!st.running,updated_at:new Date().toISOString(),
+    },{onConflict:"user_id"}).then(({error})=>{ if(error) console.error("SB clock:",error.message); });
+  },[user]);
+  const clock=useStopwatch(clockPersist);
   const rest=useCountdown(()=>setShowRestFull(true));
+  // Photos : la base ne contient que des chemins Storage, l'affichage passe par des URL
+  // signees regenerees a chaque chargement (bucket prive).
+  const photos=useMemo(()=>(profile&&profile.photos&&typeof profile.photos==="object")?profile.photos:{},[profile]);
+  const[photoUrls,setPhotoUrls]=useState({});
+  const[avatarUrl,setAvatarUrl]=useState("");
+  useEffect(()=>{ let alive=true; (async()=>{ const u=await signPhotos(photos); if(alive) setPhotoUrls(u); })(); return()=>{alive=false;}; },[photos]);
+  const avatarPath=profile&&profile.avatar;
+  useEffect(()=>{ let alive=true; (async()=>{
+    if(!avatarPath){ if(alive) setAvatarUrl(""); return; }
+    const u=await signPhotos({a:avatarPath});
+    if(alive) setAvatarUrl(u.a||"");
+  })(); return()=>{alive=false;}; },[avatarPath]);
   const wk=weekNumber();
   const viewSchedule=useMemo(()=>{let s=autoRotate?schedule.map(d=>rotateDay(d,wk)):schedule;const eq=profile?.equipment;if(eq&&eq.length)s=s.map(d=>adaptEquip(d,eq));const g=profile?.goal;if(g&&g!=="hybride")s=s.map(d=>adaptGoal(d,g));s=s.map(d=>personalizeDay(d,profile,progWeekOf(profile?.program_start)));const _mp=weeklyModePlan(s,profile,progWeekOf(profile?.program_start));s=s.map((d,i)=>(d&&d.salle)?{...d,recommendedMode:(_mp[i]&&_mp[i].mode)||"classique",circuit:(_mp[i]&&_mp[i].circuit)||false}:d);return s;},[schedule,autoRotate,wk,profile]);
 
@@ -2863,33 +3031,40 @@ export default function SomaApp() {
   const loadUserData = useCallback(async(uid)=>{
     if(!uid||loadingRef.current===uid) return; // garde anti-doublon
     loadingRef.current=uid;
-    // Load from local first (instant)
-    const local=JSON.parse(localStorage.getItem(`soma_${uid}`)||"{}");
-    if(local.log) setLog(local.log);
-    if(local.weights) setWeights(local.weights);
-    if(local.sessions){setSessions(local.sessions);computeStreak(local.sessions);}
-    if(local.excluded) setExcluded(local.excluded);
-    if(local.accent) setAccent(local.accent);
-    if(local.schedule) setSchedule(local.schedule);
-    if(typeof local.autoRotate==="boolean") setAutoRotate(local.autoRotate);
-    if(local.profile) setProfile(local.profile);
-    if(local.favorites) setFavorites(local.favorites);
-    if(local.supersets) setSupersets(local.supersets);
-    // Then sync from Supabase
+    // Reprise des donnees restees sur cet appareil avant le passage au tout-serveur.
+    // Les photos de progression n'existaient QUE en local : elles seraient definitivement
+    // perdues si on se contentait de vider le stockage. Migration unique, puis purge.
+    await migrateLocalToServer(uid);
+    // Le serveur est desormais la seule source. Plus aucune lecture locale.
     try{
-      const[{data:sess},{data:pbs},{data:strData},{data:prof}]=await Promise.all([
+      const[{data:sess},{data:pbs},{data:strData},{data:prof},{data:act}]=await Promise.all([
         supabase.from("sessions").select("*").eq("user_id",uid).order("date",{ascending:false}),
         supabase.from("personal_bests").select("*").eq("user_id",uid),
-        supabase.from("streaks").select("*").eq("user_id",uid).single(),
+        supabase.from("streaks").select("*").eq("user_id",uid).maybeSingle(),
         supabase.from("profiles").select("*").eq("id",uid).maybeSingle(),
+        supabase.from("active_session").select("*").eq("user_id",uid).maybeSingle(),
       ]);
-      setProfile(prof||null); if(prof) persist(uid,{profile:prof});
-      try{
-        const remotePhotos=(prof&&prof.photos)||{};
-        const localPhotos=JSON.parse(localStorage.getItem("soma_photos")||"{}");
-        localStorage.setItem("soma_photos",JSON.stringify({...localPhotos,...remotePhotos}));
-        if(prof&&prof.avatar) localStorage.setItem("soma_avatar_"+uid,prof.avatar);
-      }catch(_e){}
+      setProfile(prof||null);
+      if(prof){
+        if(Array.isArray(prof.schedule)&&prof.schedule.length) setSchedule(prof.schedule);
+        if(Array.isArray(prof.excluded)) setExcluded(prof.excluded);
+        if(Array.isArray(prof.favorites)) setFavorites(prof.favorites);
+        if(Array.isArray(prof.supersets)) setSupersets(prof.supersets);
+        if(prof.weights&&typeof prof.weights==="object") setWeights(prof.weights);
+        if(prof.accent) setAccent(prof.accent);
+        if(typeof prof.auto_rotate==="boolean") setAutoRotate(prof.auto_rotate);
+      }
+      // Seance en cours : le log des series cochees et le chrono reprennent ou qu'on soit,
+      // mais uniquement si elle concerne aujourd'hui (sinon c'est un reste a jeter).
+      if(act&&act.date===todayKey()){
+        setLog(act.log||{});
+        clock.hydrate(act.started_at||act.accumulated_seconds||act.running
+          ?{startedAt:act.started_at?new Date(act.started_at).getTime():null,acc:Number(act.accumulated_seconds)||0,running:!!act.running,day:act.date}
+          :null);
+      }else{
+        setLog({});
+        if(act) supabase.from("active_session").delete().eq("user_id",uid).then(()=>{});
+      }
       // Le serveur fait autorite : sa liste remplace le local (evite les seances fantomes apres suppression/wipe)
       const norm=(sess||[]).map(s=>({...s,
         dayLabel:s.day_label||s.dayLabel||s.day||"",
@@ -2900,12 +3075,12 @@ export default function SomaApp() {
         exercises:typeof s.exercises==="string"?JSON.parse(s.exercises||"[]"):(s.exercises||[]),
         feedback:typeof s.feedback==="string"?JSON.parse(s.feedback||"null"):s.feedback,
       }));
-      setSessions(norm);computeStreak(norm);persist(uid,{sessions:norm});
+      setSessions(norm);computeStreak(norm);
       if(pbs?.length){const w={};pbs.forEach(pb=>{w[pb.exercise_id||pb.exercise_name]=pb.weight_kg;});setWeights(prev=>{const next={...prev,...w};persist(uid,{weights:next});return next;});}
       if(strData) setStreak(strData.current_streak||0);
       setSbReady(true);
       setDataReady(true);
-      if(!sessionStorage.getItem('sw')){setShowWelcome(true);sessionStorage.setItem('sw','1');}
+      // (l'ecran de bienvenue est du code mort : rendu derriere un if(false&&showWelcome))
     }catch(e){console.error(e);setDataReady(true);}
     finally{loadingRef.current=null;}
   },[]);
@@ -2929,11 +3104,53 @@ export default function SomaApp() {
     setStreak(cnt);
   }
 
+  // ── Persistance : 100% serveur ──
+  // "persist" ecrivait dans localStorage, donc chaque appareil accumulait sa propre verite.
+  // Meme signature, mais l'ecriture part vers Supabase, groupee et differee pour ne pas
+  // declencher une requete par clic. Les cles de configuration vont sur profiles,
+  // le log des series en cours sur active_session.
+  const PROFILE_KEYS={schedule:"schedule",excluded:"excluded",favorites:"favorites",supersets:"supersets",weights:"weights",accent:"accent",autoRotate:"auto_rotate"};
+  const cfgBuf=useRef({}); const cfgTimer=useRef(null);
+  const logBuf=useRef(null);  const logTimer=useRef(null);
+
+  const flushCfg=useCallback((uid)=>{
+    const patch=cfgBuf.current; cfgBuf.current={};
+    if(!uid||!Object.keys(patch).length) return;
+    supabase.from("profiles").upsert({id:uid,...patch,updated_at:new Date().toISOString()},{onConflict:"id"})
+      .then(({error})=>{ if(error) console.error("SB config:",error.message); });
+  },[]);
+
+  const flushLog=useCallback((uid,sDateKey)=>{
+    const payload=logBuf.current; logBuf.current=null;
+    if(!uid||payload==null) return;
+    supabase.from("active_session").upsert({user_id:uid,date:sDateKey,log:payload,updated_at:new Date().toISOString()},{onConflict:"user_id"})
+      .then(({error})=>{ if(error) console.error("SB log:",error.message); });
+  },[]);
+
   const persist = useCallback((uid,updates)=>{
-    const key=`soma_${uid||user?.id||"anon"}`;
-    const current=JSON.parse(localStorage.getItem(key)||"{}");
-    localStorage.setItem(key,JSON.stringify({...current,...updates}));
-  },[user]);
+    const id=uid||user?.id;
+    if(!id||!updates) return;
+    Object.keys(updates).forEach(k=>{ if(PROFILE_KEYS[k]) cfgBuf.current[PROFILE_KEYS[k]]=updates[k]; });
+    if(Object.keys(cfgBuf.current).length){
+      clearTimeout(cfgTimer.current);
+      cfgTimer.current=setTimeout(()=>flushCfg(id),700);
+    }
+    if(updates.log!==undefined){
+      logBuf.current=updates.log;
+      clearTimeout(logTimer.current);
+      logTimer.current=setTimeout(()=>flushLog(id,todayKey()),700);
+    }
+    // "sessions" et "profile" ne sont pas traites ici : ils ont deja leur propre
+    // ecriture serveur (tables sessions / profiles) et etaient purement dupliques en local.
+  },[user,flushCfg,flushLog]);
+
+  // Une fermeture d'onglet ne doit pas emporter les series des dernieres secondes.
+  useEffect(()=>{
+    const flushNow=()=>{ const id=user?.id; if(!id) return; clearTimeout(cfgTimer.current); clearTimeout(logTimer.current); flushCfg(id); flushLog(id,todayKey()); };
+    window.addEventListener("pagehide",flushNow);
+    document.addEventListener("visibilitychange",()=>{ if(document.visibilityState==="hidden") flushNow(); });
+    return()=>window.removeEventListener("pagehide",flushNow);
+  },[user,flushCfg,flushLog]);
 
   const saveLog=useCallback((key,val)=>{
     // Filet de securite : le chrono ne demarrait que depuis le bouton "Demarrer" de l'onglet
@@ -2983,7 +3200,16 @@ export default function SomaApp() {
     // ne JAMAIS recalculer une version independante basee sur le jour de la semaine (bug precedent:
     // divergence entre la seance reellement affichee/jouee et celle enregistree/comptee comme faite).
     const sDateLocal=programDate(dayIdx);
-    if(fb&&fb.photo){try{const pm=JSON.parse(localStorage.getItem("soma_photos")||"{}");pm[sDateLocal]=fb.photo;localStorage.setItem("soma_photos",JSON.stringify(pm));}catch(_e){} delete fb.photo;}
+    if(fb&&fb.photo){
+      const shot=fb.photo; delete fb.photo;
+      // La photo de fin de seance part dans Storage ; la base ne garde que son chemin.
+      if(user?.id) (async()=>{
+        try{
+          const path=await uploadPhoto(user.id,sDateLocal,await dataUrlToBlob(shot));
+          updateConfig({photos:{...photos,[sDateLocal]:path}});
+        }catch(e){ console.error("photo seance:",e&&e.message); }
+      })();
+    }
     let totalKg=0,totalSets=0;
     const exercisesData=exos.map(ex=>{
       const prefix=`${sDate}_${ex.id}_s`;
@@ -3041,17 +3267,8 @@ export default function SomaApp() {
       const nextIdx=sessionIndex+1;
       updateConfig({session_index:nextIdx});
     }
-    // 1. localStorage immédiat
+    // 1. (l'ancien cache local des seances a disparu : la table sessions fait foi)
     const uid=user?.id;
-    if(uid){
-      try{
-        const k=`soma_${uid}`;
-        const cur=JSON.parse(localStorage.getItem(k)||"{}" );
-        const prev=cur.sessions||[];
-        const next=[...prev.filter(s=>s.date!==sDate),entry];
-        localStorage.setItem(k,JSON.stringify({...cur,sessions:next}));
-      }catch(e){console.error("LS",e);}
-    }
     // 2. State React
     setSessions(prev=>{
       const next=[...prev.filter(s=>s.date!==sDate),entry];
@@ -3381,13 +3598,12 @@ const NAV=[{id:"home",l:"Accueil"},{id:"seance",l:"Séances"},{id:"stats",l:"Sta
               )}
             </div>
           )}
-          {tab==="stats"&&<><StatsTab sessions={sessions} weights={weights} accent={accent} pinnedPBs={profile?.pinned_pbs} onManagePBs={()=>setShowPBManager(true)} activeSkills={profile?.active_skills} onManageSkills={()=>setShowSkillManager(true)} onOpenRewards={()=>setShowRewardsManager(true)}/><HistoryTab sessions={sessions} onSelect={setShowReport} accent={accent} onOpenPhotos={()=>setShowPhotos(true)}/></>}
-          {tab==="settings"&&<SettingsTab user={user} excluded={excluded} onToggleExclude={toggleExclude} onOpenLibrary={()=>setShowLibrary(true)} profile={profile} schedule={schedule} onUpdateConfig={updateConfig} onOpenScheduleEditor={()=>setShowSched(true)} onRedoOnboarding={()=>setShowOnboardingRedo(true)}
+          {tab==="stats"&&<><StatsTab sessions={sessions} weights={weights} accent={accent} pinnedPBs={profile?.pinned_pbs} onManagePBs={()=>setShowPBManager(true)} activeSkills={profile?.active_skills} onManageSkills={()=>setShowSkillManager(true)} onOpenRewards={()=>setShowRewardsManager(true)}/><HistoryTab sessions={sessions} onSelect={setShowReport} accent={accent} onOpenPhotos={()=>setShowPhotos(true)} photos={photos} urls={photoUrls}/></>}
+          {tab==="settings"&&<SettingsTab user={user} excluded={excluded} onToggleExclude={toggleExclude} onOpenLibrary={()=>setShowLibrary(true)} profile={profile} schedule={schedule} avatarUrl={avatarUrl} onUpdateConfig={updateConfig} onOpenScheduleEditor={()=>setShowSched(true)} onRedoOnboarding={()=>setShowOnboardingRedo(true)}
             onSignOut={async()=>{await supabase.auth.signOut();setUser(null);setLog({});setWeights({});setSessions([]);setExcluded([]);setStreak(0);}}
             onReset={async()=>{
               const uid=user?.id;
-              const key=`soma_${uid||"anon"}`;
-              localStorage.removeItem(key);
+              purgeLegacy(uid); // au cas ou un reste d'avant la migration traine encore
               setLog({});setWeights({});setSessions([]);setExcluded([]);setStreak(0);
               loadingRef.current=null;
               if(uid){
@@ -3396,6 +3612,7 @@ const NAV=[{id:"home",l:"Accueil"},{id:"seance",l:"Séances"},{id:"stats",l:"Sta
                     supabase.from("sessions").delete().eq("user_id",uid),
                     supabase.from("personal_bests").delete().eq("user_id",uid),
                     supabase.from("streaks").delete().eq("user_id",uid),
+                    supabase.from("active_session").delete().eq("user_id",uid),
                   ]);
                 }catch(e){console.error("reset SB",e);}
               }
@@ -3450,11 +3667,11 @@ const NAV=[{id:"home",l:"Accueil"},{id:"seance",l:"Séances"},{id:"stats",l:"Sta
       {showFeedback&&<FeedbackSheet onClose={()=>setShowFeedback(false)} onSave={handleFeedbackSave}/>}
       {showSettings&&<SessionSettingsSheet day={day} curMode={effMode} onClose={()=>setShowSettings(false)} onApply={({mode,cons})=>{setModeOverride(mode);setDayCons(cons);setShowSettings(false);}}/>}
       {showAI&&<AISheet onClose={()=>setShowAI(false)} onResult={o=>{setAiOverride(o);setShowAI(false);}} excluded={excluded}/>}
-      {showPhotos&&<PhotoProgress onClose={()=>setShowPhotos(false)} onSavePhotos={(map)=>updateConfig({photos:map})}/>}
+      {showPhotos&&<PhotoProgress uid={user?.id} photos={photos} urls={photoUrls} onClose={()=>setShowPhotos(false)} onSavePhotos={(map)=>updateConfig({photos:map})}/>}
       {showTimer&&<IntervalTimer onClose={()=>setShowTimer(false)}/>}
       {showPicker&&<ExPicker onSelect={newEx=>handleReplaceEx(showPicker,newEx)} onClose={()=>setShowPicker(null)} currentId={showPicker.id} excluded={excluded}/>}
       {showLibrary&&<LibraryTab favorites={favorites} onToggleFav={toggleFav} onClose={()=>setShowLibrary(false)} sessions={sessions}/>}
-      {showReport&&<SessionReport session={showReport} sessions={sessions} trainingDaysPerWeek={trainingDaysPerWeek} onClose={()=>setShowReport(null)} onDelete={deleteSession}/>}
+      {showReport&&<SessionReport session={showReport} sessions={sessions} trainingDaysPerWeek={trainingDaysPerWeek} photoUrl={photoUrls[showReport.date]} onClose={()=>setShowReport(null)} onDelete={deleteSession}/>}
       {showSched&&<ScheduleEditor schedule={schedule}
         onChange={ns=>{setSchedule(ns);persist(user?.id,{schedule:ns});}}
         onReset={()=>{setSchedule(PROGRAM);persist(user?.id,{schedule:PROGRAM});}}
