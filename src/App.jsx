@@ -704,7 +704,7 @@ const metconScore=(ex,goal)=>{ const n=String(ex.n||"").toLowerCase(); if(MET_BA
 const metRepsAmrap=(ex)=> ex.eq==="cd"?0:ex.eq==="bw"?12:ex.eq==="kb"?12:10;
 const metRepsEmom=(ex)=> ex.eq==="cd"?0:ex.eq==="bw"?12:ex.eq==="kb"?10:8;
 const metKg=(ex,profile,f)=>{ if(ex.eq==="bw"||ex.eq==="cd") return 0; const sc=engineScale(profile); const base=(typeof ex.kg==="number"?ex.kg:0)*sc*f; return base>0?Math.max(4,Math.round(base/2)*2):0; };
-const buildMetcon=(day,mode,profile,week,seed)=>{ if(!day||!day.salle) return day; const goal=baseGoal(profile&&profile.goal); const equip=(profile&&profile.equipment)||[]; const ph=phaseOf(week); let pool=DB.filter(e=>metconScore(e,goal)>0).filter(e=> e.eq==="bw" || !equip.length || equip.indexOf(e.eq)>=0); const seen={}; pool=pool.filter(e=>{ if(seen[e.n]) return false; seen[e.n]=1; return true; }); const dayEqs={};(day.exercises||[]).forEach(e=>{dayEqs[e.eq]=(dayEqs[e.eq]||0)+1;});pool=pool.map(e=>({e,s:metconScore(e,goal)+((dayEqs[e.eq]||0)>0?2:0)})).sort((a,b)=>b.s-a.s).map(x=>x.e); if(pool.length<6) pool=DB.filter(e=>metconScore(e,"hybride")>0); const off=pool.length?(((week-1)*3+(seed||0)*5)%pool.length):0; const rot=pool.slice(off).concat(pool.slice(0,off)); const lvl=profile&&profile.level; let nBlocks=lvl==="avance"?3:lvl==="debutant"?2:3; if(ph.deload) nBlocks=2; const perBlock=3; const rounds=lvl==="debutant"?3:lvl==="avance"?4:3; const cap=lvl==="avance"?12:10; const f=mode==="amrap"?0.55:0.65; const used={}; const blocks=[]; for(let b=0;b<nBlocks;b++){ const exs=[]; let cd=0; const mus={}; while(exs.length<perBlock){ let e=rot.find(x=>!used[x.n]&&(x.eq!=="cd"||cd<1)&&!mus[primaryMuscle(x.m)]); if(!e) e=rot.find(x=>!used[x.n]&&(x.eq!=="cd"||cd<1)); if(!e) e=rot.find(x=>!used[x.n]); if(!e) break; used[e.n]=1; if(e.eq==="cd")cd++; mus[primaryMuscle(e.m)]=1; exs.push(e); } if(!exs.length) break; const exercises=exs.map(ex=>{ const kg=metKg(ex,profile,f); if(mode==="amrap"){ const r=metRepsAmrap(ex); return {...ex,kg,reps:String(ex.eq==="cd"?"40s":r),repsPerRound:r,modeTag:"AMRAP"}; } const r=metRepsEmom(ex); return {...ex,kg,reps:String(ex.eq==="cd"?"40s":r),repsPerMinute:r,modeTag:"EMOM"}; }); const durationMin=mode==="amrap"?cap:(exercises.length*rounds); blocks.push({label:(mode==="amrap"?"AMRAP ":"EMOM ")+(b+1),kind:mode,durationMin,rounds:mode==="emom"?rounds:0,exercises}); } const totalMin=blocks.reduce((a,bl)=>a+bl.durationMin,0)+Math.max(0,blocks.length-1)*2; const flat=[]; blocks.forEach(bl=>bl.exercises.forEach(e=>flat.push(e))); return {...day,mode,metcon:true,blocks,totalMin,timeCapMin:blocks[0]?blocks[0].durationMin:cap,emomMinutes:blocks[0]?blocks[0].durationMin:8,exercises:flat}; };
+const buildMetcon=(day,mode,profile,week,seed)=>{ if(!day||!day.salle) return day; const goal=baseGoal(profile&&profile.goal); const equip=(profile&&profile.equipment)||[]; const ph=phaseOf(week); let pool=DB.filter(e=>metconScore(e,goal)>0).filter(e=> e.eq==="bw" || !equip.length || equip.indexOf(e.eq)>=0); const seen={}; pool=pool.filter(e=>{ if(seen[e.n]) return false; seen[e.n]=1; return true; }); const dayEqs={};(day.exercises||[]).forEach(e=>{dayEqs[e.eq]=(dayEqs[e.eq]||0)+1;});pool=pool.map(e=>({e,s:metconScore(e,goal)+((dayEqs[e.eq]||0)>0?2:0)})).sort((a,b)=>b.s-a.s).map(x=>x.e); if(pool.length<6) pool=DB.filter(e=>metconScore(e,"hybride")>0); const off=pool.length?(((week-1)*3+(seed||0)*5)%pool.length):0; const rot=pool.slice(off).concat(pool.slice(0,off)); const lvl=profile&&profile.level; let nBlocks=lvl==="avance"?3:lvl==="debutant"?2:3; if(ph.deload) nBlocks=2; const perBlock=3; const rounds=lvl==="debutant"?3:lvl==="avance"?4:3; const cap=lvl==="avance"?12:10; const f=mode==="amrap"?0.55:0.65; const used={}; const blocks=[]; for(let b=0;b<nBlocks;b++){ const exs=[]; let cd=0; const mus={}; while(exs.length<perBlock){ let e=rot.find(x=>!used[x.n]&&(x.eq!=="cd"||cd<1)&&!mus[primaryMuscle(x.m)]); if(!e) e=rot.find(x=>!used[x.n]&&(x.eq!=="cd"||cd<1)); if(!e) e=rot.find(x=>!used[x.n]); if(!e) break; used[e.n]=1; if(e.eq==="cd")cd++; mus[primaryMuscle(e.m)]=1; exs.push(e); } if(!exs.length) break; const exercises=exs.map(ex=>{ const kg=metKg(ex,profile,f); if(mode==="amrap"){ const r=metRepsAmrap(ex); return {...ex,kg,reps:String(ex.eq==="cd"?"40s":r),repsPerRound:r,modeTag:"AMRAP"}; } const r=metRepsEmom(ex); return {...ex,kg,reps:String(ex.eq==="cd"?"40s":r),repsPerMinute:r,modeTag:"EMOM"}; }); const durationMin=mode==="amrap"?cap:(exercises.length*rounds); blocks.push({label:(mode==="amrap"?"AMRAP ":"EMOM ")+(b+1),kind:mode,durationMin,rounds:mode==="emom"?rounds:0,exercises}); } const totalMin=blocks.reduce((a,bl)=>a+bl.durationMin,0)+Math.max(0,blocks.length-1)*2; const flat=[]; blocks.forEach((bl,bidx)=>bl.exercises.forEach(e=>{e.blockIdx=bidx;flat.push(e);})); return {...day,mode,metcon:true,blocks,totalMin,timeCapMin:blocks[0]?blocks[0].durationMin:cap,emomMinutes:blocks[0]?blocks[0].durationMin:8,exercises:flat}; };
 const applyMode=(day,mode,profile,week,seed)=>{ if(!day||!day.salle) return day; if(mode==="amrap"||mode==="emom") return buildMetcon(day,mode,profile,week,seed); return day.circuit?buildCircuits(day,profile):day; };
 const primaryMuscle = (m) => String(m||"").split("·")[0].trim().toLowerCase();
 const altPool = (ex) => DB.filter(e=>e.id!==ex.id && e.eq===ex.eq && primaryMuscle(e.m)===primaryMuscle(ex.m));
@@ -1318,13 +1318,34 @@ function ExRow({ex,weight,onWeightChange,log,onLogSet,onStartRest,idx,lastKg,onF
     </Tap>
   );
 }
-const groupBlocks=(exos)=>{
+// Regroupement des exercices en blocs pour l'affichage.
+// Une seance TERMINEE retombait ici sans aucune information de bloc : chaque exercice
+// formait son propre groupe ("1 exo"), et un AMRAP de 3 blocs de 3 exercices s'affichait
+// comme 9 groupes d'un exercice. On reconstruit les blocs a partir de ce qui a ete
+// sauvegarde - blockIdx d'abord, puis circuitId, puis le muscle.
+const METCON_PER_BLOCK=3;
+const groupBlocks=(exos,mode)=>{
+  const list=exos||[];
+  const isMetcon=(mode==="amrap"||mode==="emom");
+  const hasBlockIdx=list.some(e=>e&&e.blockIdx!=null);
   const blocks=[];
-  (exos||[]).forEach((ex,idx)=>{
-    const key=ex.circuitId?("c"+ex.circuitId):("m:"+(ex.m||"Divers"));
+  list.forEach((ex,idx)=>{
+    let key,label,gt=ex.groupType||null;
+    if(hasBlockIdx&&ex.blockIdx!=null){
+      key="b"+ex.blockIdx; label=`${mode==="emom"?"EMOM":"AMRAP"} ${Number(ex.blockIdx)+1}`; gt=gt||mode;
+    }else if(isMetcon){
+      // Seances enregistrees avant que le numero de bloc ne soit conserve : les metcons
+      // etaient construits par blocs de trois exercices, on retrouve le decoupage d'origine.
+      const b=Math.floor(idx/METCON_PER_BLOCK);
+      key="b"+b; label=`${mode==="emom"?"EMOM":"AMRAP"} ${b+1}`; gt=gt||mode;
+    }else if(ex.circuitId){
+      key="c"+ex.circuitId; label=ex.m||"Divers";
+    }else{
+      key="m:"+(ex.m||"Divers"); label=ex.m||"Divers";
+    }
     const last=blocks[blocks.length-1];
     if(last&&last.key===key) last.items.push({ex,idx});
-    else blocks.push({key,muscle:ex.m||"Divers",groupType:ex.groupType||null,items:[{ex,idx}]});
+    else blocks.push({key,muscle:label,groupType:gt,items:[{ex,idx}]});
   });
   return blocks;
 };
@@ -1686,7 +1707,11 @@ function ExerciseRowCollapsed({ex,dayIdx,sDate,log,idx,onOpen,onReplace,doneSess
   const loggedDone=Object.keys(log||{}).reduce((c,k)=>(k.indexOf(`${sDate}_${ex.id}_s`)===0&&log[k]&&log[k].done)?c+1:c,0);
   const completed=savedEx?n:Math.min(loggedDone,target);
   const allDone=savedEx?true:(target>0&&loggedDone>=target);
-  const w0=plan[0].w,wn=plan[n-1].w;
+  // Pour une seance enregistree, les charges affichees sont celles REELLEMENT faites
+  // (setsDetail), pas la rampe theorique 70%->100% que fabrique setPlanFor.
+  const sd=(savedEx&&Array.isArray(savedEx.setsDetail)&&savedEx.setsDetail.length)?savedEx.setsDetail:null;
+  const ws=sd?sd.map(x=>Number(x.weight)||0):null;
+  const w0=ws?ws[0]:plan[0].w, wn=ws?ws[ws.length-1]:plan[n-1].w;
   const wlabel=w0>0?(w0===wn?`${w0} kg`:`${w0}→${wn} kg`):"PdC";
   const restLbl=ex.rest>0?(ex.rest>=60?fmtMSS(ex.rest):`${ex.rest}s`):null;
   return (
@@ -3030,7 +3055,7 @@ function SettingsTab({user,excluded,onToggleExclude,onSignOut,onReset,onOpenLibr
           <span style={{fontSize:17,color:C.red}}>›</span>
         </Tap>
       </div>
-      <div style={{fontSize:12,color:C.ink4,textAlign:"center",marginTop:28}}>SŌMA · {"S"+weekNumber()} · {DB.length} exercices · build 23.66a</div>
+      <div style={{fontSize:12,color:C.ink4,textAlign:"center",marginTop:28}}>SŌMA · {"S"+weekNumber()} · {DB.length} exercices · build 23.67a</div>
     </div>
   );
 }
@@ -3773,7 +3798,8 @@ export default function SomaApp() {
       return{id:ex.id,n:ex.n||ex.name,m:ex.m||ex.muscle,weight:topWeight,reps:defReps,completedSets,setsDetail,
         ...(rpeLog&&rpeLog.rpe?{rpe:Number(rpeLog.rpe)}:{}),
         ...(ex.groupType?{groupType:ex.groupType,circuitId:ex.circuitId,circuitPos:ex.circuitPos,circuitSize:ex.circuitSize,groupTours:ex.groupTours}:{}),
-        ...(ex.modeTag?{modeTag:ex.modeTag}:{})};
+        ...(ex.modeTag?{modeTag:ex.modeTag}:{}),
+        ...(ex.blockIdx!=null?{blockIdx:ex.blockIdx}:{})};
     });
     // Duree figee UNE fois ici : elle doit etre identique en local, dans le state et en base,
     // et ne pas dependre de l'etat du chrono au moment ou l'ecriture Supabase part.
@@ -3916,7 +3942,15 @@ export default function SomaApp() {
   // journee travaillee pouvait donc s'afficher sous le nom d'une autre seance, et carrement en
   // "Recuperation / Generer une seance legere" quand le planning disait Repos ce jour-la.
   const doneDay=(isDayDone&&doneSession)?(()=>{
-    const dex=doneSession.exercises||[];
+    // Un exercice ENREGISTRE porte weight / completedSets / reps, alors que tout l'affichage
+    // attend kg / sets / reps d'un exercice PRESCRIT. Sans cette remise en forme, toutes les
+    // charges d'une seance terminee s'affichaient en "PdC" (poids du corps) - un Romanian
+    // Deadlift a 87,5 kg apparaissait comme fait au poids de corps.
+    const dex=(doneSession.exercises||[]).map(e=>({...e,
+      kg:(e.kg!=null?Number(e.kg):(Number(e.weight)||0)),
+      sets:((typeof e.sets==="number"&&e.sets>0)?e.sets:(Number(e.completedSets)||0)),
+      reps:(e.reps!=null?String(e.reps):(e.reps||"")),
+    }));
     const mus=[...new Set(dex.map(e=>e&&e.m).filter(Boolean))].slice(0,3).join(" · ");
     return{
       day:rawDay0?.day||doneSession.day||"",
@@ -4139,13 +4173,13 @@ const NAV=[{id:"home",l:"Accueil"},{id:"seance",l:"Séances"},{id:"stats",l:"Sta
                   </div>}
                   <div>
                     {day.metcon&&!locked&&<div style={{marginBottom:16}}><div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}><span style={{fontSize:13,fontWeight:700,color:C.ink}}>Séance {sessionMode==="amrap"?"AMRAP":"EMOM"} · {day.blocks.length} blocs</span><span style={{fontSize:13,fontWeight:700,color:"#000",background:C.blue,padding:"2px 10px",borderRadius:8}}>~{day.totalMin} min</span></div><div style={{fontSize:12,color:C.ink4,marginBottom:10}}>Touchez un bloc pour le démarrer</div>{day.blocks.map((bl,bi)=>(<Tap key={bi} onTap={()=>{if(locked)return;setCircuitStart(bi);setShowCircuit(true);}} style={{marginBottom:12,background:C.s1,borderRadius:14,padding:"12px 14px"}}><div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}><span style={{fontSize:14,fontWeight:800,color:C.ink}}>{bl.label}</span><span style={{fontSize:12,fontWeight:600,color:C.ink3}}>{bl.kind==="emom"?bl.durationMin+" min · "+bl.rounds+" tours":bl.durationMin+" min"}</span></div>{bl.exercises.map((ex,ei)=>(<div key={ei} style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"5px 0",borderTop:ei?`1px solid ${C.s2}`:"none"}}><span style={{fontSize:14,color:C.ink2}}>{bl.kind==="emom"?("Min "+(ei+1)+" · "):""}{ex.n}</span><span style={{fontSize:13,fontWeight:600,color:C.ink3}}>{ex.kg>0?ex.kg+"kg · ":""}{ex.reps}{bl.kind==="emom"?"/min":"/tour"}</span></div>))}</Tap>))}</div>}
-                    {!day.metcon&&groupBlocks(exos).map((blk,bi)=>(
+                    {!day.metcon&&groupBlocks(exos,effMode).map((blk,bi)=>(
                       <div key={bi} style={{marginBottom:16}}>
                         <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10,paddingLeft:2}}>
                           <span style={{fontSize:11,fontWeight:700,color:C.ink3,textTransform:"uppercase",letterSpacing:".1em"}}>{blk.muscle}</span>
-                          <span style={{fontSize:11,fontWeight:600,color:C.ink4}}>{blk.items.length} exo{blk.items.length>1?"s":""}</span>{blk.groupType&&<span style={{fontSize:10,fontWeight:700,color:"#000",background:C.blue,padding:"1px 7px",borderRadius:6,textTransform:"uppercase",letterSpacing:".08em"}}>{blk.groupType==="circuit"?"Circuit":"Superset"}</span>}
+                          <span style={{fontSize:11,fontWeight:600,color:C.ink4}}>{blk.items.length} exo{blk.items.length>1?"s":""}</span>{blk.groupType&&<span style={{fontSize:10,fontWeight:700,color:"#000",background:C.blue,padding:"1px 7px",borderRadius:6,textTransform:"uppercase",letterSpacing:".08em"}}>{blk.groupType==="circuit"?"Circuit":blk.groupType==="amrap"?"AMRAP":blk.groupType==="emom"?"EMOM":"Superset"}</span>}
                         </div>
-                        {blk.groupType&&!locked&&<Tap onTap={()=>setSupBlock({label:blk.muscle,kind:blk.groupType==="circuit"?"circuit":"superset",exercises:blk.items.map(x=>x.ex),restSec:90,tours:(blk.items[0]&&blk.items[0].ex&&blk.items[0].ex.sets)||4})} style={{display:"flex",alignItems:"center",justifyContent:"center",gap:8,padding:"12px",borderRadius:12,background:C.blueDim,border:`1px solid ${C.blue}`,marginBottom:10}}><span style={{fontSize:14,fontWeight:700,color:C.blue}}>Démarrer le {blk.groupType==="circuit"?"circuit":"superset"}</span></Tap>}
+                        {blk.groupType&&blk.groupType!=="amrap"&&blk.groupType!=="emom"&&!locked&&<Tap onTap={()=>setSupBlock({label:blk.muscle,kind:blk.groupType==="circuit"?"circuit":"superset",exercises:blk.items.map(x=>x.ex),restSec:90,tours:(blk.items[0]&&blk.items[0].ex&&blk.items[0].ex.sets)||4})} style={{display:"flex",alignItems:"center",justifyContent:"center",gap:8,padding:"12px",borderRadius:12,background:C.blueDim,border:`1px solid ${C.blue}`,marginBottom:10}}><span style={{fontSize:14,fontWeight:700,color:C.blue}}>Démarrer le {blk.groupType==="circuit"?"circuit":"superset"}</span></Tap>}
                         <div style={{paddingLeft:12,borderLeft:`2px solid ${C.s3}`}}>
                           {blk.items.map(({ex,idx})=>(
                             <ExerciseRowCollapsed key={ex.id} ex={ex} idx={idx} dayIdx={dayIdx} sDate={sDate} log={log} doneSession={doneSession}
