@@ -670,6 +670,19 @@ const engineScale=(profile)=>{ const bw=Number(profile&&profile.weight_kg)||ENG_
 // en aurait recu 180. Et le facteur de phase utilisait ph.r, concu comme multiplicateur de
 // rotation (0,85 a 1,35), ce qui gonflait le repos jusqu'a 5 minutes sur des exercices
 // d'isolation. Base par etage, ajustee par les reps, l'objectif, et une phase bornee.
+// Une traction ne pese pas zero. Les exercices au poids de corps portaient weight=0, donc
+// comptaient pour RIEN dans le tonnage : les 11 series de tractions et chin-ups du 29/07
+// n'apparaissaient nulle part dans le volume hebdomadaire, ce qui le rendait incoherent avec
+// l'effort reellement fourni. On estime la fraction de masse corporelle reellement deplacee.
+const BW_FRACTION={pull_v:1.0,push_h:0.72,push_v:0.65,squat:0.85,hinge:0.6,arm_pull:0.5,arm_push:0.5,core:0,cardio:0};
+const bodyLoadKg=(ex,bw)=>{
+  if(!ex||ex.eq!=="bw"||!(bw>0)) return 0;
+  const n=noAccent(ex.n);
+  if(/dips|muscle-?up/.test(n)) return Math.round(bw*0.95);
+  const f=BW_FRACTION[metaOf(ex).pattern];
+  return f?Math.round(bw*f):0;
+};
+
 const REST_BY_TIER={lourd:210,compound:120,isolation:75,core:45,cardio:60};
 const restFor=(ex,goal,ph)=>{
   const base0=REST_BY_TIER[metaOf(ex).tier]||90;
@@ -1415,7 +1428,11 @@ const repsNum=(r)=>{const m=String(r||"").match(/\d+/);return m?parseInt(m[0]):0
 function HomeTab({profile,streak,sessions,weights,todaySession,onStartToday,accent,trainingDaysPerWeek,weighIns,onSaveWeighIn}) {
   const now=new Date();
   const wk=(()=>{const d=new Date(now);const day=(d.getDay()+6)%7;d.setDate(d.getDate()-day);d.setHours(0,0,0,0);return d;})();
-  const weekSessions=sessions.filter(s=>{const sd=new Date(s.date);return sd>=wk;});
+  // Meme fenetre que le bilan des statistiques : liste explicite des sept dates de la semaine.
+  // La comparaison new Date(s.date) >= lundi melangeait une date lue en UTC et un lundi local,
+  // et n'avait aucune borne haute - deux facons de ne pas tomber sur le meme total.
+  const weekKeys=Array.from({length:7},(_,i)=>{const d=new Date(wk);d.setDate(wk.getDate()+i);return localDateKey(d);});
+  const weekSessions=sessions.filter(s=>weekKeys.indexOf(s.date)>=0);
   const weekVol=weekSessions.reduce((a,s)=>a+(s.totalKg||0),0);
   const totalSessions=sessions.length;
   const lwStart=new Date(wk);lwStart.setDate(lwStart.getDate()-7);
@@ -2355,14 +2372,20 @@ function WeighInCard({weighIns,onSave}) {
   const done=(weighIns||[]).find(w=>mondayOf(w.date)===wk);
   const last=(weighIns||[]).slice().sort((a,b)=>String(a.date).localeCompare(String(b.date))).pop();
   const [val,setVal]=useState(()=>done?String(done.weight_kg):(last?String(last.weight_kg):""));
-  const [saved,setSaved]=useState(false);
-  if(done&&!saved) {
-    const delta=last&&last.date!==done.date?null:null;
+  // La condition etait "done && !saved" : apres enregistrement, saved passait a true et la
+  // confirmation etait donc SAUTEE, le formulaire se reaffichait comme si rien ne s'etait
+  // passe. Une pesee enregistree s'affiche desormais comme telle, point.
+  const prev=(weighIns||[]).slice().sort((a,b)=>String(a.date).localeCompare(String(b.date))).filter(w=>mondayOf(w.date)!==wk).pop();
+  if(done) {
+    const delta=prev?Math.round((Number(done.weight_kg)-Number(prev.weight_kg))*10)/10:null;
     return (
       <div style={{background:C.s1,borderRadius:16,padding:"14px 16px",marginBottom:12,display:"flex",justifyContent:"space-between",alignItems:"center",gap:10}}>
         <div>
           <div style={{fontSize:12,fontWeight:600,color:C.ink4,textTransform:"uppercase",letterSpacing:".1em"}}>Poids de la semaine</div>
-          <div style={{fontSize:13,color:C.ink3,marginTop:3}}>Pesée enregistrée {fmtDateShort(done.date)}{delta}</div>
+          <div style={{fontSize:13,color:C.ink3,marginTop:3}}>
+            Enregistrée le {fmtDateShort(done.date)}
+            {delta!==null&&delta!==0&&<span style={{color:C.ink4}}> · {delta>0?"+":""}{delta} kg vs semaine précédente</span>}
+          </div>
         </div>
         <span style={{fontSize:22,fontWeight:700,color:C.ink,fontVariantNumeric:"tabular-nums"}}>{Number(done.weight_kg)} kg</span>
       </div>
@@ -2375,7 +2398,7 @@ function WeighInCard({weighIns,onSave}) {
       <div style={{display:"flex",gap:10,alignItems:"center"}}>
         <input type="number" inputMode="decimal" step="0.1" value={val} onChange={e=>setVal(e.target.value)} placeholder="kg"
           style={{flex:1,height:48,borderRadius:12,border:`1px solid ${C.s4}`,background:C.bg,color:C.ink,fontSize:17,fontWeight:600,fontFamily:F,padding:"0 14px",outline:"none",boxSizing:"border-box"}}/>
-        <Tap onTap={()=>{const n=parseFloat(String(val).replace(",","."));if(!(n>20&&n<300))return;onSave(n);setSaved(true);play("clic");buzz(18);}}
+        <Tap onTap={()=>{const n=parseFloat(String(val).replace(",","."));if(!(n>20&&n<300))return;onSave(n);play("cloche");buzz(40);}}
           style={{padding:"0 22px",height:48,borderRadius:12,background:C.blue,display:"flex",alignItems:"center"}}>
           <span style={{fontSize:16,fontWeight:700,color:"#000"}}>Enregistrer</span>
         </Tap>
@@ -3215,7 +3238,7 @@ function SettingsTab({user,excluded,onToggleExclude,onSignOut,onReset,onOpenLibr
           <span style={{fontSize:17,color:C.red}}>›</span>
         </Tap>
       </div>
-      <div style={{fontSize:12,color:C.ink4,textAlign:"center",marginTop:28}}>SŌMA · {"S"+weekNumber()} · {DB.length} exercices · build 23.72a</div>
+      <div style={{fontSize:12,color:C.ink4,textAlign:"center",marginTop:28}}>SŌMA · {"S"+weekNumber()} · {DB.length} exercices · build 23.73a</div>
     </div>
   );
 }
@@ -3938,6 +3961,7 @@ export default function SomaApp() {
       })();
     }
     let totalKg=0,totalSets=0;
+    const bodyWeight=Number(profile&&profile.weight_kg)||0;
     const exercisesData=exos.map(ex=>{
       const prefix=`${sDate}_${ex.id}_s`;
       // On balaie les series REELLEMENT enregistrees, au lieu d'un nombre attendu. En EMOM/AMRAP
@@ -3957,11 +3981,15 @@ export default function SomaApp() {
       for(let i=0;i<n;i++){
         const e=log[`${prefix}${i}`];
         if(!e||!e.done) continue;
+        // Charge effective pour le tonnage : la charge additionnelle, ou la fraction de poids
+        // de corps deplacee. La charge ENREGISTREE reste 0 au poids de corps, pour ne pas
+        // polluer les records avec un chiffre qui n'a pas ete souleve.
         const w=Number(e.weight)||0;
+        const wEff=w>0?w:bodyLoadKg(ex,bodyWeight);
         const r=Number(e.reps)||defReps;
         completedSets++;
         if(w>topWeight) topWeight=w;
-        totalKg+=w*r;
+        totalKg+=wEff*r;
         totalSets++;
         // Detail conserve serie par serie : seule facon de revoir la montee en charge d'une
         // seance. L'ancien format n'en gardait que la charge maximale, le reste etait jete.
@@ -3983,7 +4011,12 @@ export default function SomaApp() {
     const durationSec=clock.sec;
     // Prescrit du jour : sans lui le score ne peut se mesurer qu'a des valeurs absolues.
     const targetSets=exos.reduce((a,e)=>a+((e.groupTours>0)?e.groupTours:((typeof e.sets==="number"&&e.sets>0)?e.sets:4)),0);
-    const targetKg=Math.round(exos.reduce((a,e)=>a+setPlanFor(e).reduce((b,st)=>b+(Number(st.w)||0)*(repsNum(st.reps)||0),0),0));
+    // Le prescrit doit compter le poids de corps comme le realise, sinon le rapport
+    // realise/prescrit du score depasse mecaniquement 1 sur toute seance au poids de corps.
+    const targetKg=Math.round(exos.reduce((a,e)=>{
+      const bwl=bodyLoadKg(e,bodyWeight);
+      return a+setPlanFor(e).reduce((b,st)=>b+((Number(st.w)||0)||bwl)*(repsNum(st.reps)||0),0);
+    },0));
     const score=computeScore(totalKg,totalSets,fb,{sets:targetSets,kg:targetKg});
     // Date = jour du programme (ex: LUN = date du lundi de cette semaine)
     const entry={
@@ -4165,6 +4198,14 @@ export default function SomaApp() {
   // Le badge n'annoncait que le mode principal : une seance classique comportant des supersets
   // s'affichait "Classique" tout court, y compris une fois terminee. L'agencement reel est
   // desormais lisible, et il survit a la cloture puisqu'il est sauvegarde avec les exercices.
+  // Les exercices exclus sont retires APRES la constitution des groupes : un superset dont un
+  // membre est exclu se retrouvait avec un seul exercice tout en gardant son etiquette, et
+  // s'affichait comme un "Superset" d'un seul mouvement. On degroupe ce qui n'a plus de sens.
+  (()=>{
+    const n={};
+    exos.forEach(e=>{ if(e&&e.circuitId) n[e.circuitId]=(n[e.circuitId]||0)+1; });
+    exos.forEach(e=>{ if(e&&e.circuitId&&n[e.circuitId]<2){ delete e.circuitId; delete e.groupType; delete e.circuitPos; delete e.circuitSize; } });
+  })();
   const groupKind=(exos||[]).reduce((g,e)=>g||((e&&e.groupType)||null),null);
   // Le badge annoncait "Classique + Superset" meme quand TOUS les exercices etaient
   // groupes : il n'y avait alors plus rien de classique dans la seance.
