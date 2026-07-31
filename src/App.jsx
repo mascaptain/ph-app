@@ -2982,7 +2982,7 @@ function SettingsTab({user,excluded,onToggleExclude,onSignOut,onReset,onOpenLibr
           <span style={{fontSize:17,color:C.red}}>›</span>
         </Tap>
       </div>
-      <div style={{fontSize:12,color:C.ink4,textAlign:"center",marginTop:28}}>SŌMA · {"S"+weekNumber()} · {DB.length} exercices · build 23.83a</div>
+      <div style={{fontSize:12,color:C.ink4,textAlign:"center",marginTop:28}}>SŌMA · {"S"+weekNumber()} · {DB.length} exercices · build 23.84a</div>
     </div>
   );
 }
@@ -4252,7 +4252,7 @@ const NAV=[{id:"home",l:"Accueil"},{id:"seance",l:"Séances"},{id:"stats",l:"Sta
                   }))}
                   {isViewingToday&&isLate&&!isDayDone&&(
                     <div style={{background:C.s2,border:`1px solid ${C.s4}`,borderRadius:14,padding:"12px 15px",marginBottom:16,display:"flex",alignItems:"center",gap:10}}>
-                      <span style={{fontSize:15,fontWeight:600,color:C.ink}}>↷</span>
+                      <Icon name="swap" size={17} stroke={C.ink}/>
                       <div>
                         <div style={{fontSize:14,fontWeight:600,color:C.ink}}>Séance reportée</div>
                         <div style={{fontSize:12,color:C.ink3,marginTop:1}}>
