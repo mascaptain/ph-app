@@ -1807,12 +1807,14 @@ function ProgressLine({data,color=C.blue,height=48}) {
   const area=`${path} L ${pts[pts.length-1][0]} ${H} L ${pts[0][0]} ${H} Z`;
   return(
     <div>
-      <svg viewBox={`0 0 ${W} ${H}`} style={{width:"100%",height}} preserveAspectRatio="none">
+      {/* preserveAspectRatio="none" etirait le trace : les points devenaient des ovales et
+          le libelle de valeur, ecrase, se lisait comme un chiffre isole flottant. */}
+      <svg viewBox={`0 0 ${W} ${H}`} style={{width:"100%",height}} preserveAspectRatio="xMidYMid meet">
         <defs><linearGradient id={`g${color.replace("#","")}`} x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={color} stopOpacity=".12"/><stop offset="100%" stopColor={color} stopOpacity="0"/></linearGradient></defs>
         <path d={area} fill={`url(#g${color.replace("#","")})`}/>
         <path d={path} stroke={color} strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round"/>
         {pts.map(([x,y],i)=><circle key={i} cx={x} cy={y} r="3" fill={color} stroke={C.bg} strokeWidth="2"/>)}
-        <text x={pts[pts.length-1][0]} y={pts[pts.length-1][1]-8} textAnchor="middle" fontSize="10" fill={color} fontFamily={F} fontWeight="700">{data[data.length-1].v}</text>
+        <text x={pts[pts.length-1][0]} y={pts[pts.length-1][1]-9} textAnchor="end" fontSize="11" fill={C.ink} fontFamily={F} fontWeight="600">{String(data[data.length-1].v).replace(".",",")} t</text>
       </svg>
       <div style={{display:"flex",justifyContent:"space-between",marginTop:4}}>
         <span style={{fontSize:10,color:C.ink4,fontFamily:F}}>{data[0].date}</span>
@@ -2191,7 +2193,7 @@ function WeekSummary({sessions,accent,trainingDaysPerWeek}) {
   const weekTime=weekMin>=60?`${Math.floor(weekMin/60)}h${String(weekMin%60).padStart(2,"0")}`:`${weekMin}`;
   const target=trainingDaysPerWeek||5;
   return(
-    <div style={{background:C.s1,borderRadius:22,padding:"20px",marginBottom:16}}>
+    <div style={{background:C.bg,border:`1px solid ${C.s2}`,boxShadow:`0 3px 16px ${C.ink5}`,borderRadius:22,padding:"16px 17px",marginBottom:11}}>
       <div style={{fontSize:11,fontWeight:600,color:C.ink4,textTransform:"uppercase",letterSpacing:".1em",marginBottom:16}}>Cette semaine</div>
       <div style={{display:"flex",gap:6,marginBottom:18}}>
         {days.map((d,i)=>{
@@ -2352,10 +2354,16 @@ function SkillsOctagon({sessions,profile}) {
   const poly=axes.map((ax,i)=>pt(i,ax[1]/100*R).join(",")).join(" ");
   const grid=[25,50,75,100].map(g=>axes.map((_,i)=>pt(i,g/100*R).join(",")).join(" "));
   return (
-    <div style={{background:C.s1,borderRadius:22,padding:"20px",marginBottom:16}}>
-      <div style={{fontSize:12,fontWeight:600,color:C.ink4,textTransform:"uppercase",letterSpacing:".1em",marginBottom:4}}>Octogone de compétences</div>
-      <div style={{fontSize:13,color:C.ink4,marginBottom:4}}>Tes 8 qualités, calculées sur ton historique.</div>
-      <svg viewBox="0 0 300 268" style={{width:"100%",height:"auto",display:"block"}}>
+    <div style={{background:C.bg,border:`1px solid ${C.s2}`,boxShadow:`0 3px 16px ${C.ink5}`,
+      borderRadius:22,padding:"16px 17px",marginBottom:11}}>
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,marginBottom:2}}>
+        <span style={{fontSize:14.5,fontWeight:600,color:C.ink}}>Octogone de compétences</span>
+        <span style={{fontSize:10.5,fontWeight:600,padding:"4px 11px",borderRadius:999,background:C.s2,color:C.ink3}}>8 qualités</span>
+      </div>
+      <div style={{fontSize:11.5,color:C.ink4,marginBottom:6}}>Calculées sur ton historique.</div>
+      {/* La figure prenait 100% de la largeur : sur un conteneur de 600 elle depassait
+          500 px de haut a elle seule. Plafonnee et centree, elle tient en un tiers. */}
+      <svg viewBox="0 0 300 268" style={{width:"100%",maxWidth:290,height:"auto",display:"block",margin:"0 auto"}}>
         {grid.map((g,i)=>(<polygon key={"g"+i} points={g} fill="none" stroke={C.s3} strokeWidth="1"/>))}
         {axes.map((_,i)=>{const[x,y]=pt(i,R);return <line key={"l"+i} x1={cx} y1={cy} x2={x} y2={y} stroke={C.s3} strokeWidth="1"/>;})}
         <polygon points={poly} fill={C.blue} fillOpacity="0.25" stroke={C.blue} strokeWidth="2"/>
@@ -2412,44 +2420,19 @@ function StatsTab({sessions,weights,accent,onOpenPhotos,pinnedPBs,onManagePBs,ac
           </div>
         ))}
       </div>
+      {/* Bilan de la semaine et profil de competences, apres les mesures : la page
+          commencait par eux, ce qui repoussait les chiffres essentiels sous la ligne de
+          flottaison et donnait l'impression d'une colonne sans fin. */}
+      <WeekSummary sessions={sessions} accent={accent} trainingDaysPerWeek={trainingDaysPerWeek}/>
       {/* Volume chart */}
       {volumeByWeek.length>1&&(
-        <div style={{background:C.s1,borderRadius:22,padding:"20px",marginBottom:16}}>
+        <div style={{background:C.bg,border:`1px solid ${C.s2}`,boxShadow:`0 3px 16px ${C.ink5}`,borderRadius:22,padding:"16px 17px",marginBottom:11}}>
           <div style={{fontSize:14,fontWeight:600,color:C.ink,marginBottom:4}}>Volume hebdomadaire</div>
           <div style={{fontSize:12,color:C.ink4,marginBottom:16}}>Tonnes soulevées par semaine</div>
           <ProgressLine data={volumeByWeek} color={accent||C.blue}/>
         </div>
       )}
-      {/* Bilan de la semaine et profil de competences, apres les mesures : la page
-          commencait par eux, ce qui repoussait les chiffres essentiels sous la ligne de
-          flottaison et donnait l'impression d'une colonne sans fin. */}
-      <WeekSummary sessions={sessions} accent={accent} trainingDaysPerWeek={trainingDaysPerWeek}/>
       <SkillsOctagon sessions={sessions} profile={profile}/>
-      {/* Apprentissage */}
-      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
-        <span style={{fontSize:12,fontWeight:600,color:C.ink4,textTransform:"uppercase",letterSpacing:".1em"}}>Apprentissage</span>
-        {onManageSkills&&<Tap onTap={onManageSkills} style={{padding:"6px 12px",borderRadius:999,background:C.s2}}><span style={{fontSize:12,fontWeight:600,color:C.ink3}}>Gérer ({(activeSkills||[]).length}/2) ›</span></Tap>}
-      </div>
-      {(!activeSkills||activeSkills.length===0)?(
-        <div style={{textAlign:"center",padding:"24px 0",fontSize:14,color:C.ink4,marginBottom:16}}>Ajoute un mouvement à apprendre (muscle-up, pistol squat...).</div>
-      ):(activeSkills.map(as=>{
-        const sk=SKILLS_CATALOG.find(s=>s.id===as.skillId);
-        if(!sk) return null;
-        const step=sk.steps[as.stepIndex]||sk.steps[sk.steps.length-1];
-        const pct=Math.round(((as.stepIndex)/sk.steps.length)*100);
-        return(
-          <div key={as.skillId} style={{background:C.s1,borderRadius:22,padding:"16px",marginBottom:10}}>
-            <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:8}}>
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={C.ink3} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">{sk.icon}</svg>
-              <div style={{flex:1}}>
-                <div style={{fontSize:15,fontWeight:600,color:C.ink}}>{sk.name}</div>
-                <div style={{fontSize:12,color:C.ink3}}>Étape {as.stepIndex+1}/{sk.steps.length} · {step.label}</div>
-              </div>
-            </div>
-            <div style={{height:4,borderRadius:2,background:C.s2,overflow:"hidden"}}><div style={{height:"100%",width:`${pct}%`,background:C.blue,borderRadius:2}}/></div>
-          </div>
-        );
-      }))}
       {/* Personal Bests - vue compacte + gestion */}
       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
         <span style={{fontSize:12,fontWeight:600,color:C.ink4,textTransform:"uppercase",letterSpacing:".1em"}}>Personal Bests</span>
@@ -2465,10 +2448,35 @@ function StatsTab({sessions,weights,accent,onOpenPhotos,pinnedPBs,onManagePBs,ac
             <div style={{fontSize:21,fontWeight:500,color:C.ink,letterSpacing:"-.02em",fontVariantNumeric:"tabular-nums"}}>{pb.pbKg===0?"PdC":pb.pbKg+" kg"}</div>
           </div>
         ))}</div>}
+      {/* Apprentissage */}
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
+        <span style={{fontSize:12,fontWeight:600,color:C.ink4,textTransform:"uppercase",letterSpacing:".1em"}}>Apprentissage</span>
+        {onManageSkills&&<Tap onTap={onManageSkills} style={{padding:"6px 12px",borderRadius:999,background:C.s2}}><span style={{fontSize:12,fontWeight:600,color:C.ink3}}>Gérer ({(activeSkills||[]).length}/2) ›</span></Tap>}
+      </div>
+      {(!activeSkills||activeSkills.length===0)?(
+        <div style={{textAlign:"center",padding:"24px 0",fontSize:14,color:C.ink4,marginBottom:16}}>Ajoute un mouvement à apprendre (muscle-up, pistol squat...).</div>
+      ):(activeSkills.map(as=>{
+        const sk=SKILLS_CATALOG.find(s=>s.id===as.skillId);
+        if(!sk) return null;
+        const step=sk.steps[as.stepIndex]||sk.steps[sk.steps.length-1];
+        const pct=Math.round(((as.stepIndex)/sk.steps.length)*100);
+        return(
+          <div key={as.skillId} style={{background:C.bg,border:`1px solid ${C.s2}`,boxShadow:`0 3px 16px ${C.ink5}`,borderRadius:22,padding:"16px 17px",marginBottom:11}}>
+            <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:8}}>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={C.ink3} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">{sk.icon}</svg>
+              <div style={{flex:1}}>
+                <div style={{fontSize:15,fontWeight:600,color:C.ink}}>{sk.name}</div>
+                <div style={{fontSize:12,color:C.ink3}}>Étape {as.stepIndex+1}/{sk.steps.length} · {step.label}</div>
+              </div>
+            </div>
+            <div style={{height:4,borderRadius:2,background:C.s2,overflow:"hidden"}}><div style={{height:"100%",width:`${pct}%`,background:C.blue,borderRadius:2}}/></div>
+          </div>
+        );
+      }))}
       {(()=>{const B=computeBadges(sessions);const earned=B.filter(b=>b.ok).length;
       const cats=[...new Set(B.map(b=>b.cat))];
       return(
-      <div style={{marginTop:24,background:C.s1,borderRadius:22,padding:"16px"}}>
+      <div style={{marginTop:0,background:C.bg,border:`1px solid ${C.s2}`,boxShadow:`0 3px 16px ${C.ink5}`,borderRadius:22,padding:"16px 17px",marginBottom:11}}>
         <div style={{display:"flex",alignItems:"baseline",justifyContent:"space-between",marginBottom:12}}>
           <span style={{fontSize:11,fontWeight:600,color:C.ink3,textTransform:"uppercase",letterSpacing:".15em"}}>Récompenses</span>
           {onOpenRewards&&<Tap onTap={onOpenRewards} style={{padding:"6px 12px",borderRadius:999,background:C.s2}}><span style={{fontSize:12,fontWeight:600,color:C.ink3}}>Voir tout ({earned}/{B.length}) ›</span></Tap>}
@@ -3010,7 +3018,7 @@ function SettingsTab({user,excluded,onToggleExclude,onSignOut,onReset,onOpenLibr
           <span style={{fontSize:17,color:C.red}}>›</span>
         </Tap>
       </div>
-      <div style={{fontSize:12,color:C.ink4,textAlign:"center",marginTop:28}}>SŌMA · {"S"+weekNumber()} · {DB.length} exercices · build 23.86a</div>
+      <div style={{fontSize:12,color:C.ink4,textAlign:"center",marginTop:28}}>SŌMA · {"S"+weekNumber()} · {DB.length} exercices · build 23.87a</div>
     </div>
   );
 }
@@ -4484,6 +4492,7 @@ const NAV=[{id:"home",l:"Accueil"},{id:"seance",l:"Séances"},{id:"stats",l:"Sta
     </div>
   );
 }
+
 
 
 
