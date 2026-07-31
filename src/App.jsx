@@ -48,6 +48,9 @@ const Icon=({name,size,stroke,fill,sw,style,title})=>(
 // le sombre pose le blanc sur l'encre et teinte les surfaces de Black Denim, ce qui donne
 // de la profondeur sans introduire une seule teinte supplementaire.
 const LIGHT = {
+  // Fond de la carte d'identite du profil. Un jeton propre, car en sombre il ne peut
+  // pas etre le meme que la surface : #1C1C2B y sert deja de fond de carte.
+  idcard:  "#1C1C2B",
   bg:      "#FFFFFF",
   s1:      "#F5F4FA",
   s2:      "#EDEBF6",
@@ -74,6 +77,7 @@ const LIGHT = {
   purDim:  "rgba(28,28,43,.12)",
 };
 const DARK = {
+  idcard:  "#0E0E17",
   bg:      "#1B1B1B",
   s1:      "#1C1C2B",
   s2:      "#242433",
@@ -156,7 +160,7 @@ const REST_TPL = {label:"Repos",salle:null,muscle:"Recuperation active",exercise
 const SESSION_TEMPLATES = [...PROGRAM.filter(d=>d.salle).map(d=>({label:d.label,salle:d.salle,muscle:d.muscle,exercises:d.exercises,abs:d.abs,ids:d.ids})), REST_TPL];
 
 // Rotation hebdo - mesocycle hybride (Volume -> Intensite -> Puissance -> Deload)
-const VERSION="1.38.2";
+const VERSION="1.39.0";
 const weekNumber = () => { const dt=new Date(); const d=new Date(Date.UTC(dt.getFullYear(),dt.getMonth(),dt.getDate())); const dn=(d.getUTCDay()+6)%7; d.setUTCDate(d.getUTCDate()-dn+3); const ft=new Date(Date.UTC(d.getUTCFullYear(),0,4)); const fn=(ft.getUTCDay()+6)%7; ft.setUTCDate(ft.getUTCDate()-fn+3); return 1+Math.round((d-ft)/604800000); };
 const PHASES12=[{n:"Accumulation",f:"Volume, base"},{n:"Accumulation",f:"Volume"},{n:"Accumulation",f:"Volume +"},{n:"Intensification",f:"Charges +"},{n:"Intensification",f:"Charges ++"},{n:"Intensification",f:"Lourd"},{n:"Réalisation",f:"Explosif"},{n:"Réalisation",f:"Puissance"},{n:"Réalisation",f:"Pic de force"},{n:"Deload",f:"Récupération"},{n:"Test / PR",f:"Validation"},{n:"Test / PR",f:"Nouveaux maxs"}];
 const programWeek=()=>((weekNumber()-1)%12)+1;
@@ -3043,7 +3047,13 @@ function ScheduleEditor({schedule,onChange,onReset,onClose,autoRotate,onToggleAu
   );
 }
 
+// Profil en deux vues, comme les Stats. La page melait dix choses de nature
+// differente au meme niveau : un reglage de son pesait visuellement autant que
+// l'objectif d'entrainement. La frontiere est desormais nette —
+//   Moi       ce qui te decrit et ce qui nourrit le moteur
+//   Reglages  ce qui habille l'application et le compte
 function SettingsTab({user,excluded,onToggleExclude,onSignOut,onReset,onOpenLibrary,profile,schedule,avatarUrl,onUpdateConfig,onOpenScheduleEditor,onRedoOnboarding}) {
+  const[view,setView]=useState("moi");
   const[showLib,setShowLib]=useState(false);
   const[w,setW]=useState(profile?.weight_kg!=null?String(profile.weight_kg):"");
   const[h,setH]=useState(profile?.height_cm!=null?String(profile.height_cm):"");
@@ -3069,150 +3079,296 @@ function SettingsTab({user,excluded,onToggleExclude,onSignOut,onReset,onOpenLibr
     })();
   };
   const trainDays=(schedule||[]).map((d,i)=>(d&&d.salle)?i:-1).filter(i=>i>=0);
-  return(
-    <div style={{padding:"20px 18px 100px",maxWidth:600,margin:"0 auto",fontFamily:F}}>
-      {/* Profile card */}
-      <div style={{background:C.s1,borderRadius:22,padding:"24px",marginBottom:16,display:"flex",alignItems:"center",gap:18}}>
-        <div onClick={()=>avatarRef.current&&avatarRef.current.click()} style={{position:"relative",width:56,height:56,borderRadius:"50%",background:C.blue,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,overflow:"hidden",cursor:"pointer"}}>
-          {avatar?<img src={avatar} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/>:<span style={{fontSize:22,fontWeight:600,color:"#000"}}>{(user?.user_metadata?.name||user?.email||"U")[0].toUpperCase()}</span>}
-          <div style={{position:"absolute",left:0,right:0,bottom:0,background:"rgba(0,0,0,.45)",fontSize:9,color:"#fff",textAlign:"center",padding:"1px 0"}}>{avatar?"Modifier":"Ajouter"}</div>
-        </div>
-        <input ref={avatarRef} type="file" accept="image/*" onChange={onAvatar} style={{display:"none"}}/>
-        <div style={{flex:1,minWidth:0}}>
-          <div style={{fontSize:19,fontWeight:600,color:C.ink,marginBottom:3}}>{user?.user_metadata?.name||"Athlète"}</div>
-          <div style={{fontSize:14,color:C.ink3,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{user?.email||""}</div>
-        </div>
+  const goalLabel=(GOALS.find(g=>g[0]===profile?.goal)||[])[1]||"Non défini";
+  const total=profile?.total_sessions||60;
+  const doneN=Math.min(profile?.session_index||0,total);
+  const pct=total?Math.round(doneN/total*100):0;
+  // Semaine du programme : "semaine 6" se deduit de la date de debut, pas du calendrier.
+  const progWeek=profile?.program_start
+    ?Math.max(1,Math.floor((new Date(todayKey()+"T00:00:00")-new Date(profile.program_start+"T00:00:00"))/604800000)+1)
+    :null;
+
+  const CARD={background:C.bg,border:`1px solid ${C.s2}`,boxShadow:`0 3px 16px ${C.ink5}`,borderRadius:22};
+  const LBL={fontSize:10,fontWeight:600,letterSpacing:".11em",textTransform:"uppercase",color:C.ink4};
+  const PILL={fontSize:10.5,fontWeight:600,padding:"4px 11px",borderRadius:999,background:C.s2,color:C.ink3,whiteSpace:"nowrap"};
+  const FIELD={height:46,borderRadius:16,border:`1px solid ${C.s3}`,background:C.bg,color:C.ink,fontSize:17,
+    fontWeight:500,fontFamily:F,textAlign:"center",outline:"none",boxSizing:"border-box",width:112,
+    fontVariantNumeric:"tabular-nums"};
+
+  // Ligne de reglage : intitule a gauche, valeur et chevron a droite. Une seule
+  // fabrique, pour que dix reglages ne produisent pas dix mises en page.
+  const Line=({label,value,onTap:tap,first,danger})=>{
+    const inner=(
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,padding:"13px 0",
+        borderTop:first?"none":`1px solid ${C.s2}`}}>
+        <span style={{fontSize:14,fontWeight:500,color:danger?C.red:C.ink}}>{label}</span>
+        <span style={{fontSize:13,color:C.ink4,flexShrink:0,fontVariantNumeric:"tabular-nums"}}>
+          {value!=null&&<span style={{marginRight:7}}>{value}</span>}›</span>
       </div>
-      {/* Mon programme */}
-      {onUpdateConfig&&<div style={{background:C.s1,borderRadius:22,padding:"20px",marginBottom:12}}>
-        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:16,gap:8}}><span style={{fontSize:14,fontWeight:600,color:C.ink}}>Mon programme</span>{onOpenScheduleEditor&&<Tap onTap={onOpenScheduleEditor} style={{padding:"6px 12px",borderRadius:999,background:C.s2}}><span style={{fontSize:12,fontWeight:600,color:C.ink3}}>Modifier les séances ›</span></Tap>}</div>
-        <div style={{fontSize:12,fontWeight:600,color:C.ink4,textTransform:"uppercase",letterSpacing:".08em",marginBottom:8}}>Objectif actuel</div>
-        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",background:C.s1,border:`1px solid ${C.s3}`,borderRadius:14,padding:"14px 16px",marginBottom:18}}>
-          <span style={{fontSize:15,fontWeight:600,color:C.ink}}>{(GOALS.find(g=>g[0]===profile?.goal)||[])[1]||"—"}</span>
-          {onRedoOnboarding&&<Tap onTap={onRedoOnboarding} style={{padding:"7px 14px",borderRadius:999,background:C.blueDim}}><span style={{fontSize:12,fontWeight:600,color:C.blue}}>Changer ‹</span></Tap>}
-        </div>
-        <div style={{fontSize:12,fontWeight:600,color:C.ink4,textTransform:"uppercase",letterSpacing:".08em",marginBottom:8}}>Jours de séance</div>
-        <div style={{display:"flex",gap:6,marginBottom:18}}>
-          {["LUN","MAR","MER","JEU","VEN","SAM","DIM"].map((lbl,i)=>{
-            const on=trainDays.includes(i);
-            return <Tap key={i} onTap={()=>{const nd=on?trainDays.filter(x=>x!==i):[...trainDays,i];if(nd.length)onUpdateConfig({days:nd});}} style={{flex:1,padding:"10px 0",borderRadius:10,background:on?C.blue:C.s2,display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{fontSize:11,fontWeight:600,color:on?"#000":C.ink3}}>{lbl}</span></Tap>;
+    );
+    return tap?<Tap label={label} onTap={tap} style={{display:"block"}}>{inner}</Tap>:inner;
+  };
+
+  const Measure=({v,u,l})=>(
+    <div style={{minWidth:0}}>
+      <div style={{fontSize:21,fontWeight:500,color:"#F4F3F8",letterSpacing:"-.03em",lineHeight:1,
+        fontVariantNumeric:"tabular-nums"}}>{v}<span style={{fontSize:11.5,fontWeight:400,color:"rgba(244,243,248,.45)"}}>{u?` ${u}`:""}</span></div>
+      <div style={{fontSize:10.5,color:"rgba(244,243,248,.45)",marginTop:4}}>{l}</div>
+    </div>
+  );
+
+  const VIEWS=[["moi","Moi"],["reglages","Réglages"]];
+  return(
+    <div style={{padding:"14px 18px 16px",maxWidth:600,margin:"0 auto",fontFamily:F}}>
+
+      <div style={{position:"sticky",top:0,zIndex:Z.sticky,background:C.bg,paddingBottom:11}}>
+        <div style={{display:"flex",gap:4,background:C.s1,borderRadius:999,padding:4}}>
+          {VIEWS.map(([k,l])=>{
+            const on=view===k;
+            return(
+              <Tap key={k} label={l} onTap={()=>{setView(k);play("tick");}}
+                style={{flex:1,padding:"9px 0",borderRadius:999,background:on?C.bg:"transparent",
+                  boxShadow:on?`0 2px 9px ${C.ink5}`:"none",display:"flex",alignItems:"center",
+                  justifyContent:"center",transition:`all 220ms ${EO}`}}>
+                <span style={{fontSize:13,fontWeight:on?600:500,color:on?C.ink:C.ink4}}>{l}</span>
+              </Tap>
+            );
           })}
         </div>
-        <div style={{fontSize:12,fontWeight:600,color:C.ink4,textTransform:"uppercase",letterSpacing:".08em",marginBottom:8}}>Poids de corps</div>
-        <div style={{display:"flex",alignItems:"center",gap:10}}>
-          <input inputMode="decimal" value={w} onChange={e=>setW(e.target.value.replace(/[^0-9.]/g,""))} onBlur={()=>onUpdateConfig({weight_kg:w?Number(w):null})} placeholder="kg" style={{width:120,height:46,borderRadius:12,border:`1px solid ${C.s4}`,background:C.s2,color:C.ink,fontSize:17,fontWeight:600,fontFamily:F,textAlign:"center",outline:"none",boxSizing:"border-box"}}/>
-          <span style={{fontSize:15,color:C.ink4}}>kg</span>
+      </div>
+
+      {view==="moi"&&(
+      <div key="moi" style={{animation:`riseIn 300ms ${EO} both`}}>
+
+        {/* Carte d'identite : ton profil sportif n'est pas un reglage. */}
+        <div style={{background:C.idcard,borderRadius:24,padding:"16px 17px",marginBottom:11}}>
+          <div style={{display:"flex",gap:13,alignItems:"center"}}>
+            <div onClick={()=>avatarRef.current&&avatarRef.current.click()}
+              style={{position:"relative",width:60,height:60,borderRadius:22,background:C.blue,display:"flex",
+                alignItems:"center",justifyContent:"center",flexShrink:0,overflow:"hidden",cursor:"pointer"}}>
+              {avatar
+                ?<img src={avatar} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/>
+                :<span style={{fontSize:23,fontWeight:500,color:"#1B1B1B"}}>
+                   {(user?.user_metadata?.name||user?.email||"U").slice(0,2).toUpperCase()}</span>}
+            </div>
+            <input ref={avatarRef} type="file" accept="image/*" onChange={onAvatar} style={{display:"none"}}/>
+            <div style={{flex:1,minWidth:0}}>
+              <div style={{fontSize:17,color:"#F4F3F8",letterSpacing:"-.015em",whiteSpace:"nowrap",
+                overflow:"hidden",textOverflow:"ellipsis"}}>{user?.user_metadata?.name||"Athlète"}</div>
+              <div style={{fontSize:11.5,color:"rgba(244,243,248,.5)",marginTop:2,whiteSpace:"nowrap",
+                overflow:"hidden",textOverflow:"ellipsis"}}>{user?.email||""}</div>
+            </div>
+            <Tap label="Changer la photo" onTap={()=>avatarRef.current&&avatarRef.current.click()}
+              style={{padding:"6px 12px",borderRadius:999,background:"rgba(255,255,255,.12)",flexShrink:0}}>
+              <span style={{fontSize:10.5,fontWeight:600,color:"rgba(244,243,248,.75)"}}>{avatar?"Modifier":"Ajouter"}</span></Tap>
+          </div>
+          <div style={{height:1,background:"rgba(255,255,255,.1)",margin:"14px 0 12px"}}/>
+          <div style={{display:"flex",justifyContent:"space-between",gap:8}}>
+            <Measure v={profile?.weight_kg!=null?String(profile.weight_kg).replace(".",","):"—"} u="kg" l="Poids"/>
+            <Measure v={profile?.height_cm||"—"} u="cm" l="Taille"/>
+            <Measure v={profile?.age||"—"} u="ans" l="Âge"/>
+            <Measure v={profile?.sex==="femme"?"F":profile?.sex==="homme"?"H":"—"} l="Sexe"/>
+          </div>
         </div>
-        <div style={{fontSize:12,fontWeight:600,color:C.ink4,textTransform:"uppercase",letterSpacing:".08em",margin:"18px 0 8px"}}>Taille</div>
-        <div style={{display:"flex",alignItems:"center",gap:10}}>
-          <input inputMode="numeric" value={h} onChange={e=>setH(e.target.value.replace(/[^0-9]/g,""))} onBlur={()=>onUpdateConfig({height_cm:h?Number(h):null})} placeholder="cm" style={{width:120,height:46,borderRadius:12,border:`1px solid ${C.s4}`,background:C.s2,color:C.ink,fontSize:17,fontWeight:600,fontFamily:F,textAlign:"center",outline:"none",boxSizing:"border-box"}}/>
-          <span style={{fontSize:15,color:C.ink4}}>cm</span>
+
+        {/* Programme en cours */}
+        <div style={{background:C.blue,border:`1px solid ${C.blue}`,borderRadius:24,padding:"15px 16px",marginBottom:11}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:10}}>
+            <span style={{fontSize:11.5,fontWeight:600,color:"rgba(27,27,27,.62)"}}>Programme en cours</span>
+            {progWeek&&<span style={{fontSize:10.5,fontWeight:600,padding:"4px 11px",borderRadius:999,
+              background:"rgba(255,255,255,.5)",color:"#1B1B1B",whiteSpace:"nowrap"}}>Semaine {progWeek}</span>}
+          </div>
+          <div style={{fontSize:34,fontWeight:500,color:"#1B1B1B",letterSpacing:"-.035em",lineHeight:1,marginTop:9,
+            fontVariantNumeric:"tabular-nums"}}>{doneN}
+            <span style={{fontSize:13,fontWeight:400,color:"rgba(27,27,27,.5)"}}> / {total} séances</span></div>
+          <div style={{height:5,borderRadius:3,background:"rgba(255,255,255,.45)",overflow:"hidden",marginTop:12}}>
+            <div style={{height:"100%",width:`${pct}%`,background:"#1B1B1B",borderRadius:3,
+              transition:`width 460ms ${EO}`}}/></div>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:10,marginTop:11}}>
+            <span style={{fontSize:11.5,color:"rgba(27,27,27,.62)"}}>{goalLabel} · {trainDays.length} jours/semaine</span>
+            {onOpenScheduleEditor&&<Tap label="Modifier les séances" onTap={onOpenScheduleEditor}>
+              <span style={{fontSize:11.5,fontWeight:600,color:"#1B1B1B"}}>Modifier ›</span></Tap>}
+          </div>
         </div>
-        <div style={{fontSize:12,fontWeight:600,color:C.ink4,textTransform:"uppercase",letterSpacing:".08em",margin:"18px 0 8px"}}>Sexe</div>
-        <div style={{display:"flex",gap:8}}>
-          {[["homme","Homme"],["femme","Femme"]].map(([k,l])=>(
-            <Tap key={k} onTap={()=>onUpdateConfig({sex:k})} style={{flex:1,padding:"10px",borderRadius:10,background:profile?.sex===k?C.blue:C.s2,display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{fontSize:13,fontWeight:600,color:profile?.sex===k?"#000":C.ink3}}>{l}</span></Tap>
-          ))}
+
+        {/* Objectif : c'est lui qui pilote le moteur, il merite d'etre choisi ici. */}
+        <div style={{...CARD,padding:"16px 17px",marginBottom:11}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:10,marginBottom:11}}>
+            <span style={{fontSize:14,fontWeight:600,color:C.ink}}>Objectif</span>
+            <span style={PILL}>Pilote le moteur</span>
+          </div>
+          <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+            {GOALS.map(([k,l])=>{
+              const on=profile?.goal===k;
+              return(
+                <Tap key={k} label={l} onTap={()=>{onUpdateConfig&&onUpdateConfig({goal:k});play("clic");buzz(15);}}
+                  style={{padding:"8px 14px",borderRadius:999,background:on?C.ink:C.s1,
+                    transition:`all 180ms ${EO}`}}>
+                  <span style={{fontSize:12,fontWeight:on?600:500,color:on?C.bg:C.ink3}}>{l}</span></Tap>
+              );
+            })}
+          </div>
         </div>
-        <div style={{fontSize:12,fontWeight:600,color:C.ink4,textTransform:"uppercase",letterSpacing:".08em",margin:"18px 0 8px"}}>Âge</div>
-        <div style={{display:"flex",alignItems:"center",gap:10}}>
-          <input inputMode="numeric" value={ag} onChange={e=>setAg(e.target.value.replace(/[^0-9]/g,""))} onBlur={()=>onUpdateConfig({age:ag?Number(ag):null})} placeholder="ans" style={{width:120,height:46,borderRadius:12,border:`1px solid ${C.s4}`,background:C.s2,color:C.ink,fontSize:17,fontWeight:600,fontFamily:F,textAlign:"center",outline:"none",boxSizing:"border-box"}}/>
-          <span style={{fontSize:15,color:C.ink4}}>ans</span>
+
+        {/* Jours de seance */}
+        <div style={{...CARD,padding:"16px 17px",marginBottom:11}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:10,marginBottom:11}}>
+            <span style={{fontSize:14,fontWeight:600,color:C.ink}}>Jours de séance</span>
+            <span style={PILL}>{trainDays.length} / semaine</span>
+          </div>
+          <div style={{display:"flex",gap:5}}>
+            {["L","M","M","J","V","S","D"].map((lbl,i)=>{
+              const on=trainDays.includes(i);
+              return(
+                <Tap key={i} label={`Jour ${i+1}`}
+                  onTap={()=>{const nd=on?trainDays.filter(x=>x!==i):[...trainDays,i];
+                    if(nd.length&&onUpdateConfig){onUpdateConfig({days:nd});play("clic");buzz(15);}}}
+                  style={{flex:1,padding:"11px 0",borderRadius:14,background:on?C.blue:C.s1,
+                    display:"flex",alignItems:"center",justifyContent:"center",transition:`all 180ms ${EO}`}}>
+                  <span style={{fontSize:12,fontWeight:600,color:on?"#1B1B1B":C.ink4}}>{lbl}</span></Tap>
+              );
+            })}
+          </div>
         </div>
-        {(hasChanges||saved||saveErr)&&<Tap onTap={async()=>{const r=await onUpdateConfig({weight_kg:w?Number(w):null,height_cm:h?Number(h):null,age:ag?Number(ag):null});if(r&&r.error){setSaved(false);setSaveErr(true);setTimeout(()=>setSaveErr(false),2400);}else{setSaveErr(false);setSaved(true);setTimeout(()=>setSaved(false),1600);}}} style={{marginTop:18,height:48,borderRadius:12,background:saveErr?C.s4:(saved?C.blue:C.ink),display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{fontSize:14,fontWeight:600,color:saveErr?C.ink:(saved?"#000":"#fff"),letterSpacing:".02em"}}>{saveErr?"Erreur — réessayer":(saved?"Enregistré ✓":"Enregistrer")}</span></Tap>}
-        <div style={{marginTop:20,paddingTop:18,borderTop:`1px solid ${C.s3}`}}>
-          <div style={{fontSize:12,fontWeight:600,color:C.ink4,textTransform:"uppercase",letterSpacing:".08em",marginBottom:8}}>Programme</div>
-          {profile?.program_start?(
-            <div style={{fontSize:14,color:C.ink2,marginBottom:12}}>Séance {Math.min(profile?.session_index||0,profile?.total_sessions||48)}/{profile?.total_sessions||48} · débuté le {fmtDateShort(profile.program_start)}</div>
-          ):(
-            <div style={{fontSize:14,color:C.ink4,marginBottom:12}}>Aucun programme démarré.</div>
+
+        {/* Mensurations modifiables */}
+        <div style={{...CARD,padding:"16px 17px",marginBottom:11}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:10,marginBottom:13}}>
+            <span style={{fontSize:14,fontWeight:600,color:C.ink}}>Mensurations</span>
+            <span style={PILL}>Échelonne les charges</span>
+          </div>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:9}}>
+            {[["Poids",w,setW,"kg",v=>v.replace(/[^0-9.]/g,""),()=>onUpdateConfig({weight_kg:w?Number(w):null})],
+              ["Taille",h,setH,"cm",v=>v.replace(/[^0-9]/g,""),()=>onUpdateConfig({height_cm:h?Number(h):null})],
+              ["Âge",ag,setAg,"ans",v=>v.replace(/[^0-9]/g,""),()=>onUpdateConfig({age:ag?Number(ag):null})]
+            ].map(([l,val,set,u,clean,blur])=>(
+              <div key={l}>
+                <div style={{...LBL,marginBottom:6}}>{l}</div>
+                <input inputMode="decimal" value={val} onChange={e=>set(clean(e.target.value))} onBlur={blur}
+                  placeholder={u} aria-label={l} style={{...FIELD,width:"100%"}}/>
+              </div>
+            ))}
+          </div>
+          <div style={{...LBL,margin:"14px 0 7px"}}>Sexe</div>
+          <div style={{display:"flex",gap:7}}>
+            {[["homme","Homme"],["femme","Femme"]].map(([k,l])=>{
+              const on=profile?.sex===k;
+              return(
+                <Tap key={k} label={l} onTap={()=>onUpdateConfig&&onUpdateConfig({sex:k})}
+                  style={{flex:1,padding:"11px 0",borderRadius:16,background:on?C.blue:C.s1,
+                    display:"flex",alignItems:"center",justifyContent:"center",transition:`all 180ms ${EO}`}}>
+                  <span style={{fontSize:13,fontWeight:600,color:on?"#1B1B1B":C.ink3}}>{l}</span></Tap>
+              );
+            })}
+          </div>
+          {(hasChanges||saved||saveErr)&&(
+            <Tap label="Enregistrer les mensurations" onTap={async()=>{
+              const r=await onUpdateConfig({weight_kg:w?Number(w):null,height_cm:h?Number(h):null,age:ag?Number(ag):null});
+              if(r&&r.error){setSaved(false);setSaveErr(true);setTimeout(()=>setSaveErr(false),2400);}
+              else{setSaveErr(false);setSaved(true);setTimeout(()=>setSaved(false),1600);}}}
+              style={{marginTop:13,height:48,borderRadius:18,background:saveErr?C.s4:(saved?C.blue:C.ink),
+                display:"flex",alignItems:"center",justifyContent:"center"}}>
+              <span style={{fontSize:14,fontWeight:600,color:saveErr?C.ink:(saved?"#1B1B1B":C.bg)}}>
+                {saveErr?"Erreur — réessayer":(saved?"Enregistré":"Enregistrer")}</span></Tap>
           )}
-          <Tap onTap={()=>onUpdateConfig({program_start:todayKey()})} style={{padding:"13px",borderRadius:12,background:C.s2,border:`1px solid ${C.div}`,display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{fontSize:14,fontWeight:600,color:C.blue}}>{profile?.program_start?"Recommencer un programme (12 sem)":"Démarrer un programme (12 sem)"}</span></Tap>
         </div>
-      </div>}
-      {/* Compte */}
-      <div style={{background:C.s1,borderRadius:22,overflow:"hidden",marginBottom:12}}>
-        <Tap onTap={onSignOut} style={{padding:"18px 20px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-          <span style={{fontSize:17,color:C.ink}}>Se déconnecter</span>
-          <span style={{fontSize:17,color:C.blue}}>›</span>
-        </Tap>
-      </div>
-      {/* Bibliotheque */}
-      <Tap onTap={onOpenLibrary} style={{background:C.s1,borderRadius:18,padding:"18px 20px",display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
-        <span style={{fontSize:17,color:C.ink}}>Bibliothèque d'exercices</span>
-        <span style={{fontSize:17,color:C.blue}}>›</span>
-      </Tap>
-      {/* Apparence */}
-      <div style={{fontSize:12,fontWeight:600,color:C.ink4,textTransform:"uppercase",letterSpacing:".1em",marginBottom:10,marginTop:20}}>Apparence</div>
-      <div style={{display:"flex",gap:9}}>
-        {[["light","Clair","Encre sur blanc"],["dark","Sombre","Blanc sur encre"]].map(([v,t,d])=>{
-          const on=((profile&&profile.theme)||"light")===v;
-          return (
-            <Tap key={v} label={t} onTap={()=>{onUpdateConfig&&onUpdateConfig({theme:v});play("clic");buzz(15);}}
-              style={{flex:1,padding:"14px 15px",borderRadius:18,background:on?C.blueDim:C.s1,
-                      border:`1px solid ${on?C.blue:C.s3}`,transition:`all 200ms ${EO}`}}>
-              <div style={{display:"flex",gap:6,marginBottom:9}}>
-                <span style={{width:20,height:20,borderRadius:6,background:v==="dark"?"#1B1B1B":"#FFFFFF",border:`1px solid ${C.s4}`}}/>
-                <span style={{width:20,height:20,borderRadius:6,background:v==="dark"?"#1C1C2B":"#F5F4FA",border:`1px solid ${C.s4}`}}/>
-                <span style={{width:20,height:20,borderRadius:6,background:"#C0B4FE"}}/>
-              </div>
-              <div style={{fontSize:15,fontWeight:600,color:C.ink}}>{t}</div>
-              <div style={{fontSize:12,color:C.ink4,marginTop:1}}>{d}</div>
-            </Tap>
-          );
-        })}
-      </div>
-      {/* Signaux */}
-      <div style={{fontSize:12,fontWeight:600,color:C.ink4,textTransform:"uppercase",letterSpacing:".1em",marginBottom:10,marginTop:20}}>Signaux</div>
-      {[
-        ["sound_on","Sons","Fin de repos, minute EMOM, fin de bloc"],
-        ["vibrate_on","Vibration","Utile en salle avec des écouteurs"],
-        ["countdown_on","Décompte 3·2·1","Trois clics avant la fin du repos"],
-      ].map(([k,t,d],i,arr)=>{
-        const on=profile?.[k]!==false;
-        return (
-          <Tap key={k} onTap={()=>{ const next=!on; onUpdateConfig&&onUpdateConfig({[k]:next}); if(next){unlockAudio();play(k==="countdown_on"?"tick":"cloche");} }}
-            style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:12,padding:"15px 17px",background:C.bg,border:`1px solid ${C.s2}`,
-              borderRadius:i===0?"14px 14px 0 0":i===arr.length-1?"0 0 14px 14px":0,
-              borderTop:i?`1px solid ${C.s2}`:"none",marginBottom:i===arr.length-1?0:0}}>
-            <div><div style={{fontSize:15,fontWeight:600,color:C.ink}}>{t}</div><div style={{fontSize:12,color:C.ink4,marginTop:2}}>{d}</div></div>
-            <div style={{width:46,height:28,borderRadius:999,background:on?C.blue:C.s4,position:"relative",transition:`background 200ms ${EO}`,flexShrink:0}}>
-              <div style={{position:"absolute",top:3,left:on?21:3,width:22,height:22,borderRadius:"50%",background:"#fff",transition:`left 200ms ${EO}`}}/>
-            </div>
-          </Tap>
-        );
-      })}
-      {/* Exclusions */}
-      <div style={{fontSize:12,fontWeight:600,color:C.ink4,textTransform:"uppercase",letterSpacing:".1em",marginBottom:10,marginTop:20}}>
-        Exercices exclus {excluded.length>0&&`· ${excluded.length}`}
-      </div>
-      <Tap onTap={()=>setShowLib(o=>!o)} style={{background:C.s1,borderRadius:showLib?"14px 14px 0 0":14,padding:"16px 20px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-        <span style={{fontSize:17,color:C.ink}}>Gérer les exclusions · {DB.length} exo</span>
-        <span style={{fontSize:17,color:C.blue,transform:showLib?"rotate(90deg)":"none",transition:`transform 200ms ${EO}`,display:"inline-block"}}>›</span>
-      </Tap>
-      {showLib&&(
-        <div style={{background:C.s1,borderRadius:"0 0 14px 14px",overflow:"hidden",marginBottom:12,maxHeight:340,overflowY:"auto"}}>
-          {DB.map(ex=>(
-            <div key={ex.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"12px 20px",borderTop:`1px solid ${C.s3}`,opacity:excluded.includes(ex.id)?.4:1}}>
-              <div>
-                <div style={{fontSize:14,fontWeight:500,color:C.ink}}>{ex.n}</div>
-                <div style={{fontSize:12,color:C.ink4}}>{EQ_LABELS[ex.eq]}</div>
-              </div>
-              <Tap onTap={()=>onToggleExclude(ex.id)} style={{padding:"5px 14px",borderRadius:999,border:`1px solid ${excluded.includes(ex.id)?C.green:C.div}`,background:excluded.includes(ex.id)?C.greenDim:"transparent",transition:`all 150ms ${EO}`}}>
-                <span style={{fontSize:12,fontWeight:600,color:excluded.includes(ex.id)?C.green:C.ink4}}>{excluded.includes(ex.id)?"Réactiver":"Exclure"}</span>
+
+        <div style={{...CARD,padding:"2px 17px",marginBottom:11}}>
+          <Line first label={profile?.program_start?"Recommencer un programme":"Démarrer un programme"}
+            value="12 semaines" onTap={()=>onUpdateConfig&&onUpdateConfig({program_start:todayKey()})}/>
+          <Line label="Refaire l'introduction" onTap={onRedoOnboarding}/>
+        </div>
+      </div>)}
+
+      {view==="reglages"&&(
+      <div key="reglages" style={{animation:`riseIn 300ms ${EO} both`}}>
+
+        <div style={{...CARD,padding:"16px 17px",marginBottom:11}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:10,marginBottom:11}}>
+            <span style={{fontSize:14,fontWeight:600,color:C.ink}}>Apparence</span>
+            <span style={PILL}>{((profile&&profile.theme)||"light")==="dark"?"Sombre":"Clair"}</span>
+          </div>
+          <div style={{display:"flex",gap:9}}>
+            {[["light","Clair","Encre sur blanc"],["dark","Sombre","Blanc sur encre"]].map(([v,t,d])=>{
+              const on=((profile&&profile.theme)||"light")===v;
+              return(
+                <Tap key={v} label={t} onTap={()=>{onUpdateConfig&&onUpdateConfig({theme:v});play("clic");buzz(15);}}
+                  style={{flex:1,padding:"13px 14px",borderRadius:18,background:on?C.blueDim:C.s1,
+                    border:`1px solid ${on?C.blue:"transparent"}`,transition:`all 200ms ${EO}`}}>
+                  <div style={{display:"flex",gap:5,marginBottom:9}}>
+                    <span style={{width:19,height:19,borderRadius:6,background:v==="dark"?"#1B1B1B":"#FFFFFF",border:`1px solid ${C.s4}`}}/>
+                    <span style={{width:19,height:19,borderRadius:6,background:v==="dark"?"#1C1C2B":"#F5F4FA",border:`1px solid ${C.s4}`}}/>
+                    <span style={{width:19,height:19,borderRadius:6,background:"#C0B4FE"}}/>
+                  </div>
+                  <div style={{fontSize:14,fontWeight:600,color:C.ink}}>{t}</div>
+                  <div style={{fontSize:11,color:C.ink4,marginTop:1}}>{d}</div>
+                </Tap>
+              );
+            })}
+          </div>
+        </div>
+
+        <div style={{...CARD,padding:"16px 17px",marginBottom:11}}>
+          <div style={{fontSize:14,fontWeight:600,color:C.ink,marginBottom:2}}>Signaux</div>
+          <div style={{fontSize:11.5,color:C.ink4,marginBottom:4}}>Ce que l'app te dit sans que tu regardes l'écran.</div>
+          {[["sound_on","Sons","Fin de repos, minute EMOM, fin de bloc"],
+            ["vibrate_on","Vibration","Utile en salle avec des écouteurs"],
+            ["countdown_on","Décompte 3·2·1","Trois clics avant la fin du repos"],
+          ].map(([k,t,d],i)=>{
+            const on=profile?.[k]!==false;
+            return(
+              <Tap key={k} label={t} onTap={()=>{const next=!on;onUpdateConfig&&onUpdateConfig({[k]:next});
+                if(next){unlockAudio();play(k==="countdown_on"?"tick":"cloche");}}}
+                style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:12,padding:"12px 0",
+                  borderTop:i?`1px solid ${C.s2}`:`1px solid ${C.s2}`}}>
+                <div style={{minWidth:0}}>
+                  <div style={{fontSize:14,fontWeight:500,color:C.ink}}>{t}</div>
+                  <div style={{fontSize:11,color:C.ink4,marginTop:1}}>{d}</div>
+                </div>
+                <div style={{width:44,height:26,borderRadius:999,background:on?C.blue:C.s3,position:"relative",
+                  transition:`background 200ms ${EO}`,flexShrink:0}}>
+                  <div style={{position:"absolute",top:3,left:on?21:3,width:20,height:20,borderRadius:"50%",
+                    background:"#fff",transition:`left 200ms ${EO}`,boxShadow:"0 1px 3px rgba(0,0,0,.25)"}}/>
+                </div>
               </Tap>
-            </div>
-          ))}
+            );
+          })}
         </div>
-      )}
-      {/* Reset */}
-      <div style={{background:C.s1,borderRadius:18,overflow:"hidden",marginTop:showLib?0:0}}>
-        <Tap onTap={()=>{if(window.confirm("Effacer toutes les données locales ?"))onReset();}} style={{padding:"18px 20px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-          <span style={{fontSize:17,color:C.red}}>Effacer les données</span>
-          <span style={{fontSize:17,color:C.red}}>›</span>
-        </Tap>
-      </div>
-      <div style={{fontSize:12,color:C.ink4,textAlign:"center",marginTop:28}}>SŌMA · {"S"+weekNumber()} · {DB.length} exercices · version {VERSION}</div>
+
+        <div style={{...CARD,padding:"2px 17px",marginBottom:11}}>
+          <Line first label="Bibliothèque d'exercices" value={DB.length} onTap={onOpenLibrary}/>
+          <Line label="Exercices exclus" value={excluded.length||"aucun"} onTap={()=>setShowLib(o=>!o)}/>
+        </div>
+        {showLib&&(
+          <div style={{...CARD,padding:"6px 17px",marginBottom:11,maxHeight:340,overflowY:"auto"}}>
+            {DB.map((ex,i)=>(
+              <div key={ex.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:10,
+                padding:"10px 0",borderTop:i?`1px solid ${C.s2}`:"none",opacity:excluded.includes(ex.id)?.45:1}}>
+                <div style={{minWidth:0}}>
+                  <div style={{fontSize:13.5,fontWeight:500,color:C.ink,whiteSpace:"nowrap",overflow:"hidden",
+                    textOverflow:"ellipsis"}}>{ex.n}</div>
+                  <div style={{fontSize:11,color:C.ink4}}>{EQ_LABELS[ex.eq]}</div>
+                </div>
+                <Tap label={excluded.includes(ex.id)?"Réactiver":"Exclure"} onTap={()=>onToggleExclude(ex.id)}
+                  style={{padding:"5px 13px",borderRadius:999,flexShrink:0,
+                    border:`1px solid ${excluded.includes(ex.id)?C.green:C.s3}`,
+                    background:excluded.includes(ex.id)?C.greenDim:"transparent"}}>
+                  <span style={{fontSize:11.5,fontWeight:600,color:excluded.includes(ex.id)?C.green:C.ink4}}>
+                    {excluded.includes(ex.id)?"Réactiver":"Exclure"}</span></Tap>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <div style={{...CARD,padding:"2px 17px",marginBottom:11}}>
+          <Line first label="Se déconnecter" onTap={onSignOut}/>
+          <Line label="Effacer les données" danger
+            onTap={()=>{if(window.confirm("Effacer toutes les données locales ?"))onReset();}}/>
+        </div>
+
+        <div style={{fontSize:11.5,color:C.ink4,textAlign:"center",padding:"6px 0 4px"}}>
+          SŌMA · {"S"+weekNumber()} · {DB.length} exercices · version {VERSION}</div>
+      </div>)}
     </div>
   );
 }
@@ -4745,6 +4901,7 @@ const NAV=[{id:"home",l:"Accueil"},{id:"seance",l:"Séances"},{id:"stats",l:"Sta
     </div>
   );
 }
+
 
 
 
