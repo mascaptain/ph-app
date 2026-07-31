@@ -6,6 +6,42 @@ import { DB } from "./catalog.js";
 // Apple dark system + Emil micro-interactions + Impeccable rules
 // OKLCH-inspired palette. One accent. No border-left hacks. No nested cards.
 // Letter-spacing floor: -0.03em on display. Body: 17px/1.47.
+// ─── ICONOGRAPHIE ───────────────────────────────────────────────────────────
+// Un seul jeu pour toute l'application : geometrique, filaire, trace de 1,6 sur une grille
+// de 24. Les icones etaient jusqu'ici dessinees au cas par cas avec des epaisseurs et des
+// styles differents selon l'ecran, ce qui se voyait des qu'on les mettait cote a cote.
+const ICONS={
+  // navigation
+  home:(<><rect x="3.5" y="3.5" width="7" height="7" rx="2.2"/><rect x="13.5" y="3.5" width="7" height="7" rx="2.2"/><rect x="3.5" y="13.5" width="7" height="7" rx="2.2"/><rect x="13.5" y="13.5" width="7" height="7" rx="2.2"/></>),
+  seance:(<><rect x="2.5" y="9" width="3.5" height="6" rx="1.4"/><rect x="18" y="9" width="3.5" height="6" rx="1.4"/><path d="M6 12h12"/><path d="M7.5 7.5v9"/><path d="M16.5 7.5v9"/></>),
+  stats:(<><rect x="3.5" y="13" width="4" height="7.5" rx="1.6"/><rect x="10" y="8" width="4" height="12.5" rx="1.6"/><rect x="16.5" y="4" width="4" height="16.5" rx="1.6"/></>),
+  settings:(<><circle cx="12" cy="8.5" r="3.6"/><path d="M4.6 20.2c.9-3.6 3.9-5.5 7.4-5.5s6.5 1.9 7.4 5.5"/></>),
+  // actions
+  back:(<path d="M14.5 5.5L8 12l6.5 6.5"/>),
+  close:(<><path d="M6 6l12 12"/><path d="M18 6L6 18"/></>),
+  info:(<><circle cx="12" cy="12" r="8.6"/><path d="M12 11v5.4"/><path d="M12 7.9v.1"/></>),
+  check:(<path d="M5 12.6l4.6 4.4L19 7.4"/>),
+  plus:(<><path d="M12 5.5v13"/><path d="M5.5 12h13"/></>),
+  minus:(<path d="M5.5 12h13"/>),
+  play:(<path d="M8 5.6l10 6.4-10 6.4z"/>),
+  pause:(<><rect x="7" y="5.5" width="3.4" height="13" rx="1.3"/><rect x="13.6" y="5.5" width="3.4" height="13" rx="1.3"/></>),
+  clock:(<><circle cx="12" cy="12" r="8.6"/><path d="M12 7.2V12l3.2 2"/></>),
+  flame:(<path d="M12 3.5c3.4 3 5.4 5.5 5.4 8.6a5.4 5.4 0 1 1-10.8 0c0-1.6.7-3 1.9-4.3.3 1.2.9 2 1.8 2.4-.2-2.6.4-4.7 1.7-6.7z"/>),
+  weight:(<><path d="M5.4 20.5l1.9-11h9.4l1.9 11z"/><circle cx="12" cy="6" r="2.6"/></>),
+  bell:(<><path d="M6.6 10a5.4 5.4 0 0 1 10.8 0c0 4 1.6 5.6 1.6 5.6H5s1.6-1.6 1.6-5.6z"/><path d="M10.3 19a2 2 0 0 0 3.4 0"/></>),
+  camera:(<><rect x="3" y="7" width="18" height="13" rx="3.4"/><circle cx="12" cy="13.5" r="3.4"/><path d="M8.5 7l1.4-2.4h4.2L15.5 7"/></>),
+  target:(<><circle cx="12" cy="12" r="8.6"/><circle cx="12" cy="12" r="4.4"/><circle cx="12" cy="12" r=".6"/></>),
+  swap:(<><path d="M4 8.5h13l-3-3"/><path d="M20 15.5H7l3 3"/></>),
+  chevron:(<path d="M9.5 5.5L16 12l-6.5 6.5"/>),
+  dot:(<circle cx="12" cy="12" r="2.4"/>),
+};
+const Icon=({name,size,stroke,fill,sw,style,title})=>(
+  <svg width={size||22} height={size||22} viewBox="0 0 24 24" fill={fill||"none"}
+    stroke={stroke||"currentColor"} strokeWidth={sw||1.6} strokeLinecap="round" strokeLinejoin="round"
+    style={style} aria-hidden={title?undefined:true} role={title?"img":undefined}>
+    {title?<title>{title}</title>:null}{ICONS[name]||ICONS.dot}</svg>
+);
+
 // ─── PALETTE ────────────────────────────────────────────────────────────────
 // Eerie Black 1B1B1B · Washed Black 343434 · Black Denim 1C1C2B · Primary C0B4FE · White.
 // Deux themes construits sur les MEMES cinq couleurs : le clair pose l'encre sur du blanc,
@@ -1362,7 +1398,7 @@ function CircuitPlayer({mode,exos,onClose,defMin,blocks,onAllDone,startBlock,log
     </div>
   );
   const NextUp=({label,ex})=> ex?(
-    <div style={{background:C.s1,borderRadius:14,padding:"12px 15px",display:"flex",justifyContent:"space-between",alignItems:"center",gap:10}}>
+    <div style={{background:C.s1,borderRadius:18,padding:"12px 15px",display:"flex",justifyContent:"space-between",alignItems:"center",gap:10}}>
       <span style={{fontSize:13,color:C.ink4,flexShrink:0}}>{label}</span>
       <span style={{fontSize:15,fontWeight:600,color:C.ink,textAlign:"right"}}>{ex.n}</span>
     </div>
@@ -1496,7 +1532,7 @@ function ExerciseRowCollapsed({ex,dayIdx,sDate,log,idx,onOpen,onReplace,doneSess
   const wlabel=w0>0?(w0===wn?`${w0} kg`:`${w0}→${wn} kg`):"PdC";
   const restLbl=ex.rest>0?(ex.rest>=60?fmtMSS(ex.rest):`${ex.rest}s`):null;
   return (
-    <div style={{display:"flex",alignItems:"center",gap:12,background:C.s1,borderRadius:14,padding:"12px 14px",marginBottom:10,border:`1px solid ${allDone?C.green:C.s3}`,animation:`fadeSlideIn 280ms ${EO} ${idx*35}ms both`}}>
+    <div style={{display:"flex",alignItems:"center",gap:12,background:C.s1,borderRadius:18,padding:"12px 14px",marginBottom:10,border:`1px solid ${allDone?C.green:C.s3}`,animation:`fadeSlideIn 280ms ${EO} ${idx*35}ms both`}}>
       <Tap onTap={(e)=>{
         // On note la position verticale de la carte avant d'ouvrir : l'ecran plein
         // s'agrandira depuis cet endroit plutot que depuis le centre.
@@ -1643,7 +1679,7 @@ function ExerciseFocus({ex,dayIdx,sDate,log,onLogSet,onClose,onNext,hasNext,idx,
               <div style={{fontSize:24,fontWeight:700,color:C.ink,letterSpacing:"-.02em"}}>{ex.n}</div>
               <div style={{fontSize:14,color:C.ink4,marginTop:5}}>{n} séries terminées</div>
             </div>
-            <div style={{background:C.s1,borderRadius:16,padding:"14px 16px",display:"flex",flexDirection:"column",gap:7}}>
+            <div style={{background:C.s1,borderRadius:22,padding:"14px 16px",display:"flex",flexDirection:"column",gap:7}}>
               {plan.map((_,i)=>(
                 <div key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
                   <span style={{fontSize:13,color:C.ink4}}>Série {i+1}</span>
@@ -1705,7 +1741,7 @@ function ExerciseFocus({ex,dayIdx,sDate,log,onLogSet,onClose,onNext,hasNext,idx,
               {step("+",()=>setReps(r=>r.map((v,i)=>i===cur?v+1:v)))}
             </div>
             {prevIdx<0&&lastPerf&&lastPerf.kg>0&&(
-              <div style={{background:C.s1,borderRadius:14,padding:"12px 15px",display:"flex",justifyContent:"space-between",alignItems:"center",gap:10}}>
+              <div style={{background:C.s1,borderRadius:18,padding:"12px 15px",display:"flex",justifyContent:"space-between",alignItems:"center",gap:10}}>
                 <span style={{fontSize:13,color:C.ink4}}>La dernière fois</span>
                 <span style={{fontSize:15,fontWeight:600,color:C.ink,fontVariantNumeric:"tabular-nums"}}>
                   {lastPerf.kg} kg{lastPerf.rpe?` · RPE ${lastPerf.rpe}`:""}
@@ -1714,7 +1750,7 @@ function ExerciseFocus({ex,dayIdx,sDate,log,onLogSet,onClose,onNext,hasNext,idx,
               </div>
             )}
             {prevIdx>=0&&(
-              <div style={{background:C.s1,borderRadius:14,padding:"12px 15px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+              <div style={{background:C.s1,borderRadius:18,padding:"12px 15px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
                 <span style={{fontSize:13,color:C.ink4}}>Série précédente</span>
                 <span style={{fontSize:15,fontWeight:600,color:C.ink,fontVariantNumeric:"tabular-nums"}}>{loads[prevIdx]>0?`${loads[prevIdx]} kg`:"PdC"} × {reps[prevIdx]}</span>
               </div>
@@ -2044,7 +2080,7 @@ function WeighInCard({weighIns,onSave}) {
   if(done) {
     const delta=prev?Math.round((Number(done.weight_kg)-Number(prev.weight_kg))*10)/10:null;
     return (
-      <div style={{background:C.s1,borderRadius:16,padding:"14px 16px",marginBottom:12,display:"flex",justifyContent:"space-between",alignItems:"center",gap:10}}>
+      <div style={{background:C.s1,borderRadius:22,padding:"14px 16px",marginBottom:12,display:"flex",justifyContent:"space-between",alignItems:"center",gap:10}}>
         <div>
           <div style={{fontSize:12,fontWeight:600,color:C.ink4,textTransform:"uppercase",letterSpacing:".1em"}}>Poids de la semaine</div>
           <div style={{fontSize:13,color:C.ink3,marginTop:3}}>
@@ -2057,7 +2093,7 @@ function WeighInCard({weighIns,onSave}) {
     );
   }
   return (
-    <div style={{background:C.s1,borderRadius:16,padding:"16px",marginBottom:12,animation:`riseIn 320ms ${EO} both`}}>
+    <div style={{background:C.s1,borderRadius:22,padding:"16px",marginBottom:12,animation:`riseIn 320ms ${EO} both`}}>
       <div style={{fontSize:12,fontWeight:600,color:C.ink4,textTransform:"uppercase",letterSpacing:".1em",marginBottom:4}}>Pesée de la semaine</div>
       <div style={{fontSize:13,color:C.ink3,marginBottom:12}}>Une fois par semaine suffit — de préférence le lundi, à jeun.</div>
       <div style={{display:"flex",gap:10,alignItems:"center"}}>
@@ -2077,7 +2113,7 @@ function WeightChart({weighIns,accent}) {
   const pts=(weighIns||[]).slice().sort((a,b)=>String(a.date).localeCompare(String(b.date)))
     .map(w=>({d:w.date,v:Number(w.weight_kg)})).filter(x=>x.v>0);
   if(pts.length<2) return (
-    <div style={{background:C.s1,borderRadius:16,padding:"18px",marginBottom:16}}>
+    <div style={{background:C.s1,borderRadius:22,padding:"18px",marginBottom:16}}>
       <div style={{fontSize:14,fontWeight:600,color:C.ink,marginBottom:4}}>Progression du poids</div>
       <div style={{fontSize:13,color:C.ink4}}>Une deuxième pesée et la courbe apparaît.</div>
     </div>
@@ -2092,7 +2128,7 @@ function WeightChart({weighIns,accent}) {
   const area=`${line} L${x(pts.length-1).toFixed(1)},${H} L${x(0).toFixed(1)},${H} Z`;
   const first=pts[0].v,lastV=pts[pts.length-1].v,delta=Math.round((lastV-first)*10)/10;
   return (
-    <div style={{background:C.s1,borderRadius:16,padding:"18px",marginBottom:16}}>
+    <div style={{background:C.s1,borderRadius:22,padding:"18px",marginBottom:16}}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",marginBottom:2}}>
         <span style={{fontSize:14,fontWeight:600,color:C.ink}}>Progression du poids</span>
         <span style={{fontSize:20,fontWeight:700,color:C.ink,fontVariantNumeric:"tabular-nums"}}>{lastV} kg</span>
@@ -2133,7 +2169,11 @@ function WeekSummary({sessions,accent,trainingDaysPerWeek}) {
           const date=weekDates[i];const done=sessions.find(s=>s.date===date);const isToday=date===todayKey();
           return(
             <div key={d} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:5}}>
-              <div style={{width:"100%",aspectRatio:"1",borderRadius:"50%",background:done?accent||C.blue:isToday?C.blueDim:"transparent",border:`2px solid ${done?accent||C.blue:isToday?C.blue:C.div}`,display:"flex",alignItems:"center",justifyContent:"center",transition:`all 300ms ${EO}`}}>
+              <div style={{width:"100%",aspectRatio:"1",borderRadius:14,
+                background:done?(accent||C.blue):(isToday?C.blueDim:"transparent"),
+                backgroundImage:(!done&&!isToday)?`repeating-linear-gradient(115deg, ${C.bg} 0 3px, ${C.s2} 3px 7px)`:"none",
+                border:`1.5px solid ${done?(accent||C.blue):isToday?C.blue:C.s2}`,
+                display:"flex",alignItems:"center",justifyContent:"center",transition:`all 300ms ${EO}`}}>
                 {done&&<span style={{fontSize:10,fontWeight:700,color:"#000"}}>✓</span>}
                 {isToday&&!done&&<div style={{width:5,height:5,borderRadius:"50%",background:C.lime}}/>}
               </div>
@@ -2283,7 +2323,7 @@ function SkillsOctagon({sessions,profile}) {
   const poly=axes.map((ax,i)=>pt(i,ax[1]/100*R).join(",")).join(" ");
   const grid=[25,50,75,100].map(g=>axes.map((_,i)=>pt(i,g/100*R).join(",")).join(" "));
   return (
-    <div style={{background:C.s1,borderRadius:16,padding:"20px",marginBottom:16}}>
+    <div style={{background:C.s1,borderRadius:22,padding:"20px",marginBottom:16}}>
       <div style={{fontSize:12,fontWeight:600,color:C.ink4,textTransform:"uppercase",letterSpacing:".1em",marginBottom:4}}>Octogone de compétences</div>
       <div style={{fontSize:13,color:C.ink4,marginBottom:4}}>Tes 8 qualités, calculées sur ton historique.</div>
       <svg viewBox="0 0 300 268" style={{width:"100%",height:"auto",display:"block"}}>
@@ -2314,7 +2354,7 @@ function StatsTab({sessions,weights,accent,onOpenPhotos,pinnedPBs,onManagePBs,ac
       <WeekSummary sessions={sessions} accent={accent} trainingDaysPerWeek={trainingDaysPerWeek}/>
       <SkillsOctagon sessions={sessions} profile={profile}/>
       {/* Hero card: volume total, mise en avant */}
-      <div style={{background:C.blueDim,border:`1px solid ${C.blue}`,borderRadius:18,padding:"20px",marginBottom:10,display:"flex",alignItems:"center",gap:16}}>
+      <div style={{background:C.blueDim,border:`1px solid ${C.blue}`,borderRadius:24,padding:"20px",marginBottom:10,display:"flex",alignItems:"center",gap:16}}>
         <div style={{width:44,height:44,borderRadius:12,background:C.bg,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={C.ink} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M6 7v10"/><path d="M18 7v10"/><path d="M4 10v4"/><path d="M20 10v4"/><path d="M6 12h12"/></svg>
         </div>
@@ -2330,7 +2370,7 @@ function StatsTab({sessions,weights,accent,onOpenPhotos,pinnedPBs,onManagePBs,ac
           {l:"Score moy.",v:avgScore||"—",icon:(<><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></>)},
           {l:"Cette semaine",v:`${sessions.filter(s=>{const d=new Date();const dow=d.getDay()===0?6:d.getDay()-1;const wd=new Date(d);wd.setDate(d.getDate()-dow);return s.date>=localDateKey(wd);}).length}`,icon:(<><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18"/><path d="M8 3v4"/><path d="M16 3v4"/><path d="M9 15l2 2 4-4"/></>)},
         ].map(({l,v,icon})=>(
-          <div key={l} style={{background:C.s1,borderRadius:16,padding:"14px 10px",display:"flex",flexDirection:"column",alignItems:"flex-start",gap:8}}>
+          <div key={l} style={{background:C.s1,borderRadius:22,padding:"14px 10px",display:"flex",flexDirection:"column",alignItems:"flex-start",gap:8}}>
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={C.ink4} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">{icon}</svg>
             <div>
               <div style={{fontSize:20,fontWeight:800,color:C.ink,letterSpacing:"-.02em"}}>{v}</div>
@@ -2341,7 +2381,7 @@ function StatsTab({sessions,weights,accent,onOpenPhotos,pinnedPBs,onManagePBs,ac
       </div>
       {/* Volume chart */}
       {volumeByWeek.length>1&&(
-        <div style={{background:C.s1,borderRadius:16,padding:"20px",marginBottom:16}}>
+        <div style={{background:C.s1,borderRadius:22,padding:"20px",marginBottom:16}}>
           <div style={{fontSize:14,fontWeight:600,color:C.ink,marginBottom:4}}>Volume hebdomadaire</div>
           <div style={{fontSize:12,color:C.ink4,marginBottom:16}}>Tonnes soulevées par semaine</div>
           <ProgressLine data={volumeByWeek} color={accent||C.blue}/>
@@ -2360,7 +2400,7 @@ function StatsTab({sessions,weights,accent,onOpenPhotos,pinnedPBs,onManagePBs,ac
         const step=sk.steps[as.stepIndex]||sk.steps[sk.steps.length-1];
         const pct=Math.round(((as.stepIndex)/sk.steps.length)*100);
         return(
-          <div key={as.skillId} style={{background:C.s1,borderRadius:16,padding:"16px",marginBottom:10}}>
+          <div key={as.skillId} style={{background:C.s1,borderRadius:22,padding:"16px",marginBottom:10}}>
             <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:8}}>
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={C.ink3} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">{sk.icon}</svg>
               <div style={{flex:1}}>
@@ -2379,7 +2419,7 @@ function StatsTab({sessions,weights,accent,onOpenPhotos,pinnedPBs,onManagePBs,ac
       </div>
       {pbs.length===0?<div style={{textAlign:"center",padding:"32px 0",fontSize:15,color:C.ink4}}>Réalise des séances avec charges pour débloquer tes PB.</div>:
         displayedPBs.map((pb,i)=>(
-          <div key={pb.id||i} style={{background:C.s1,borderRadius:14,padding:"14px 18px",marginBottom:8,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+          <div key={pb.id||i} style={{background:C.s1,borderRadius:18,padding:"14px 18px",marginBottom:8,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
             <div style={{display:"flex",alignItems:"center",gap:10}}>
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={C.ink4} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">{PBCAT_ICON[PBCAT[Array.isArray(pb.eq)?pb.eq[0]:pb.eq]]||PBCAT_ICON.Autre}</svg>
               <div><div style={{fontSize:15,fontWeight:600,color:C.ink}}>{pb.n}</div><div style={{fontSize:13,color:C.ink3}}>{pb.m}</div></div>
@@ -2390,7 +2430,7 @@ function StatsTab({sessions,weights,accent,onOpenPhotos,pinnedPBs,onManagePBs,ac
       {(()=>{const B=computeBadges(sessions);const earned=B.filter(b=>b.ok).length;
       const cats=[...new Set(B.map(b=>b.cat))];
       return(
-      <div style={{marginTop:24,background:C.s1,borderRadius:16,padding:"16px"}}>
+      <div style={{marginTop:24,background:C.s1,borderRadius:22,padding:"16px"}}>
         <div style={{display:"flex",alignItems:"baseline",justifyContent:"space-between",marginBottom:12}}>
           <span style={{fontSize:11,fontWeight:700,color:C.ink3,textTransform:"uppercase",letterSpacing:".15em"}}>Récompenses</span>
           {onOpenRewards&&<Tap onTap={onOpenRewards} style={{padding:"6px 12px",borderRadius:980,background:C.s2}}><span style={{fontSize:12,fontWeight:600,color:C.ink3}}>Voir tout ({earned}/{B.length}) ›</span></Tap>}
@@ -2443,7 +2483,7 @@ function PBManagerSheet({sessions,pinnedPBs,onSave,onClose}) {
               const on=sel.includes(pb.id);
               const disabled=!on&&sel.length>=5;
               return(
-                <Tap key={pb.id} onTap={()=>!disabled&&toggle(pb.id)} style={{display:"flex",justifyContent:"space-between",alignItems:"center",background:C.s1,borderRadius:14,padding:"14px 16px",marginBottom:8,opacity:disabled?0.4:1}}>
+                <Tap key={pb.id} onTap={()=>!disabled&&toggle(pb.id)} style={{display:"flex",justifyContent:"space-between",alignItems:"center",background:C.s1,borderRadius:18,padding:"14px 16px",marginBottom:8,opacity:disabled?0.4:1}}>
                   <div><div style={{fontSize:15,fontWeight:600,color:C.ink}}>{pb.n}</div><div style={{fontSize:13,color:C.ink3}}>{pb.pbKg===0?"BW":pb.pbKg+"kg"}</div></div>
                   <div style={{width:44,height:26,borderRadius:980,background:on?C.blue:C.s3,position:"relative",transition:`background 150ms ${EO}`,flexShrink:0}}>
                     <div style={{position:"absolute",top:2,left:on?20:2,width:22,height:22,borderRadius:"50%",background:"#fff",transition:`left 150ms ${EO}`}}/>
@@ -2523,7 +2563,7 @@ function SkillManagerSheet({activeSkills,onSave,onClose}) {
           const existing=(activeSkills||[]).find(s=>s.skillId===sk.id);
           const stepIdx=existing?existing.stepIndex:0;
           return(
-            <Tap key={sk.id} onTap={()=>!disabled&&toggle(sk.id)} style={{display:"flex",alignItems:"center",gap:12,background:C.s1,borderRadius:14,padding:"14px 16px",marginBottom:8,opacity:disabled?0.4:1,border:`1.5px solid ${on?C.blue:"transparent"}`}}>
+            <Tap key={sk.id} onTap={()=>!disabled&&toggle(sk.id)} style={{display:"flex",alignItems:"center",gap:12,background:C.s1,borderRadius:18,padding:"14px 16px",marginBottom:8,opacity:disabled?0.4:1,border:`1.5px solid ${on?C.blue:"transparent"}`}}>
               <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={C.ink3} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" style={{flexShrink:0}}>{sk.icon}</svg>
               <div style={{flex:1}}>
                 <div style={{fontSize:15,fontWeight:600,color:C.ink}}>{sk.name}</div>
@@ -2588,7 +2628,7 @@ function PhotoProgress({uid,photos,urls,onSavePhotos,onClose}) {
         <Tap onTap={onClose} style={{width:40,height:40,borderRadius:10,background:C.s2,display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{fontSize:14,color:C.ink3}}>✕</span></Tap>
       </div>
       <div style={{flex:1,overflowY:"auto",padding:"0 20px 24px"}}>
-        <div style={{background:C.s1,borderRadius:16,padding:"18px",marginBottom:16}}>
+        <div style={{background:C.s1,borderRadius:22,padding:"18px",marginBottom:16}}>
           <div style={{fontSize:14,fontWeight:600,color:C.ink,marginBottom:14}}>Ajouter une photo</div>
           <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:14}}>
             <span style={{fontSize:13,color:C.ink3,width:46}}>Date</span>
@@ -2600,7 +2640,7 @@ function PhotoProgress({uid,photos,urls,onSavePhotos,onClose}) {
           </div>
         </div>
         {keys.length>=2&&(
-          <div style={{background:C.s1,borderRadius:16,padding:"18px",marginBottom:16}}>
+          <div style={{background:C.s1,borderRadius:22,padding:"18px",marginBottom:16}}>
             <div style={{fontSize:14,fontWeight:600,color:C.ink,marginBottom:4}}>Avant / Après</div>
             <div style={{fontSize:12,color:C.ink4,marginBottom:14}}>{gap} jours d'écart</div>
             <div style={{display:"flex",gap:10}}>
@@ -2697,7 +2737,7 @@ function HistoryTab({sessions,onSelect,accent,onOpenPhotos,photos:photoMap,urls}
         const prog=PROGRAM.find(p=>p.day===s.day);
         const label=s.dayLabel||prog?.label||s.day||"Séance";
         return(
-          <Tap key={i} onTap={()=>onSelect(s)} style={{background:C.s1,borderRadius:16,padding:"16px 18px",marginBottom:10}}>
+          <Tap key={i} onTap={()=>onSelect(s)} style={{background:C.s1,borderRadius:22,padding:"16px 18px",marginBottom:10}}>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:8}}>
               <div>
                 <div style={{fontSize:17,fontWeight:600,color:C.ink}}>{label}</div>
@@ -2804,7 +2844,7 @@ function SettingsTab({user,excluded,onToggleExclude,onSignOut,onReset,onOpenLibr
         </div>
       </div>
       {/* Mon programme */}
-      {onUpdateConfig&&<div style={{background:C.s1,borderRadius:16,padding:"20px",marginBottom:12}}>
+      {onUpdateConfig&&<div style={{background:C.s1,borderRadius:22,padding:"20px",marginBottom:12}}>
         <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:16,gap:8}}><span style={{fontSize:14,fontWeight:600,color:C.ink}}>Mon programme</span>{onOpenScheduleEditor&&<Tap onTap={onOpenScheduleEditor} style={{padding:"6px 12px",borderRadius:980,background:C.s2}}><span style={{fontSize:12,fontWeight:600,color:C.ink3}}>Modifier les séances ›</span></Tap>}</div>
         <div style={{fontSize:12,fontWeight:600,color:C.ink4,textTransform:"uppercase",letterSpacing:".08em",marginBottom:8}}>Objectif actuel</div>
         <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",background:C.s1,border:`1px solid ${C.s3}`,borderRadius:14,padding:"14px 16px",marginBottom:18}}>
@@ -2851,14 +2891,14 @@ function SettingsTab({user,excluded,onToggleExclude,onSignOut,onReset,onOpenLibr
         </div>
       </div>}
       {/* Compte */}
-      <div style={{background:C.s1,borderRadius:16,overflow:"hidden",marginBottom:12}}>
+      <div style={{background:C.s1,borderRadius:22,overflow:"hidden",marginBottom:12}}>
         <Tap onTap={onSignOut} style={{padding:"18px 20px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
           <span style={{fontSize:17,color:C.ink}}>Se déconnecter</span>
           <span style={{fontSize:17,color:C.blue}}>›</span>
         </Tap>
       </div>
       {/* Bibliotheque */}
-      <Tap onTap={onOpenLibrary} style={{background:C.s1,borderRadius:14,padding:"18px 20px",display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+      <Tap onTap={onOpenLibrary} style={{background:C.s1,borderRadius:18,padding:"18px 20px",display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
         <span style={{fontSize:17,color:C.ink}}>Bibliothèque d'exercices</span>
         <span style={{fontSize:17,color:C.blue}}>›</span>
       </Tap>
@@ -2926,13 +2966,13 @@ function SettingsTab({user,excluded,onToggleExclude,onSignOut,onReset,onOpenLibr
         </div>
       )}
       {/* Reset */}
-      <div style={{background:C.s1,borderRadius:14,overflow:"hidden",marginTop:showLib?0:0}}>
+      <div style={{background:C.s1,borderRadius:18,overflow:"hidden",marginTop:showLib?0:0}}>
         <Tap onTap={()=>{if(window.confirm("Effacer toutes les données locales ?"))onReset();}} style={{padding:"18px 20px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
           <span style={{fontSize:17,color:C.red}}>Effacer les données</span>
           <span style={{fontSize:17,color:C.red}}>›</span>
         </Tap>
       </div>
-      <div style={{fontSize:12,color:C.ink4,textAlign:"center",marginTop:28}}>SŌMA · {"S"+weekNumber()} · {DB.length} exercices · build 23.79a</div>
+      <div style={{fontSize:12,color:C.ink4,textAlign:"center",marginTop:28}}>SŌMA · {"S"+weekNumber()} · {DB.length} exercices · build 23.80a</div>
     </div>
   );
 }
@@ -3306,9 +3346,9 @@ function OnboardingScreen({user,onDone,onClose}) {
         {step===1 && LEVELS.map(([k,tt,d])=>(<Tap key={k} onTap={()=>setLevel(k)} style={card(level===k)}><div><div style={ttl(level===k)}>{tt}</div><div style={dsc(level===k)}>{d}</div></div>{chk(level===k)}</Tap>))}
         {step===2 && EQUIP.map(([k,tt])=>(<Tap key={k} onTap={()=>toggleEq(k)} style={card(equip.includes(k))}><div style={ttl(equip.includes(k))}>{tt}</div>{chk(equip.includes(k))}</Tap>))}
         {step===3 && FREQS.map(f=>(<Tap key={f} onTap={()=>setFreq(f)} style={card(freq===f)}><div style={ttl(freq===f)}>{f} jours / semaine</div>{chk(freq===f)}</Tap>))}
-        {step===4 && (<div style={{display:"flex",alignItems:"center",gap:14,background:C.s1,borderRadius:16,padding:"20px",border:`1px solid ${C.s3}`}}><input value={weight} onChange={e=>setWeight(e.target.value.replace(/[^0-9.]/g,""))} inputMode="decimal" placeholder="75" style={{flex:1,background:"transparent",border:"none",outline:"none",color:C.ink,fontSize:32,fontWeight:700,fontFamily:F,width:"100%"}}/><span style={{fontSize:18,color:C.ink4}}>kg</span></div>)}
+        {step===4 && (<div style={{display:"flex",alignItems:"center",gap:14,background:C.s1,borderRadius:22,padding:"20px",border:`1px solid ${C.s3}`}}><input value={weight} onChange={e=>setWeight(e.target.value.replace(/[^0-9.]/g,""))} inputMode="decimal" placeholder="75" style={{flex:1,background:"transparent",border:"none",outline:"none",color:C.ink,fontSize:32,fontWeight:700,fontFamily:F,width:"100%"}}/><span style={{fontSize:18,color:C.ink4}}>kg</span></div>)}
         {step===5 && (<div>
-          <div style={{background:C.s1,borderRadius:16,padding:"20px",border:`1px solid ${C.s3}`,marginBottom:12}}>
+          <div style={{background:C.s1,borderRadius:22,padding:"20px",border:`1px solid ${C.s3}`,marginBottom:12}}>
             <input type="date" value={startDate} onChange={e=>setStartDate(e.target.value)} style={{width:"100%",background:"transparent",border:"none",outline:"none",color:C.ink,fontSize:20,fontWeight:700,fontFamily:F}}/>
           </div>
           <Tap onTap={()=>setStartDate(todayKey())} style={{padding:"12px 16px",borderRadius:12,background:startDate===todayKey()?C.blueDim:C.s1,border:`1px solid ${startDate===todayKey()?C.blue:C.s3}`,display:"inline-flex"}}><span style={{fontSize:13,fontWeight:600,color:startDate===todayKey()?C.blue:C.ink3}}>Aujourd'hui</span></Tap>
@@ -3982,13 +4022,6 @@ export default function SomaApp() {
     return (nGrouped>0&&nGrouped===exos.length)?label:`${base} + ${label}`;
   })();
   const absExos=aiOverride?.abs||day?.abs||[];
-  const NAV_ICONS={
-  home:(<><path d="M3 11l9-8 9 8"/><path d="M5 10v10a1 1 0 0 0 1 1h3v-6h6v6h3a1 1 0 0 0 1-1V10"/></>),
-  seance:(<><path d="M6.5 6.5l11 11"/><path d="M21 21l-1-1"/><path d="M3 3l1 1"/><path d="M18 22l4-4"/><path d="M2 6l4-4"/><path d="M3 10l7-7"/><path d="M14 21l7-7"/></>),
-  stats:(<><path d="M3 3v18h18"/><rect x="7" y="10" width="3" height="7"/><rect x="12" y="6" width="3" height="11"/><rect x="17" y="13" width="3" height="4"/></>),
-  history:(<><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></>),
-  settings:(<><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 4-6 8-6s8 2 8 6"/></>)
-};
 const NAV=[{id:"home",l:"Accueil"},{id:"seance",l:"Séances"},{id:"stats",l:"Stats"},{id:"settings",l:"Profil"}];
 
   return(
@@ -4023,6 +4056,14 @@ const NAV=[{id:"home",l:"Accueil"},{id:"seance",l:"Séances"},{id:"stats",l:"Sta
         .tabin>*:nth-child(7){animation-delay:250ms}  .tabin>*:nth-child(8){animation-delay:275ms}
         .tabin>*:nth-child(n+9){animation-delay:300ms}
         .themed{transition:background-color 280ms cubic-bezier(.23,1,.32,1),color 280ms cubic-bezier(.23,1,.32,1)}
+        /* Responsive : jamais de debordement horizontal, quelle que soit la largeur, et un
+           peu plus d'air sur les grands ecrans sans casser la lecture en colonne. */
+        html,body{overflow-x:hidden;max-width:100%}
+        img,svg{max-width:100%}
+        @media (min-width:820px){ .tabin{padding-inline:8px} }
+        @media (max-width:340px){
+          .tabin{font-size:.96em}
+        }
         [role="button"]:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{
           outline:2px solid ${C.ink};outline-offset:3px;border-radius:10px}
         [role="button"]:focus:not(:focus-visible){outline:none}
@@ -4091,7 +4132,7 @@ const NAV=[{id:"home",l:"Accueil"},{id:"seance",l:"Séances"},{id:"stats",l:"Sta
       )}
 
       {/* CONTENT */}
-      <div style={{paddingBottom:80}}>
+      <div style={{paddingBottom:104}}>
         <TabContent tab={tab} prevTab={prevTab}>
           {tab==="home"&&<HomeTab profile={profile} streak={streak} sessions={sessions} weights={weights} todaySession={todaySessionForHome} accent={accent} trainingDaysPerWeek={trainingDaysPerWeek} weighIns={weighIns} onSaveWeighIn={saveWeighIn} onStartToday={()=>{setDayIdx(todayIdx());switchTab("seance");}}/>}
           {tab==="seance"&&(
@@ -4207,7 +4248,7 @@ const NAV=[{id:"home",l:"Accueil"},{id:"seance",l:"Séances"},{id:"stats",l:"Sta
                     {sessionMode!=="classique"&&!locked&&<Tap onTap={()=>setShowCircuit(true)} style={{display:"flex",alignItems:"center",justifyContent:"center",gap:8,padding:"14px",borderRadius:12,background:C.blueDim,border:`1px solid ${C.blue}`}}><span style={{fontSize:15}}>⏱</span><span style={{fontSize:15,fontWeight:700,color:C.blue}}>Démarrer le circuit {sessionMode==="amrap"?"AMRAP":"EMOM"}</span></Tap>}
                   </div>}
                   <div>
-                    {day.metcon&&!locked&&<div style={{marginBottom:16}}><div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}><span style={{fontSize:13,fontWeight:700,color:C.ink}}>Séance {sessionMode==="amrap"?"AMRAP":"EMOM"} · {day.blocks.length} blocs</span><span style={{fontSize:13,fontWeight:700,color:"#000",background:C.blue,padding:"2px 10px",borderRadius:8}}>~{day.totalMin} min</span></div><div style={{fontSize:12,color:C.ink4,marginBottom:10}}>Touchez un bloc pour le démarrer</div>{day.blocks.map((bl,bi)=>(<Tap key={bi} onTap={()=>{if(locked)return;setCircuitStart(bi);setShowCircuit(true);}} style={{marginBottom:12,background:C.s1,borderRadius:14,padding:"12px 14px"}}><div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}><span style={{fontSize:14,fontWeight:800,color:C.ink}}>{bl.label}</span><span style={{fontSize:12,fontWeight:600,color:C.ink3}}>{bl.kind==="emom"?bl.durationMin+" min · "+bl.rounds+" tours":bl.durationMin+" min"}</span></div>{bl.exercises.map((ex,ei)=>(<div key={ei} style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"5px 0",borderTop:ei?`1px solid ${C.s2}`:"none"}}><span style={{fontSize:14,color:C.ink2}}>{bl.kind==="emom"?("Min "+(ei+1)+" · "):""}{ex.n}</span><span style={{fontSize:13,fontWeight:600,color:C.ink3}}>{ex.kg>0?ex.kg+"kg · ":""}{ex.reps}{bl.kind==="emom"?"/min":"/tour"}</span></div>))}</Tap>))}</div>}
+                    {day.metcon&&!locked&&<div style={{marginBottom:16}}><div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}><span style={{fontSize:13,fontWeight:700,color:C.ink}}>Séance {sessionMode==="amrap"?"AMRAP":"EMOM"} · {day.blocks.length} blocs</span><span style={{fontSize:13,fontWeight:700,color:"#000",background:C.blue,padding:"2px 10px",borderRadius:8}}>~{day.totalMin} min</span></div><div style={{fontSize:12,color:C.ink4,marginBottom:10}}>Touchez un bloc pour le démarrer</div>{day.blocks.map((bl,bi)=>(<Tap key={bi} onTap={()=>{if(locked)return;setCircuitStart(bi);setShowCircuit(true);}} style={{marginBottom:12,background:C.s1,borderRadius:18,padding:"12px 14px"}}><div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}><span style={{fontSize:14,fontWeight:800,color:C.ink}}>{bl.label}</span><span style={{fontSize:12,fontWeight:600,color:C.ink3}}>{bl.kind==="emom"?bl.durationMin+" min · "+bl.rounds+" tours":bl.durationMin+" min"}</span></div>{bl.exercises.map((ex,ei)=>(<div key={ei} style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"5px 0",borderTop:ei?`1px solid ${C.s2}`:"none"}}><span style={{fontSize:14,color:C.ink2}}>{bl.kind==="emom"?("Min "+(ei+1)+" · "):""}{ex.n}</span><span style={{fontSize:13,fontWeight:600,color:C.ink3}}>{ex.kg>0?ex.kg+"kg · ":""}{ex.reps}{bl.kind==="emom"?"/min":"/tour"}</span></div>))}</Tap>))}</div>}
                     {!day.metcon&&groupBlocks(exos,effMode).map((blk,bi)=>(
                       <div key={bi} style={{marginBottom:16}}>
                         <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10,paddingLeft:2}}>
@@ -4292,15 +4333,23 @@ const NAV=[{id:"home",l:"Accueil"},{id:"seance",l:"Séances"},{id:"stats",l:"Sta
       )}
 
       {/* BOTTOM NAV */}
-      <div style={{position:"fixed",bottom:0,left:0,right:0,zIndex:Z.sticky+10,background:"rgba(255,255,255,.96)",backdropFilter:"blur(24px)",WebkitBackdropFilter:"blur(24px)",borderTop:`1px solid ${C.s3}`}}>
-        <div style={{maxWidth:600,margin:"0 auto",display:"flex",paddingBottom:"env(safe-area-inset-bottom)"}}>
+      {/* Barre flottante : elle etait collee au bord bas, pleine largeur et separee du contenu
+          par un filet. Elle devient une pastille posee SUR la page, dans le meme langage de
+          cartes que le reste, avec l'onglet actif en carre sombre. */}
+      <div style={{position:"fixed",left:0,right:0,bottom:0,zIndex:Z.sticky+10,display:"flex",justifyContent:"center",
+                   padding:"0 16px calc(14px + env(safe-area-inset-bottom))",pointerEvents:"none"}}>
+        <div style={{pointerEvents:"auto",display:"flex",gap:4,padding:6,borderRadius:26,width:"100%",maxWidth:340,
+                     background:C.bg==="#FFFFFF"?"rgba(255,255,255,.86)":"rgba(28,28,43,.86)",
+                     backdropFilter:"blur(22px)",WebkitBackdropFilter:"blur(22px)",
+                     border:`1px solid ${C.s2}`,boxShadow:`0 10px 30px ${C.ink5}`}}>
         {NAV.map(({id,l})=>{
           const on=tab===id;
-          const ic=NAV_ICONS[id]||NAV_ICONS.seance;
           return (
-          <Tap key={id} onTap={()=>switchTab(id)} style={{flex:1,padding:"9px 4px calc(8px + env(safe-area-inset-bottom))",display:"flex",flexDirection:"column",alignItems:"center",gap:4}}>
-            <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke={on?accent:C.ink4} strokeWidth={on?2.4:2} strokeLinecap="round" strokeLinejoin="round" style={{transition:`stroke 200ms ${EO}`}}>{ic}</svg>
-            <span style={{fontSize:11.5,fontWeight:on?700:500,color:on?C.ink:C.ink4,transition:`color 200ms ${EO}`}}>{l}</span>
+          <Tap key={id} label={l} onTap={()=>switchTab(id)}
+            style={{flex:1,height:46,borderRadius:18,display:"flex",alignItems:"center",justifyContent:"center",
+                    background:on?C.ink:"transparent",transition:`background 240ms ${EO}`}}>
+            <Icon name={id} size={21} stroke={on?C.bg:C.ink4} sw={on?1.8:1.6}
+                  style={{transition:`stroke 220ms ${EO}`}} title={l}/>
           </Tap>);
         })}
         </div>
@@ -4337,4 +4386,5 @@ const NAV=[{id:"home",l:"Accueil"},{id:"seance",l:"Séances"},{id:"stats",l:"Sta
     </div>
   );
 }
+
 
