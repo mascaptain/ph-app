@@ -69,14 +69,20 @@ const LIGHT = {
   s4:      "#CFC9E7",  // bord marque
   div:     "#E2DFF0",
   ink:     "#1B1B1B",              // texte           — Eerie
-  ink2:    "rgba(27,27,27,.82)",
-  ink3:    "rgba(27,27,27,.62)",   // texte second
-  ink4:    "rgba(27,27,27,.42)",   // texte tertiaire
-  ink5:    "rgba(27,27,27,.16)",   // ombre
+  // Texte secondaire teinte Denim : c'est ce qui donne au theme clair sa note
+  // bleu marine sans toucher au contraste du texte courant.
+  ink2:    "rgba(28,28,43,.84)",
+  ink3:    "rgba(28,28,43,.64)",   // texte second
+  ink4:    "rgba(28,28,43,.44)",   // texte tertiaire
+  ink5:    "rgba(28,28,43,.16)",   // ombre
   accent:      "#C0B4FE",                  // a faire maintenant
   accentSoft:  "rgba(192,180,254,.22)",
   onAccent:    "#1B1B1B",                  // texte sur accent — jamais #000
-  onInk:       "#FFFFFF",                  // texte sur encre pleine
+  fill:        "#1C1C2B",                  // encre pleine     — Denim
+  onFill:      "#FFFFFF",
+  onDark:      "#FFFFFF",                  // texte sur surface toujours sombre
+  onDark2:     "rgba(255,255,255,.52)",
+  onDark3:     "rgba(255,255,255,.12)",
   idcard:      "#1C1C2B",                  // carte d'identite — Denim
   done:        "#1C1C2B",                  // termine          — Denim
   doneSoft:    "rgba(28,28,43,.09)",
@@ -100,7 +106,13 @@ const DARK = {
   accent:      "#C0B4FE",
   accentSoft:  "rgba(192,180,254,.20)",
   onAccent:    "#1B1B1B",
-  onInk:       "#1B1B1B",   // l'encre pleine devient lavande en sombre
+  // En sombre, l'encre pleine ne peut pas etre du noir sur du noir : elle devient
+  // l'accent, et son texte suit.
+  fill:        "#C0B4FE",
+  onFill:      "#1B1B1B",
+  onDark:      "#FFFFFF",
+  onDark2:     "rgba(255,255,255,.52)",
+  onDark3:     "rgba(255,255,255,.12)",
   // #1C1C2B sert deja de creux : la carte d'identite doit descendre plus bas,
   // sinon elle se confond avec la surface.
   idcard:      "#0E0E17",
@@ -176,7 +188,7 @@ const REST_TPL = {label:"Repos",salle:null,muscle:"Recuperation active",exercise
 const SESSION_TEMPLATES = [...PROGRAM.filter(d=>d.salle).map(d=>({label:d.label,salle:d.salle,muscle:d.muscle,exercises:d.exercises,abs:d.abs,ids:d.ids})), REST_TPL];
 
 // Rotation hebdo - mesocycle hybride (Volume -> Intensite -> Puissance -> Deload)
-const VERSION="1.41.0";
+const VERSION="1.41.1";
 const weekNumber = () => { const dt=new Date(); const d=new Date(Date.UTC(dt.getFullYear(),dt.getMonth(),dt.getDate())); const dn=(d.getUTCDay()+6)%7; d.setUTCDate(d.getUTCDate()-dn+3); const ft=new Date(Date.UTC(d.getUTCFullYear(),0,4)); const fn=(ft.getUTCDay()+6)%7; ft.setUTCDate(ft.getUTCDate()-fn+3); return 1+Math.round((d-ft)/604800000); };
 const PHASES12=[{n:"Accumulation",f:"Volume, base"},{n:"Accumulation",f:"Volume"},{n:"Accumulation",f:"Volume +"},{n:"Intensification",f:"Charges +"},{n:"Intensification",f:"Charges ++"},{n:"Intensification",f:"Lourd"},{n:"Réalisation",f:"Explosif"},{n:"Réalisation",f:"Puissance"},{n:"Réalisation",f:"Pic de force"},{n:"Deload",f:"Récupération"},{n:"Test / PR",f:"Validation"},{n:"Test / PR",f:"Nouveaux maxs"}];
 const programWeek=()=>((weekNumber()-1)%12)+1;
@@ -1239,8 +1251,8 @@ function HomeTab({profile,streak,sessions,weights,todaySession,onStartToday,acce
           overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
           {todaySession?todaySession.muscle:"Récupération active"}</div>
         {!isRest&&<Tap label="Démarrer la séance" onTap={onStartToday}
-          style={{marginTop:12,height:44,borderRadius:12,background:C.ink,display:"flex",alignItems:"center",justifyContent:"center"}}>
-          <span style={{fontSize:14,fontWeight:600,color:C.onInk}}>Démarrer</span></Tap>}
+          style={{marginTop:12,height:44,borderRadius:12,background:C.fill,display:"flex",alignItems:"center",justifyContent:"center"}}>
+          <span style={{fontSize:14,fontWeight:600,color:C.onFill}}>Démarrer</span></Tap>}
       </Card>
       <Card bg={C.s1} style={{flex:1,minWidth:0,display:"flex",flexDirection:"column"}}>
         <K>Série en cours</K>
@@ -1317,7 +1329,7 @@ function SessionSettingsSheet({day,curMode,onClose,onApply}) {
       <div style={{fontSize:11.5,fontWeight:600,color:C.ink4,textTransform:"uppercase",letterSpacing:".08em",marginBottom:10}}>Équipement</div>
       <div style={{display:"flex",gap:8,marginBottom:10}}>{[["all","Tout"],["bw","Poids du corps"],["pick","Choisir"]].map(([k,l])=><Chip key={k} on={equipMode===k} label={l} onTap={()=>setEquipMode(k)}/>)}</div>
       {equipMode==="pick"&&<div style={{display:"flex",flexWrap:"wrap",gap:8,marginBottom:10}}>{EQS.map(([k,l])=><Chip key={k} on={equip.indexOf(k)>=0} label={l} onTap={()=>tog(equip,setEquip,k)}/>)}</div>}
-      <Tap onTap={apply} style={{marginTop:14,height:52,borderRadius:12,background:C.ink,display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{fontSize:15,fontWeight:600,color:C.onInk}}>Appliquer à cette séance</span></Tap>
+      <Tap onTap={apply} style={{marginTop:14,height:52,borderRadius:12,background:C.fill,display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{fontSize:15,fontWeight:600,color:C.onFill}}>Appliquer à cette séance</span></Tap>
     </div>
   </div>);
 }
@@ -2184,9 +2196,9 @@ function WeighInCard({weighIns,onSave,compact}) {
         <div style={{display:"flex",alignItems:"center",gap:10,flexShrink:0}}>
           <span style={{fontSize:21,fontWeight:500,color:C.ink,letterSpacing:"-.03em",fontVariantNumeric:"tabular-nums"}}>
             {String(done.weight_kg).replace(".",",")} kg</span>
-          <Tap label="Corriger la pesée" onTap={()=>{setVal(String(done.weight_kg));setEdit(true);}}
-            style={{padding:"7px 12px",borderRadius:999,background:C.s2}}>
-            <span style={{fontSize:11.5,fontWeight:600,color:C.ink3}}>Corriger</span></Tap>
+          <Tap label="Enregistrer une pesée" onTap={()=>{setVal(String(done.weight_kg));setEdit(true);}}
+            style={{padding:"7px 12px",borderRadius:999,background:C.accentSoft}}>
+            <span style={{fontSize:11.5,fontWeight:600,color:C.ink2}}>Enregistrer</span></Tap>
         </div>
       </div>
       {!compact&&DateField}
@@ -2914,8 +2926,8 @@ function PhotoProgress({uid,photos,urls,onSavePhotos,onClose}) {
             {[...keys].reverse().map(d=>(
               <div key={d} style={{position:"relative",borderRadius:12,overflow:"hidden",background:C.s2,aspectRatio:"3/4"}}>
                 <img src={(urls||{})[d]} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/>
-                <div style={{position:"absolute",left:0,right:0,bottom:0,padding:"4px 6px",background:"linear-gradient(transparent,rgba(0,0,0,.75))",fontSize:10,fontWeight:600,color:C.onInk}}>{d.slice(5)}</div>
-                <Tap onTap={()=>del(d)} style={{position:"absolute",top:4,right:4,width:24,height:24,borderRadius:"50%",background:"rgba(0,0,0,.55)",display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{fontSize:11.5,color:C.onInk}}>✕</span></Tap>
+                <div style={{position:"absolute",left:0,right:0,bottom:0,padding:"4px 6px",background:"linear-gradient(transparent,rgba(0,0,0,.75))",fontSize:10,fontWeight:600,color:C.onDark}}>{d.slice(5)}</div>
+                <Tap onTap={()=>del(d)} style={{position:"absolute",top:4,right:4,width:24,height:24,borderRadius:"50%",background:"rgba(0,0,0,.55)",display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{fontSize:11.5,color:C.onDark}}>✕</span></Tap>
               </div>
             ))}
           </div>
@@ -2952,7 +2964,7 @@ function PhotoStrip({photos,urls,onOpen}) {
               <img src={(urls||{})[d]} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/>
               <div style={{position:"absolute",left:0,right:0,bottom:0,padding:"4px 8px",
                 background:"linear-gradient(transparent,rgba(0,0,0,.75))",fontSize:10,fontWeight:600,
-                color:C.onInk,fontVariantNumeric:"tabular-nums"}}>{d.slice(5)}</div>
+                color:C.onDark,fontVariantNumeric:"tabular-nums"}}>{d.slice(5)}</div>
             </div>
           ))}
         </div>
@@ -3127,9 +3139,9 @@ function SettingsTab({user,excluded,onToggleExclude,onSignOut,onReset,onOpenLibr
 
   const Measure=({v,u,l})=>(
     <div style={{minWidth:0}}>
-      <div style={{fontSize:21,fontWeight:500,color:C.onInk,letterSpacing:"-.03em",lineHeight:1,
-        fontVariantNumeric:"tabular-nums"}}>{v}<span style={{fontSize:11.5,fontWeight:400,color:"rgba(244,243,248,.45)"}}>{u?` ${u}`:""}</span></div>
-      <div style={{fontSize:10,color:"rgba(244,243,248,.45)",marginTop:4}}>{l}</div>
+      <div style={{fontSize:21,fontWeight:500,color:C.onDark,letterSpacing:"-.03em",lineHeight:1,
+        fontVariantNumeric:"tabular-nums"}}>{v}<span style={{fontSize:11.5,fontWeight:400,color:C.onDark2}}>{u?` ${u}`:""}</span></div>
+      <div style={{fontSize:10,color:C.onDark2,marginTop:4}}>{l}</div>
     </div>
   );
 
@@ -3169,16 +3181,16 @@ function SettingsTab({user,excluded,onToggleExclude,onSignOut,onReset,onOpenLibr
             </div>
             <input ref={avatarRef} type="file" accept="image/*" onChange={onAvatar} style={{display:"none"}}/>
             <div style={{flex:1,minWidth:0}}>
-              <div style={{fontSize:15,color:C.onInk,letterSpacing:"-.015em",whiteSpace:"nowrap",
+              <div style={{fontSize:15,color:C.onDark,letterSpacing:"-.015em",whiteSpace:"nowrap",
                 overflow:"hidden",textOverflow:"ellipsis"}}>{user?.user_metadata?.name||"Athlète"}</div>
-              <div style={{fontSize:11.5,color:"rgba(244,243,248,.5)",marginTop:2,whiteSpace:"nowrap",
+              <div style={{fontSize:11.5,color:C.onDark2,marginTop:2,whiteSpace:"nowrap",
                 overflow:"hidden",textOverflow:"ellipsis"}}>{user?.email||""}</div>
             </div>
             <Tap label="Changer la photo" onTap={()=>avatarRef.current&&avatarRef.current.click()}
-              style={{padding:"6px 12px",borderRadius:999,background:"rgba(255,255,255,.12)",flexShrink:0}}>
-              <span style={{fontSize:10,fontWeight:600,color:"rgba(244,243,248,.75)"}}>{avatar?"Modifier":"Ajouter"}</span></Tap>
+              style={{padding:"6px 12px",borderRadius:999,background:C.onDark3,flexShrink:0}}>
+              <span style={{fontSize:10,fontWeight:600,color:C.onDark}}>{avatar?"Modifier":"Ajouter"}</span></Tap>
           </div>
-          <div style={{height:1,background:"rgba(255,255,255,.1)",margin:"14px 0 12px"}}/>
+          <div style={{height:1,background:C.onDark3,margin:"14px 0 12px"}}/>
           <div style={{display:"flex",justifyContent:"space-between",gap:8}}>
             <Measure v={profile?.weight_kg!=null?String(profile.weight_kg).replace(".",","):"—"} u="kg" l="Poids"/>
             <Measure v={profile?.height_cm||"—"} u="cm" l="Taille"/>
@@ -3218,9 +3230,9 @@ function SettingsTab({user,excluded,onToggleExclude,onSignOut,onReset,onOpenLibr
               const on=profile?.goal===k;
               return(
                 <Tap key={k} label={l} onTap={()=>{onUpdateConfig&&onUpdateConfig({goal:k});play("clic");buzz(15);}}
-                  style={{padding:"8px 14px",borderRadius:999,background:on?C.ink:C.s1,
+                  style={{padding:"8px 14px",borderRadius:999,background:on?C.fill:C.s1,
                     transition:`all 180ms ${EO}`}}>
-                  <span style={{fontSize:11.5,fontWeight:on?600:500,color:on?C.bg:C.ink3}}>{l}</span></Tap>
+                  <span style={{fontSize:11.5,fontWeight:on?600:500,color:on?C.onFill:C.ink3}}>{l}</span></Tap>
               );
             })}
           </div>
@@ -3282,9 +3294,9 @@ function SettingsTab({user,excluded,onToggleExclude,onSignOut,onReset,onOpenLibr
               const r=await onUpdateConfig({weight_kg:w?Number(w):null,height_cm:h?Number(h):null,age:ag?Number(ag):null});
               if(r&&r.error){setSaved(false);setSaveErr(true);setTimeout(()=>setSaveErr(false),2400);}
               else{setSaveErr(false);setSaved(true);setTimeout(()=>setSaved(false),1600);}}}
-              style={{marginTop:13,height:48,borderRadius:22,background:saveErr?C.s4:(saved?C.accent:C.ink),
+              style={{marginTop:13,height:48,borderRadius:22,background:saveErr?C.s4:(saved?C.accent:C.fill),
                 display:"flex",alignItems:"center",justifyContent:"center"}}>
-              <span style={{fontSize:14,fontWeight:600,color:saveErr?C.ink:(saved?C.onAccent:C.bg)}}>
+              <span style={{fontSize:14,fontWeight:600,color:saveErr?C.ink:(saved?C.onAccent:C.onFill)}}>
                 {saveErr?"Erreur — réessayer":(saved?"Enregistré":"Enregistrer")}</span></Tap>
           )}
         </div>
@@ -4620,7 +4632,7 @@ const NAV=[{id:"home",l:"Accueil"},{id:"seance",l:"Séances"},{id:"stats",l:"Sta
                         </Tap>
                       ):isPastMissed?null:(
                         <Tap label="Démarrer la séance" onTap={()=>{setSessionActive(true);if(!clock.running&&clock.sec===0)clock.start();}}
-                          style={{flex:1,padding:"16px",borderRadius:22,background:C.ink,display:"flex",alignItems:"center",justifyContent:"center",gap:10}}>
+                          style={{flex:1,padding:"16px",borderRadius:22,background:C.fill,display:"flex",alignItems:"center",justifyContent:"center",gap:10}}>
                           <Icon name="play" size={16} stroke={C.bg} fill={C.bg}/>
                           <span style={{fontSize:15,fontWeight:600,color:C.bg}}>Démarrer la séance</span>
                         </Tap>
@@ -4897,7 +4909,7 @@ const NAV=[{id:"home",l:"Accueil"},{id:"seance",l:"Séances"},{id:"stats",l:"Sta
       {toasts.length>0&&(
         <div role="status" aria-live="polite" style={{position:"fixed",left:0,right:0,bottom:"calc(78px + env(safe-area-inset-bottom))",zIndex:Z.fullscreen+200,display:"flex",flexDirection:"column",alignItems:"center",gap:8,pointerEvents:"none",padding:"0 20px"}}>
           {toasts.map(t=>(
-            <div key={t.id} style={{maxWidth:560,width:"100%",background:C.ink,color:C.onInk,borderRadius:12,padding:"16px",fontSize:14,fontWeight:600,fontFamily:F,boxShadow:"0 10px 30px rgba(0,0,0,.22)",animation:`riseIn 260ms ${EO} both`}}>
+            <div key={t.id} style={{maxWidth:560,width:"100%",background:C.fill,color:C.onFill,borderRadius:12,padding:"16px",fontSize:14,fontWeight:600,fontFamily:F,boxShadow:"0 10px 30px rgba(0,0,0,.22)",animation:`riseIn 260ms ${EO} both`}}>
               {t.msg}
             </div>
           ))}
@@ -4917,6 +4929,7 @@ const NAV=[{id:"home",l:"Accueil"},{id:"seance",l:"Séances"},{id:"stats",l:"Sta
     </div>
   );
 }
+
 
 
 
