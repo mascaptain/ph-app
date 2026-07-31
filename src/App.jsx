@@ -188,7 +188,7 @@ const REST_TPL = {label:"Repos",salle:null,muscle:"Recuperation active",exercise
 const SESSION_TEMPLATES = [...PROGRAM.filter(d=>d.salle).map(d=>({label:d.label,salle:d.salle,muscle:d.muscle,exercises:d.exercises,abs:d.abs,ids:d.ids})), REST_TPL];
 
 // Rotation hebdo - mesocycle hybride (Volume -> Intensite -> Puissance -> Deload)
-const VERSION="1.41.1";
+const VERSION="1.41.2";
 const weekNumber = () => { const dt=new Date(); const d=new Date(Date.UTC(dt.getFullYear(),dt.getMonth(),dt.getDate())); const dn=(d.getUTCDay()+6)%7; d.setUTCDate(d.getUTCDate()-dn+3); const ft=new Date(Date.UTC(d.getUTCFullYear(),0,4)); const fn=(ft.getUTCDay()+6)%7; ft.setUTCDate(ft.getUTCDate()-fn+3); return 1+Math.round((d-ft)/604800000); };
 const PHASES12=[{n:"Accumulation",f:"Volume, base"},{n:"Accumulation",f:"Volume"},{n:"Accumulation",f:"Volume +"},{n:"Intensification",f:"Charges +"},{n:"Intensification",f:"Charges ++"},{n:"Intensification",f:"Lourd"},{n:"Réalisation",f:"Explosif"},{n:"Réalisation",f:"Puissance"},{n:"Réalisation",f:"Pic de force"},{n:"Deload",f:"Récupération"},{n:"Test / PR",f:"Validation"},{n:"Test / PR",f:"Nouveaux maxs"}];
 const programWeek=()=>((weekNumber()-1)%12)+1;
@@ -1212,7 +1212,7 @@ function HomeTab({profile,streak,sessions,weights,todaySession,onStartToday,acce
     <Card>
       <Row><span style={{fontSize:14,fontWeight:600,color:C.ink}}>Volume d'entraînement</span>
         <Pill bg={C.s2} fg={C.ink3}>Semaine</Pill></Row>
-      <div style={{display:"flex",gap:14,alignItems:"flex-end",marginTop:12}}>
+      <div style={{display:"flex",gap:10,alignItems:"flex-end",marginTop:10}}>
         <div style={{flex:"0 0 auto",minWidth:104}}>
           {volDeltaPct!==null&&<Pill>{volDeltaPct>=0?"+":""}{volDeltaPct} % vs S-1</Pill>}
           <div style={{fontSize:34,fontWeight:500,color:C.ink,letterSpacing:"-.035em",lineHeight:1,marginTop:8,fontVariantNumeric:"tabular-nums"}}>
@@ -1242,8 +1242,8 @@ function HomeTab({profile,streak,sessions,weights,todaySession,onStartToday,acce
     {/* Seance du jour + serie en cours */}
     <Row style={{marginTop:2}}><span style={{fontSize:14,fontWeight:600,color:C.ink}}>Séance du jour</span>
       {goalLabel&&<K>Programme {goalLabel}</K>}</Row>
-    <div style={{display:"flex",gap:10}}>
-      <Card bg={isRest?C.s1:C.accent} style={{flex:1.25,minWidth:0}}>
+    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+      <Card bg={isRest?C.s1:C.accent} style={{minWidth:0,display:"flex",flexDirection:"column"}}>
         <K>{isRest?"Aujourd'hui":"À faire"}</K>
         <div style={{fontSize:15,fontWeight:600,color:isRest?C.ink:C.onAccent,letterSpacing:"-.02em",lineHeight:1.15,marginTop:3}}>
           {todaySession?todaySession.label:"Repos"}</div>
@@ -1251,10 +1251,10 @@ function HomeTab({profile,streak,sessions,weights,todaySession,onStartToday,acce
           overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
           {todaySession?todaySession.muscle:"Récupération active"}</div>
         {!isRest&&<Tap label="Démarrer la séance" onTap={onStartToday}
-          style={{marginTop:12,height:44,borderRadius:12,background:C.fill,display:"flex",alignItems:"center",justifyContent:"center"}}>
+          style={{marginTop:"auto",paddingTop:0,height:44,borderRadius:12,background:C.fill,display:"flex",alignItems:"center",justifyContent:"center"}}>
           <span style={{fontSize:14,fontWeight:600,color:C.onFill}}>Démarrer</span></Tap>}
       </Card>
-      <Card bg={C.s1} style={{flex:1,minWidth:0,display:"flex",flexDirection:"column"}}>
+      <Card bg={C.s1} style={{minWidth:0,display:"flex",flexDirection:"column"}}>
         <K>Série en cours</K>
         <div style={{fontSize:34,fontWeight:500,color:C.ink,letterSpacing:"-.03em",lineHeight:1,marginTop:4,fontVariantNumeric:"tabular-nums"}}>
           {streak}<span style={{fontSize:11.5,fontWeight:400,color:C.ink4}}> {streak>1?"jours":"jour"}</span></div>
@@ -2166,69 +2166,74 @@ function WeighInCard({weighIns,onSave,compact}) {
   const prev=list.filter(w=>w.date<date).pop();
   const [val,setVal]=useState(()=>{const d=list.find(w=>w.date===today);
     return d?String(d.weight_kg):(list.length?String(list[list.length-1].weight_kg):"");});
-  const [edit,setEdit]=useState(false);
-  const delta=(done&&prev)?Math.round((Number(done.weight_kg)-Number(prev.weight_kg))*10)/10:null;
+  const [flash,setFlash]=useState(false);
+
+  // Changer de date recharge la valeur de ce jour-la : sans cela on ecraserait
+  // une pesee passee avec le poids affiche pour aujourd'hui.
   const pick=(d)=>{ setDate(d); const e=list.find(w=>w.date===d);
-    setVal(e?String(e.weight_kg):(list.length?String(list[list.length-1].weight_kg):"")); setEdit(false); };
+    setVal(e?String(e.weight_kg):(list.length?String(list[list.length-1].weight_kg):"")); };
 
-  const DateField=(
-    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,marginTop:11}}>
-      <span style={{fontSize:11.5,color:C.ink4}}>Date de la pesée</span>
-      <input type="date" value={date} max={today} onChange={e=>pick(e.target.value||today)}
-        aria-label="Date de la pesée"
-        style={{border:`1px solid ${C.s3}`,borderRadius:12,background:C.bg,color:C.ink,fontSize:12.5,
-          fontFamily:F,padding:"8px 11px",outline:"none",fontVariantNumeric:"tabular-nums"}}/>
-    </div>
+  const num=parseFloat(String(val).replace(",","."));
+  const valid=num>20&&num<300;
+  const changed=valid&&(!done||Math.abs(num-Number(done.weight_kg))>=0.05);
+  const delta=(done&&prev)?Math.round((Number(done.weight_kg)-Number(prev.weight_kg))*10)/10:null;
+  const bump=(d)=>{ const base=valid?num:(prev?Number(prev.weight_kg):75);
+    setVal(String(Math.round((base+d)*10)/10)); };
+  const save=()=>{ if(!valid) return; onSave(num,date); setFlash(true);
+    setTimeout(()=>setFlash(false),1500); play("cloche"); buzz(40); };
+
+  const Step=({sign,d})=>(
+    <Tap label={sign==="+"?"Augmenter de 100 g":"Diminuer de 100 g"} onTap={()=>bump(d)}
+      style={{width:44,height:48,borderRadius:12,background:C.s1,display:"flex",
+        alignItems:"center",justifyContent:"center",flexShrink:0}}>
+      <Icon name={sign==="+"?"plus":"minus"} size={16} stroke={C.ink2}/></Tap>
   );
 
-  if(done&&!edit) return (
-    <div style={{background:C.card,border:`1px solid ${C.s2}`,boxShadow:`0 3px 16px ${C.ink5}`,
-      borderRadius:22,padding:"16px",marginBottom:10}}>
-      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:10}}>
-        <div style={{minWidth:0}}>
-          <div style={{fontSize:14,fontWeight:600,color:C.ink}}>
-            Pesée {date===today?"du jour":`du ${fmtDateShort(date)}`}</div>
-          <div style={{fontSize:11.5,color:C.ink4,marginTop:2}}>
-            {list.length} pesée{list.length>1?"s":""} au total
-            {delta!==null&&delta!==0&&` · ${delta>0?"+":""}${String(delta).replace(".",",")} kg`}
-          </div>
-        </div>
-        <div style={{display:"flex",alignItems:"center",gap:10,flexShrink:0}}>
-          <span style={{fontSize:21,fontWeight:500,color:C.ink,letterSpacing:"-.03em",fontVariantNumeric:"tabular-nums"}}>
-            {String(done.weight_kg).replace(".",",")} kg</span>
-          <Tap label="Enregistrer une pesée" onTap={()=>{setVal(String(done.weight_kg));setEdit(true);}}
-            style={{padding:"7px 12px",borderRadius:999,background:C.accentSoft}}>
-            <span style={{fontSize:11.5,fontWeight:600,color:C.ink2}}>Enregistrer</span></Tap>
-        </div>
-      </div>
-      {!compact&&DateField}
-    </div>
-  );
-
-  const save=()=>{const n=parseFloat(String(val).replace(",","."));if(!(n>20&&n<300))return;
-    onSave(n,date);setEdit(false);play("cloche");buzz(40);};
   return (
     <div style={{background:C.card,border:`1px solid ${C.s2}`,boxShadow:`0 3px 16px ${C.ink5}`,
       borderRadius:22,padding:"16px",marginBottom:10,animation:`riseIn 320ms ${EO} both`}}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:10}}>
-        <span style={{fontSize:14,fontWeight:600,color:C.ink}}>
+        <span style={{fontSize:15,fontWeight:600,color:C.ink}}>
           {date===today?"Pesée du jour":`Pesée du ${fmtDateShort(date)}`}</span>
-        <span style={{fontSize:10,fontWeight:600,padding:"4px 11px",borderRadius:999,background:C.s2,color:C.ink3}}>
-          {list.length?`${list.length} au total`:"Première"}</span>
+        <span style={{fontSize:10,fontWeight:600,padding:"4px 11px",borderRadius:999,
+          background:flash?C.accentSoft:C.s2,color:flash?C.ink2:C.ink3,whiteSpace:"nowrap",
+          transition:`background 240ms ${EO}`}}>
+          {flash?"Enregistrée":(done?`déjà pesé · ${String(done.weight_kg).replace(".",",")} kg`
+            :(list.length?`${list.length} au total`:"Première"))}</span>
       </div>
       {!compact&&<div style={{fontSize:11.5,color:C.ink4,marginTop:4,lineHeight:1.5}}>
-        N'importe quel jour, autant de fois que tu veux — et tu peux rattraper une pesée oubliée en changeant la date.</div>}
-      <div style={{display:"flex",gap:10,alignItems:"center",marginTop:12}}>
-        <input type="number" inputMode="decimal" step="0.1" value={val} onChange={e=>setVal(e.target.value)}
+        {delta!==null&&delta!==0
+          ?`${delta>0?"+":""}${String(delta).replace(".",",")} kg depuis la pesée précédente.`
+          :"N'importe quel jour, autant de fois que tu veux — change la date pour rattraper une pesée oubliée."}</div>}
+
+      {/* Le champ reste toujours modifiable : la carte basculait en lecture seule
+          des qu'une pesee existait, et il fallait retrouver un bouton pour en
+          ressortir. */}
+      <div style={{display:"flex",gap:8,alignItems:"center",marginTop:12}}>
+        <Step sign="−" d={-0.1}/>
+        <input type="number" inputMode="decimal" step="0.1" value={val}
+          onChange={e=>setVal(e.target.value)} onFocus={e=>e.target.select()}
           placeholder={prev?String(prev.weight_kg):"kg"} aria-label="Poids en kilogrammes"
-          style={{flex:1,minWidth:0,height:48,borderRadius:22,border:`1px solid ${C.s3}`,background:C.bg,color:C.ink,
-            fontSize:15,fontWeight:500,fontFamily:F,padding:"0 15px",outline:"none",boxSizing:"border-box",
-            fontVariantNumeric:"tabular-nums"}}/>
-        <Tap label="Enregistrer la pesée" onTap={save}
-          style={{padding:"0 22px",height:48,borderRadius:22,background:C.accent,display:"flex",alignItems:"center"}}>
-          <span style={{fontSize:15,fontWeight:600,color:C.onAccent}}>Enregistrer</span></Tap>
+          style={{flex:1,minWidth:0,height:48,borderRadius:12,border:`1px solid ${valid?C.s3:C.s4}`,
+            background:C.bg,color:C.ink,fontSize:16,fontWeight:500,fontFamily:F,textAlign:"center",
+            outline:"none",boxSizing:"border-box",fontVariantNumeric:"tabular-nums",
+            userSelect:"text",WebkitUserSelect:"text"}}/>
+        <Step sign="+" d={0.1}/>
       </div>
-      {!compact&&DateField}
+
+      <div style={{display:"flex",gap:8,alignItems:"center",marginTop:8}}>
+        <input type="date" value={date} max={today} onChange={e=>pick(e.target.value||today)}
+          aria-label="Date de la pesée"
+          style={{flex:1,minWidth:0,height:44,borderRadius:12,border:`1px solid ${C.s3}`,
+            background:C.bg,color:C.ink3,fontSize:12.5,fontFamily:F,padding:"0 12px",outline:"none",
+            boxSizing:"border-box",fontVariantNumeric:"tabular-nums",
+            userSelect:"text",WebkitUserSelect:"text"}}/>
+        <Tap label="Enregistrer la pesée" onTap={changed?save:undefined}
+          style={{padding:"0 20px",height:44,borderRadius:12,flexShrink:0,
+            background:changed?C.accent:C.s2,display:"flex",alignItems:"center",
+            transition:`background 200ms ${EO}`}}>
+          <span style={{fontSize:14,fontWeight:600,color:changed?C.onAccent:C.ink4}}>Enregistrer</span></Tap>
+      </div>
     </div>
   );
 }
@@ -4484,6 +4489,9 @@ const NAV=[{id:"home",l:"Accueil"},{id:"seance",l:"Séances"},{id:"stats",l:"Sta
     <div style={{background:C.bg,minHeight:"100dvh",color:C.ink,fontFamily:F,overflowX:"hidden"}}>
       <style>{`
         *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;user-select:none;}
+        /* Un champ de saisie doit rester selectionnable : la regle universelle
+           ci-dessus lui interdisait le curseur sur iOS Safari. */
+        input,textarea,select{user-select:text;-webkit-user-select:text;}
         body{margin:0;background:${C.bg};}
         @keyframes fadeIn{from{opacity:0}to{opacity:1}}
         @keyframes sheetIn{from{opacity:0;transform:translateY(28px) scale(.985)}to{opacity:1;transform:none}}
@@ -4929,6 +4937,7 @@ const NAV=[{id:"home",l:"Accueil"},{id:"seance",l:"Séances"},{id:"stats",l:"Sta
     </div>
   );
 }
+
 
 
 
