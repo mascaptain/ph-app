@@ -1505,7 +1505,7 @@ function CircuitPlayer({mode,exos,onClose,defMin,blocks,onAllDone,startBlock,log
       </div>
     </div>);
 }
-function ExerciseRowCollapsed({ex,dayIdx,sDate,log,idx,onOpen,onReplace,doneSession,onOriginY}) {
+function ExerciseRowCollapsed({ex,dayIdx,sDate,log,idx,onOpen,onReplace,doneSession,onOriginY,barColor,grouped,first}) {
   const plan=setPlanFor(ex);const n=plan.length;
   // Si la journee est deja enregistree (doneSession), c'est la SOURCE DE VERITE - ne jamais se fier
   // au log local qui peut etre incomplet/absent (ex: seance corrigee manuellement en base).
@@ -1531,35 +1531,40 @@ function ExerciseRowCollapsed({ex,dayIdx,sDate,log,idx,onOpen,onReplace,doneSess
   const w0=ws?ws[0]:plan[0].w, wn=ws?ws[ws.length-1]:plan[n-1].w;
   const wlabel=w0>0?(w0===wn?`${w0} kg`:`${w0}→${wn} kg`):"PdC";
   const restLbl=ex.rest>0?(ex.rest>=60?fmtMSS(ex.rest):`${ex.rest}s`):null;
+  // Ligne de la maquette : filet de couleur, intitule, ligne de detail, valeur a droite.
+  // L'ancienne ligne etait une carte grise autonome avec une pastille de progression de
+  // 44 px et un chevron - trois elements qui empechaient de lire un bloc comme un tout.
+  const sub=grouped?"enchaîner":(restLbl?`repos ${restLbl}`:null);
+  const sub2=[sub,(ex.rpe?`RPE ${ex.rpe}`:null)].filter(Boolean).join(" · ");
   return (
-    <div style={{display:"flex",alignItems:"center",gap:12,background:C.s1,borderRadius:18,padding:"12px 14px",marginBottom:10,border:`1px solid ${allDone?C.green:C.s3}`,animation:`fadeSlideIn 280ms ${EO} ${idx*35}ms both`}}>
-      <Tap onTap={(e)=>{
-        // On note la position verticale de la carte avant d'ouvrir : l'ecran plein
-        // s'agrandira depuis cet endroit plutot que depuis le centre.
+    <div style={{display:"flex",alignItems:"center",gap:11,padding:"10px 0",
+      borderTop:first?"none":`1px solid ${C.s2}`,
+      animation:`fadeSlideIn 280ms ${EO} ${idx*30}ms both`}}>
+      <Tap label={ex.n} onTap={(e)=>{
         try{ const r=e&&e.currentTarget&&e.currentTarget.getBoundingClientRect&&e.currentTarget.getBoundingClientRect();
              if(r&&onOriginY) onOriginY(Math.max(0,Math.min(100,Math.round((r.top+r.height/2)/window.innerHeight*100)))); }catch(_e){}
         onOpen&&onOpen();
-      }} style={{flex:1,minWidth:0,display:"flex",alignItems:"center",gap:12}}>
-        <div style={{width:44,height:44,borderRadius:12,background:allDone?C.greenDim:C.s2,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
-          {allDone?(
-            <span style={{fontSize:18,fontWeight:600,color:C.green}}>✓</span>
-          ):(
-            <svg width="22" height="22" viewBox="0 0 22 22">
-              <circle cx="11" cy="11" r="9" fill="none" stroke={C.s3} strokeWidth="2.5"/>
-              {completed>0&&<circle cx="11" cy="11" r="9" fill="none" stroke={C.ink3} strokeWidth="2.5" strokeDasharray={`${(completed/n)*56.5} 56.5`} strokeLinecap="round" transform="rotate(-90 11 11)"/>}
-            </svg>
-          )}
-        </div>
+      }} style={{flex:1,minWidth:0,display:"flex",alignItems:"center",gap:11}}>
+        <span style={{width:4,height:30,borderRadius:2,flexShrink:0,
+          background:allDone?C.green:(barColor||C.s4),transition:`background 240ms ${EO}`}}/>
         <div style={{flex:1,minWidth:0}}>
-          <div style={{fontSize:16,fontWeight:600,color:allDone?C.ink4:C.ink,textDecoration:allDone?"line-through":"none",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{ex.n}</div>
-          <div style={{fontSize:13,color:C.ink4,marginTop:2}}>{n} × {ex.reps} · {wlabel}{restLbl?` · ${restLbl}`:""}</div>
+          <div style={{fontSize:14,fontWeight:500,color:allDone?C.ink4:C.ink,
+            textDecoration:allDone?"line-through":"none",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{ex.n}</div>
+          {(sub2||completed>0)&&<div style={{fontSize:11.5,color:C.ink4,marginTop:1,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>
+            {allDone?`${completed} séries faites`:(completed>0?`${completed}/${target} · ${sub2}`:sub2)}
+          </div>}
         </div>
+        <span style={{fontSize:13.5,color:allDone?C.ink4:C.ink2,flexShrink:0,fontVariantNumeric:"tabular-nums"}}>
+          {n} × {wlabel}
+        </span>
       </Tap>
-      <Tap onTap={()=>onReplace(ex)} style={{width:34,height:34,borderRadius:9,background:C.s2,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}><span style={{fontSize:15,color:C.ink3}}>⇄</span></Tap>
-      <span style={{fontSize:22,color:C.ink4,flexShrink:0,lineHeight:1}}>›</span>
+      {!allDone&&onReplace&&<Tap label="Remplacer l'exercice" onTap={()=>onReplace(ex)}
+        style={{width:28,height:28,borderRadius:9,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+        <Icon name="swap" size={15} stroke={C.ink4}/></Tap>}
     </div>
   );
 }
+
 
 function ExerciseFocus({ex,dayIdx,sDate,log,onLogSet,onClose,onNext,hasNext,idx,count,onDetail,lastPerf,originY}) {
   // Fermeture animee : le composant reste monte le temps de l'animation de sortie, sinon
@@ -2977,7 +2982,7 @@ function SettingsTab({user,excluded,onToggleExclude,onSignOut,onReset,onOpenLibr
           <span style={{fontSize:17,color:C.red}}>›</span>
         </Tap>
       </div>
-      <div style={{fontSize:12,color:C.ink4,textAlign:"center",marginTop:28}}>SŌMA · {"S"+weekNumber()} · {DB.length} exercices · build 23.81a</div>
+      <div style={{fontSize:12,color:C.ink4,textAlign:"center",marginTop:28}}>SŌMA · {"S"+weekNumber()} · {DB.length} exercices · build 23.82a</div>
     </div>
   );
 }
@@ -4118,7 +4123,7 @@ const NAV=[{id:"home",l:"Accueil"},{id:"seance",l:"Séances"},{id:"stats",l:"Sta
             const wasPlanned=!!(d&&d.salle);
             const isMissed=isPastDay&&wasPlanned&&!dayFullyDone&&(!profile?.program_start||dStrDate>=profile.program_start);
             return(
-              <Tap key={i} onTap={()=>{setDayIdx(i);setAiOverride(null);setDayCons(null);setModeOverride(null);setCircuitStart(0);setSupBlock(null);}} style={{flexShrink:0,minWidth:52,padding:"10px 6px",textAlign:"center",borderRadius:12,background:isSel?C.s2:"transparent",border:`1px solid ${isSel?C.s4:"transparent"}`,transition:`all 200ms ${EO}`}}>
+              <Tap key={i} label={d.day} onTap={()=>{setDayIdx(i);setAiOverride(null);setDayCons(null);setModeOverride(null);setCircuitStart(0);setSupBlock(null);}} style={{flexShrink:0,minWidth:54,padding:"9px 6px",textAlign:"center",borderRadius:16,background:isSel?C.blueDim:"transparent",border:`1px solid ${isSel?C.blue:"transparent"}`,transition:`all 220ms ${EO}`}}>
                 <div style={{fontSize:10,fontWeight:600,color:isSel?C.ink2:C.ink4,letterSpacing:".06em",marginBottom:4}}>{d.day}</div>
                 {isToday&&!dayFullyDone&&<div style={{width:6,height:6,borderRadius:"50%",background:C.lime,margin:"0 auto 4px"}}/>}
                 {!isToday&&isMissed&&<div title="Séance manquée" style={{width:6,height:6,borderRadius:"50%",border:`1.5px solid ${C.ink4}`,margin:"0 auto 4px",boxSizing:"border-box"}}/>}
@@ -4178,8 +4183,10 @@ const NAV=[{id:"home",l:"Accueil"},{id:"seance",l:"Séances"},{id:"stats",l:"Sta
                           <span style={{fontSize:12,fontWeight:600,color:C.green}}>Voir le rapport →</span>
                         </Tap>
                       ):isPastMissed?null:(
-                        <Tap onTap={()=>{setSessionActive(true);if(!clock.running&&clock.sec===0)clock.start();}} style={{flex:1,padding:"16px",borderRadius:15,background:C.blue,display:"flex",alignItems:"center",justifyContent:"center"}}>
-                          <span style={{fontSize:17,fontWeight:600,color:"#000"}}>Démarrer</span>
+                        <Tap label="Démarrer la séance" onTap={()=>{setSessionActive(true);if(!clock.running&&clock.sec===0)clock.start();}}
+                          style={{flex:1,padding:"17px",borderRadius:20,background:C.ink,display:"flex",alignItems:"center",justifyContent:"center",gap:9}}>
+                          <Icon name="play" size={16} stroke={C.bg} fill={C.bg}/>
+                          <span style={{fontSize:16,fontWeight:600,color:C.bg}}>Démarrer la séance</span>
                         </Tap>
                       )}
                       <Tap onTap={()=>setShowSettings(true)} style={{padding:"16px 20px",borderRadius:15,border:`1px solid ${C.div}`,display:"flex",alignItems:"center",justifyContent:"center"}}>
@@ -4257,21 +4264,49 @@ const NAV=[{id:"home",l:"Accueil"},{id:"seance",l:"Séances"},{id:"stats",l:"Sta
                   </div>}
                   <div>
                     {day.metcon&&!locked&&<div style={{marginBottom:16}}><div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}><span style={{fontSize:13,fontWeight:600,color:C.ink}}>Séance {sessionMode==="amrap"?"AMRAP":"EMOM"} · {day.blocks.length} blocs</span><span style={{fontSize:13,fontWeight:600,color:"#000",background:C.blue,padding:"2px 10px",borderRadius:8}}>~{day.totalMin} min</span></div><div style={{fontSize:12,color:C.ink4,marginBottom:10}}>Touchez un bloc pour le démarrer</div>{day.blocks.map((bl,bi)=>(<Tap key={bi} onTap={()=>{if(locked)return;setCircuitStart(bi);setShowCircuit(true);}} style={{marginBottom:12,background:C.s1,borderRadius:18,padding:"12px 14px"}}><div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}><span style={{fontSize:14,fontWeight:600,color:C.ink}}>{bl.label}</span><span style={{fontSize:12,fontWeight:600,color:C.ink3}}>{bl.kind==="emom"?bl.durationMin+" min · "+bl.rounds+" tours":bl.durationMin+" min"}</span></div>{bl.exercises.map((ex,ei)=>(<div key={ei} style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"5px 0",borderTop:ei?`1px solid ${C.s2}`:"none"}}><span style={{fontSize:14,color:C.ink2}}>{bl.kind==="emom"?("Min "+(ei+1)+" · "):""}{ex.n}</span><span style={{fontSize:13,fontWeight:600,color:C.ink3}}>{ex.kg>0?ex.kg+"kg · ":""}{ex.reps}{bl.kind==="emom"?"/min":"/tour"}</span></div>))}</Tap>))}</div>}
-                    {!day.metcon&&groupBlocks(exos,effMode).map((blk,bi)=>(
-                      <div key={bi} style={{marginBottom:16}}>
-                        <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10,paddingLeft:2}}>
-                          <span style={{fontSize:11,fontWeight:600,color:C.ink3,textTransform:"uppercase",letterSpacing:".1em"}}>{blk.muscle}</span>
-                          <span style={{fontSize:11,fontWeight:600,color:C.ink4}}>{blk.items.length} exo{blk.items.length>1?"s":""}</span>{blk.groupType&&<span style={{fontSize:10,fontWeight:600,color:"#000",background:C.blue,padding:"1px 7px",borderRadius:6,textTransform:"uppercase",letterSpacing:".08em"}}>{blk.groupType==="circuit"?"Circuit":blk.groupType==="amrap"?"AMRAP":blk.groupType==="emom"?"EMOM":"Superset"}</span>}
+                    {!day.metcon&&groupBlocks(exos,effMode).map((blk,bi)=>{
+                      // Une CARTE par bloc, comme la maquette : en-tete "Bloc N · type",
+                      // pastille de tours ou mention Lourd, puis les exercices en lignes
+                      // filetees. Avant, chaque exercice etait sa propre carte grise et le
+                      // bloc n'existait que sous forme d'un titre et d'un trait vertical.
+                      const first=blk.items[0]&&blk.items[0].ex;
+                      const heavy=first&&metaOf(first).tier==="lourd";
+                      const isGroup=!!blk.groupType&&blk.groupType!=="amrap"&&blk.groupType!=="emom";
+                      const tours=first?((first.groupTours>0)?first.groupTours:((typeof first.sets==="number"&&first.sets>0)?first.sets:4)):4;
+                      const kind=blk.groupType==="circuit"?"circuit":blk.groupType==="superset"?"superset"
+                        :blk.groupType==="amrap"?"AMRAP":blk.groupType==="emom"?"EMOM":"série droite";
+                      const BAR=[C.ink,C.blue,C.ink3,C.s4];
+                      const barColor=heavy?C.ink:BAR[(bi+1)%BAR.length];
+                      const done=blk.items.every(({ex})=>{
+                        const sv=doneSession?(doneSession.exercises||[]).find(e=>e.id===ex.id):null;
+                        if(sv) return true;
+                        const tgt=(ex.groupTours>0)?ex.groupTours:setPlanFor(ex).length;
+                        const c=Object.keys(log||{}).reduce((a,k)=>(k.indexOf(`${sDate}_${ex.id}_s`)===0&&log[k]&&log[k].done)?a+1:a,0);
+                        return tgt>0&&c>=tgt;
+                      });
+                      return (
+                      <div key={bi} style={{background:C.bg,border:`1px solid ${done?C.green:C.s2}`,borderRadius:24,
+                        padding:"14px 16px",marginBottom:11,boxShadow:`0 3px 16px ${C.ink5}`,transition:`border-color 260ms ${EO}`}}>
+                        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,marginBottom:4}}>
+                          <span style={{fontSize:11.5,fontWeight:500,color:C.ink4}}>Bloc {bi+1} · {kind}</span>
+                          <span style={{fontSize:10.5,fontWeight:600,padding:"4px 11px",borderRadius:999,whiteSpace:"nowrap",
+                            background:done?C.greenDim:(heavy?C.blueDim:C.s2),color:done?C.green:C.ink3}}>
+                            {done?"terminé":heavy?"lourd":isGroup?`${tours} tours`:`${tours} séries`}
+                          </span>
                         </div>
-                        {blk.groupType&&blk.groupType!=="amrap"&&blk.groupType!=="emom"&&!locked&&<Tap onTap={()=>setSupBlock({label:blk.muscle,kind:blk.groupType==="circuit"?"circuit":"superset",exercises:blk.items.map(x=>x.ex),restSec:(blk.items[0]&&blk.items[0].ex&&blk.items[0].ex.groupRest)||90,tours:(blk.items[0]&&blk.items[0].ex&&blk.items[0].ex.sets)||4})} style={{display:"flex",alignItems:"center",justifyContent:"center",gap:8,padding:"12px",borderRadius:12,background:C.blueDim,border:`1px solid ${C.blue}`,marginBottom:10}}><span style={{fontSize:14,fontWeight:600,color:C.blue}}>Démarrer le {blk.groupType==="circuit"?"circuit":"superset"}</span></Tap>}
-                        <div style={{paddingLeft:12,borderLeft:`2px solid ${C.s3}`}}>
-                          {blk.items.map(({ex,idx})=>(
-                            <ExerciseRowCollapsed key={ex.id} ex={ex} idx={idx} dayIdx={dayIdx} sDate={sDate} log={log} doneSession={doneSession}
-                              onOpen={()=>{if(locked)return;if(sessionMode!=="classique"){setShowCircuit(true);return;}const _e=exos[idx];if(_e&&_e.circuitId){const _g=exos.filter(e=>e.circuitId===_e.circuitId);setSupBlock({label:_e.m||"Superset",kind:_g.length>=3?"circuit":"superset",exercises:_g,restSec:(_g[0]&&_g[0].groupRest)||90,tours:(_g[0]&&(_g[0].groupTours||_g[0].sets))||4});}else{setFocusIdx(idx);}}} onReplace={e=>setShowPicker(e)} onOriginY={setFocusOrigin}/>
-                          ))}
-                        </div>
-                      </div>
-                    ))}
+                        {blk.items.map(({ex,idx},k)=>(
+                          <ExerciseRowCollapsed key={ex.id} ex={ex} idx={k} first={k===0} barColor={barColor} grouped={isGroup&&k<blk.items.length-1}
+                            dayIdx={dayIdx} sDate={sDate} log={log} doneSession={doneSession}
+                            onOpen={()=>{if(locked)return;if(sessionMode!=="classique"){setShowCircuit(true);return;}const _e=exos[idx];if(_e&&_e.circuitId){const _g=exos.filter(e=>e.circuitId===_e.circuitId);setSupBlock({label:_e.m||"Superset",kind:_g.length>=3?"circuit":"superset",exercises:_g,restSec:(_g[0]&&_g[0].groupRest)||90,tours:(_g[0]&&(_g[0].groupTours||_g[0].sets))||4});}else{setFocusIdx(idx);}}}
+                            onReplace={locked?null:(e)=>setShowPicker(e)} onOriginY={setFocusOrigin}/>
+                        ))}
+                        {isGroup&&!locked&&!done&&<Tap label={`Démarrer le ${kind}`}
+                          onTap={()=>setSupBlock({label:blk.muscle,kind:blk.groupType==="circuit"?"circuit":"superset",exercises:blk.items.map(x=>x.ex),restSec:(blk.items[0]&&blk.items[0].ex&&blk.items[0].ex.groupRest)||90,tours})}
+                          style={{marginTop:11,padding:"11px",borderRadius:14,background:C.blueDim,border:`1px solid ${C.blue}`,display:"flex",alignItems:"center",justifyContent:"center",gap:7}}>
+                          <Icon name="play" size={14} stroke={C.ink} fill={C.ink}/>
+                          <span style={{fontSize:13.5,fontWeight:600,color:C.ink}}>Démarrer le {kind}</span></Tap>}
+                      </div>);
+                    })}
                   </div>
                   {absExos.length>0&&(
                     <div style={{marginTop:24,paddingTop:20,borderTop:`1px solid ${C.s3}`}}>
@@ -4394,6 +4429,7 @@ const NAV=[{id:"home",l:"Accueil"},{id:"seance",l:"Séances"},{id:"stats",l:"Sta
     </div>
   );
 }
+
 
 
 
