@@ -2790,7 +2790,7 @@ function SettingsTab({user,excluded,onToggleExclude,onSignOut,onReset,onOpenLibr
           <span style={{fontSize:17,color:C.red}}>›</span>
         </Tap>
       </div>
-      <div style={{fontSize:12,color:C.ink4,textAlign:"center",marginTop:28}}>SŌMA · {"S"+weekNumber()} · {DB.length} exercices · build 23.76a</div>
+      <div style={{fontSize:12,color:C.ink4,textAlign:"center",marginTop:28}}>SŌMA · {"S"+weekNumber()} · {DB.length} exercices · build 23.77a</div>
     </div>
   );
 }
@@ -3737,7 +3737,10 @@ export default function SomaApp() {
   // que si le planning de la semaine declarait ce jour comme un jour d'entrainement : rater
   // un lundi et se presenter un mardi de repos affichait "Recuperation", et la sequence
   // restait bloquee. On compte les creneaux prevus et deja passes qui n'ont pas ete honores.
-  const overdueCount=useMemo(()=>{
+  // Calcul simple et NON memoise : ce bloc se trouve apres les retours anticipes du
+  // composant (authLoading, absence d'utilisateur, donnees non pretes). Un hook place ici
+  // n'est appele que sur une partie des rendus, ce que React refuse - d'ou l'ecran blanc.
+  const overdueCount=(()=>{
     const start=profile?.program_start; if(!start) return 0;
     const today=todayKey(); if(today<=start) return 0;
     // On compte les creneaux manques DEPUIS LA DERNIERE SEANCE, et non depuis le debut du
@@ -3754,7 +3757,7 @@ export default function SomaApp() {
       d.setDate(d.getDate()+1);
     }
     return slots;
-  },[profile,schedule,sessions]);
+  })();
   const isLate=overdueCount>0;
   const pendingTemplate=(!programDone&&!isBeforeProgramStart)?pendingSessionFor(profile?.goal||"hybride",sessionIndex,profile?.equipment):null;
   // Une journee DEJA ENREGISTREE s'affiche telle qu'elle a ete faite : intitule, muscles et
