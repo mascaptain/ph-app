@@ -2354,7 +2354,7 @@ function StatsTab({sessions,weights,accent,onOpenPhotos,pinnedPBs,onManagePBs,ac
   },[sessions]);
 
   return(
-    <div style={{padding:"20px 20px 16px",maxWidth:600,margin:"0 auto",fontFamily:F}}>
+    <div style={{padding:"20px 18px 16px",maxWidth:600,margin:"0 auto",fontFamily:F}}>
       
       <WeekSummary sessions={sessions} accent={accent} trainingDaysPerWeek={trainingDaysPerWeek}/>
       <SkillsOctagon sessions={sessions} profile={profile}/>
@@ -2692,7 +2692,7 @@ function HistoryTab({sessions,onSelect,accent,onOpenPhotos,photos:photoMap,urls}
   const DN=["L","M","M","J","V","S","D"];
   const dates=sessions.map(s=>s.date);
   return(
-    <div style={{padding:"20px 20px 100px",maxWidth:600,margin:"0 auto",fontFamily:F}}>
+    <div style={{padding:"20px 18px 100px",maxWidth:600,margin:"0 auto",fontFamily:F}}>
       {(()=>{
         const dates=Object.keys(photoMap||{}).sort().reverse();
         return (
@@ -2840,7 +2840,7 @@ function SettingsTab({user,excluded,onToggleExclude,onSignOut,onReset,onOpenLibr
   };
   const trainDays=(schedule||[]).map((d,i)=>(d&&d.salle)?i:-1).filter(i=>i>=0);
   return(
-    <div style={{padding:"20px 20px 100px",maxWidth:600,margin:"0 auto",fontFamily:F}}>
+    <div style={{padding:"20px 18px 100px",maxWidth:600,margin:"0 auto",fontFamily:F}}>
       {/* Profile card */}
       <div style={{background:C.s1,borderRadius:20,padding:"24px",marginBottom:16,display:"flex",alignItems:"center",gap:18}}>
         <div onClick={()=>avatarRef.current&&avatarRef.current.click()} style={{position:"relative",width:56,height:56,borderRadius:"50%",background:C.blue,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,overflow:"hidden",cursor:"pointer"}}>
@@ -2982,7 +2982,7 @@ function SettingsTab({user,excluded,onToggleExclude,onSignOut,onReset,onOpenLibr
           <span style={{fontSize:17,color:C.red}}>›</span>
         </Tap>
       </div>
-      <div style={{fontSize:12,color:C.ink4,textAlign:"center",marginTop:28}}>SŌMA · {"S"+weekNumber()} · {DB.length} exercices · build 23.82a</div>
+      <div style={{fontSize:12,color:C.ink4,textAlign:"center",marginTop:28}}>SŌMA · {"S"+weekNumber()} · {DB.length} exercices · build 23.83a</div>
     </div>
   );
 }
@@ -4084,8 +4084,8 @@ const NAV=[{id:"home",l:"Accueil"},{id:"seance",l:"Séances"},{id:"stats",l:"Sta
       `}</style>
 
       {/* TOP BAR */}
-      <div style={{background:"rgba(255,255,255,.92)",backdropFilter:"blur(24px)",WebkitBackdropFilter:"blur(24px)",borderBottom:`1px solid ${C.s3}`,position:"sticky",top:0,zIndex:Z.sticky}}>
-        <div style={{maxWidth:600,margin:"0 auto",padding:`calc(14px + env(safe-area-inset-top)) 20px 12px`,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+      <div style={{background:C.bg,backdropFilter:"blur(24px)",WebkitBackdropFilter:"blur(24px)",position:"sticky",top:0,zIndex:Z.sticky}}>
+        <div style={{maxWidth:600,margin:"0 auto",padding:`calc(14px + env(safe-area-inset-top)) 18px 10px`,display:"flex",justifyContent:"space-between",alignItems:"center",gap:10}}>
           <div>
             <div style={{fontSize:22,fontWeight:600,color:C.ink,letterSpacing:"-.04em"}}>SŌMA</div>
             <div style={{fontSize:10,fontWeight:600,color:C.ink4,letterSpacing:".16em",textTransform:"uppercase"}}>{"S"+wk+" · "}{user?.user_metadata?.name||"Athlète"}</div>
@@ -4101,8 +4101,8 @@ const NAV=[{id:"home",l:"Accueil"},{id:"seance",l:"Séances"},{id:"stats",l:"Sta
 
       {/* DAY STRIP */}
       {tab==="seance"&&(
-        <div style={{background:C.bg,borderBottom:`1px solid ${C.s3}`}}>
-        <div style={{maxWidth:600,margin:"0 auto",display:"flex",overflowX:"auto",padding:"10px 16px",gap:6,scrollbarWidth:"none"}}>
+        <div style={{background:C.bg}}>
+        <div style={{maxWidth:600,margin:"0 auto",display:"flex",overflowX:"auto",padding:"2px 18px 12px",gap:6,scrollbarWidth:"none",WebkitOverflowScrolling:"touch"}}>
           {viewSchedule.map((d,i)=>{
             const exList=d.exercises||[];
             const dStrDate=programDate(i);
@@ -4123,14 +4123,17 @@ const NAV=[{id:"home",l:"Accueil"},{id:"seance",l:"Séances"},{id:"stats",l:"Sta
             const wasPlanned=!!(d&&d.salle);
             const isMissed=isPastDay&&wasPlanned&&!dayFullyDone&&(!profile?.program_start||dStrDate>=profile.program_start);
             return(
-              <Tap key={i} label={d.day} onTap={()=>{setDayIdx(i);setAiOverride(null);setDayCons(null);setModeOverride(null);setCircuitStart(0);setSupBlock(null);}} style={{flexShrink:0,minWidth:54,padding:"9px 6px",textAlign:"center",borderRadius:16,background:isSel?C.blueDim:"transparent",border:`1px solid ${isSel?C.blue:"transparent"}`,transition:`all 220ms ${EO}`}}>
+              <Tap key={i} label={d.day} onTap={()=>{setDayIdx(i);setAiOverride(null);setDayCons(null);setModeOverride(null);setCircuitStart(0);setSupBlock(null);}} style={{flex:"1 1 0",minWidth:42,padding:"9px 4px",textAlign:"center",borderRadius:16,background:isSel?C.blueDim:"transparent",border:`1px solid ${isSel?C.blue:"transparent"}`,transition:`all 220ms ${EO}`}}>
                 <div style={{fontSize:10,fontWeight:600,color:isSel?C.ink2:C.ink4,letterSpacing:".06em",marginBottom:4}}>{d.day}</div>
                 {isToday&&!dayFullyDone&&<div style={{width:6,height:6,borderRadius:"50%",background:C.lime,margin:"0 auto 4px"}}/>}
-                {!isToday&&isMissed&&<div title="Séance manquée" style={{width:6,height:6,borderRadius:"50%",border:`1.5px solid ${C.ink4}`,margin:"0 auto 4px",boxSizing:"border-box"}}/>}
+
                 {dayFullyDone?(
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={accent||C.green} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" style={{margin:"0 auto",display:"block"}}><path d="M20 6L9 17l-5-5"/></svg>
                 ):isMissed?(
-                  <span style={{display:"block",textAlign:"center",fontSize:12,fontWeight:600,color:C.ink4,lineHeight:"12px"}}>↷</span>
+                  // Un anneau creux plutot qu'un caractere : le glyphe de report se lisait
+                  // comme un tilde et salissait la bande.
+                  <span title="Séance manquée" style={{display:"block",width:10,height:10,borderRadius:"50%",
+                    border:`1.5px solid ${C.ink4}`,margin:"1px auto",boxSizing:"border-box"}}/>
                 ):(d.salle&&pct>0&&<div style={{width:"70%",height:2,background:C.s4,borderRadius:1,margin:"0 auto"}}>
                   <div style={{width:`${pct*100}%`,height:2,background:accent,borderRadius:1,transition:`width 400ms ${EO}`}}/>
                 </div>)}
@@ -4146,7 +4149,7 @@ const NAV=[{id:"home",l:"Accueil"},{id:"seance",l:"Séances"},{id:"stats",l:"Sta
         <TabContent tab={tab} prevTab={prevTab}>
           {tab==="home"&&<HomeTab profile={profile} streak={streak} sessions={sessions} weights={weights} todaySession={todaySessionForHome} accent={accent} trainingDaysPerWeek={trainingDaysPerWeek} weighIns={weighIns} onSaveWeighIn={saveWeighIn} onStartToday={()=>{setDayIdx(todayIdx());switchTab("seance");}}/>}
           {tab==="seance"&&(
-            <div style={{padding:"16px 20px 0",maxWidth:600,margin:"0 auto"}}>
+            <div style={{padding:"14px 18px 0",maxWidth:600,margin:"0 auto"}}>
               {isRest?(
                 <div style={{textAlign:"center",padding:"80px 20px"}}>
                   <div style={{fontSize:36,fontWeight:600,color:C.ink4,letterSpacing:"-.02em",marginBottom:14}}>Récupération</div>
@@ -4308,13 +4311,23 @@ const NAV=[{id:"home",l:"Accueil"},{id:"seance",l:"Séances"},{id:"stats",l:"Sta
                       </div>);
                     })}
                   </div>
+                  {/* Les abdominaux formaient une liste a part, separee par un filet et avec
+                      son propre style de ligne. Ils deviennent un bloc comme les autres. */}
                   {absExos.length>0&&(
-                    <div style={{marginTop:24,paddingTop:20,borderTop:`1px solid ${C.s3}`}}>
-                      <div style={{fontSize:11,fontWeight:600,color:C.ink4,textTransform:"uppercase",letterSpacing:".1em",marginBottom:16}}>Abdominaux</div>
-                      {absExos.map(a=>(
-                        <div key={a.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"14px 0",borderBottom:`1px solid ${C.s3}`}}>
-                          <span style={{fontSize:17,fontWeight:400,color:C.ink}}>{a.n||a.name}</span>
-                          <span style={{fontSize:15,fontWeight:600,color:C.ink3}}>{a.vol}</span>
+                    <div style={{background:C.bg,border:`1px solid ${C.s2}`,borderRadius:24,padding:"14px 16px",
+                      marginBottom:11,boxShadow:`0 3px 16px ${C.ink5}`}}>
+                      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,marginBottom:4}}>
+                        <span style={{fontSize:11.5,fontWeight:500,color:C.ink4}}>Bloc gainage · abdominaux</span>
+                        <span style={{fontSize:10.5,fontWeight:600,padding:"4px 11px",borderRadius:999,background:C.s2,color:C.ink3}}>
+                          {absExos.length} exercice{absExos.length>1?"s":""}</span>
+                      </div>
+                      {absExos.map((a,k)=>(
+                        <div key={a.id} style={{display:"flex",alignItems:"center",gap:11,padding:"10px 0",
+                          borderTop:k?`1px solid ${C.s2}`:"none"}}>
+                          <span style={{width:4,height:30,borderRadius:2,flexShrink:0,background:C.s4}}/>
+                          <span style={{flex:1,minWidth:0,fontSize:14,fontWeight:500,color:C.ink,
+                            whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{a.n||a.name}</span>
+                          <span style={{fontSize:13.5,color:C.ink2,flexShrink:0,fontVariantNumeric:"tabular-nums"}}>{a.vol}</span>
                         </div>
                       ))}
                     </div>
@@ -4328,7 +4341,7 @@ const NAV=[{id:"home",l:"Accueil"},{id:"seance",l:"Séances"},{id:"stats",l:"Sta
               )}
             </div>
           )}
-          {tab==="stats"&&<><div style={{padding:"20px 20px 0",maxWidth:600,margin:"0 auto"}}><WeightChart weighIns={weighIns} accent={accent}/></div><StatsTab sessions={sessions} weights={weights} accent={accent} trainingDaysPerWeek={trainingDaysPerWeek} profile={profile} pinnedPBs={profile?.pinned_pbs} onManagePBs={()=>setShowPBManager(true)} activeSkills={profile?.active_skills} onManageSkills={()=>setShowSkillManager(true)} onOpenRewards={()=>setShowRewardsManager(true)}/><HistoryTab sessions={sessions} onSelect={setShowReport} accent={accent} onOpenPhotos={()=>setShowPhotos(true)} photos={photos} urls={photoUrls}/></>}
+          {tab==="stats"&&<><div style={{padding:"20px 18px 0",maxWidth:600,margin:"0 auto"}}><WeightChart weighIns={weighIns} accent={accent}/></div><StatsTab sessions={sessions} weights={weights} accent={accent} trainingDaysPerWeek={trainingDaysPerWeek} profile={profile} pinnedPBs={profile?.pinned_pbs} onManagePBs={()=>setShowPBManager(true)} activeSkills={profile?.active_skills} onManageSkills={()=>setShowSkillManager(true)} onOpenRewards={()=>setShowRewardsManager(true)}/><HistoryTab sessions={sessions} onSelect={setShowReport} accent={accent} onOpenPhotos={()=>setShowPhotos(true)} photos={photos} urls={photoUrls}/></>}
           {tab==="settings"&&<SettingsTab user={user} excluded={excluded} onToggleExclude={toggleExclude} onOpenLibrary={()=>setShowLibrary(true)} profile={profile} schedule={schedule} avatarUrl={avatarUrl} onUpdateConfig={updateConfig} onOpenScheduleEditor={()=>setShowSched(true)} onRedoOnboarding={()=>setShowOnboardingRedo(true)}
             onSignOut={async()=>{await supabase.auth.signOut();setUser(null);setLog({});setWeights({});setSessions([]);setExcluded([]);setStreak(0);}}
             onReset={async()=>{
@@ -4380,8 +4393,8 @@ const NAV=[{id:"home",l:"Accueil"},{id:"seance",l:"Séances"},{id:"stats",l:"Sta
           par un filet. Elle devient une pastille posee SUR la page, dans le meme langage de
           cartes que le reste, avec l'onglet actif en carre sombre. */}
       <div style={{position:"fixed",left:0,right:0,bottom:0,zIndex:Z.sticky+10,display:"flex",justifyContent:"center",
-                   padding:"0 16px calc(14px + env(safe-area-inset-bottom))",pointerEvents:"none"}}>
-        <div style={{pointerEvents:"auto",display:"flex",gap:4,padding:6,borderRadius:26,width:"100%",maxWidth:340,
+                   padding:"0 18px calc(14px + env(safe-area-inset-bottom))",pointerEvents:"none"}}>
+        <div style={{pointerEvents:"auto",display:"flex",gap:4,padding:6,borderRadius:26,width:"100%",maxWidth:600,
                      background:C.bg==="#FFFFFF"?"rgba(255,255,255,.86)":"rgba(28,28,43,.86)",
                      backdropFilter:"blur(22px)",WebkitBackdropFilter:"blur(22px)",
                      border:`1px solid ${C.s2}`,boxShadow:`0 10px 30px ${C.ink5}`}}>
