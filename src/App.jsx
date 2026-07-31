@@ -156,6 +156,7 @@ const REST_TPL = {label:"Repos",salle:null,muscle:"Recuperation active",exercise
 const SESSION_TEMPLATES = [...PROGRAM.filter(d=>d.salle).map(d=>({label:d.label,salle:d.salle,muscle:d.muscle,exercises:d.exercises,abs:d.abs,ids:d.ids})), REST_TPL];
 
 // Rotation hebdo - mesocycle hybride (Volume -> Intensite -> Puissance -> Deload)
+const VERSION="1.37.0";
 const weekNumber = () => { const dt=new Date(); const d=new Date(Date.UTC(dt.getFullYear(),dt.getMonth(),dt.getDate())); const dn=(d.getUTCDay()+6)%7; d.setUTCDate(d.getUTCDate()-dn+3); const ft=new Date(Date.UTC(d.getUTCFullYear(),0,4)); const fn=(ft.getUTCDay()+6)%7; ft.setUTCDate(ft.getUTCDate()-fn+3); return 1+Math.round((d-ft)/604800000); };
 const PHASES12=[{n:"Accumulation",f:"Volume, base"},{n:"Accumulation",f:"Volume"},{n:"Accumulation",f:"Volume +"},{n:"Intensification",f:"Charges +"},{n:"Intensification",f:"Charges ++"},{n:"Intensification",f:"Lourd"},{n:"Réalisation",f:"Explosif"},{n:"Réalisation",f:"Puissance"},{n:"Réalisation",f:"Pic de force"},{n:"Deload",f:"Récupération"},{n:"Test / PR",f:"Validation"},{n:"Test / PR",f:"Nouveaux maxs"}];
 const programWeek=()=>((weekNumber()-1)%12)+1;
@@ -1045,13 +1046,20 @@ const groupBlocks=(exos,mode)=>{
   });
   return blocks;
 };
+// Materiel a charge FIXE : on saisit une cloche, on ne la change pas en cours
+// d'exercice. Une rampe y prescrivait des poids qui n'existent pas (17,5 / 22,5 kg)
+// et un changement de kettlebell entre chaque serie.
+const FIXED_LOAD_EQ={kb:true};
+const isFixedLoad=(ex)=>{const e=ex&&ex.eq;const k=Array.isArray(e)?e[0]:e;return !!FIXED_LOAD_EQ[k];};
 const setPlanFor=(ex)=>{
   const n=Math.max(1,typeof ex.sets==="number"?ex.sets:4);
   const W=ex.kg||0;
+  const fixed=isFixedLoad(ex);
   return Array.from({length:n},(_,i)=>{
+    // Une cloche de 24 kg pese 24 kg : l'arrondi au pas de 2,5 la faisait afficher a 25.
+    if(fixed) return {w:W,reps:ex.reps};
     const frac=n>1?(0.7+0.3*i/(n-1)):1;
-    const w=W>0?Math.round(W*frac/2.5)*2.5:0;
-    return {w,reps:ex.reps};
+    return {w:W>0?Math.round(W*frac/2.5)*2.5:0,reps:ex.reps};
   });
 };
 const repsNum=(r)=>{const m=String(r||"").match(/\d+/);return m?parseInt(m[0]):0;};
@@ -2409,7 +2417,7 @@ function SkillsOctagon({sessions,profile}) {
             ["Intensité",intensite],["Progression",prog],["Équilibre",equilibre],["Explosivité",explosivite]];
   },[sessions,profile]);
   if(!axes) return null;
-  const cx=150,cy=150,R=92;
+  const cx=150,cy=92,R=68;
   const pt=(i,r)=>{const a=(-90+i*45)*Math.PI/180;return [cx+Math.cos(a)*r,cy+Math.sin(a)*r];};
   const poly=axes.map((ax,i)=>pt(i,ax[1]/100*R).join(",")).join(" ");
   const grid=[25,50,75,100].map(g=>axes.map((_,i)=>pt(i,g/100*R).join(",")).join(" "));
@@ -2420,15 +2428,18 @@ function SkillsOctagon({sessions,profile}) {
         <span style={{fontSize:14.5,fontWeight:600,color:C.ink}}>Octogone de compétences</span>
         <span style={{fontSize:10.5,fontWeight:600,padding:"4px 11px",borderRadius:999,background:C.s2,color:C.ink3}}>8 qualités</span>
       </div>
-      <div style={{fontSize:11.5,color:C.ink4,marginBottom:6}}>Calculées sur ton historique.</div>
-      {/* La figure prenait 100% de la largeur : sur un conteneur de 600 elle depassait
-          500 px de haut a elle seule. Plafonnee et centree, elle tient en un tiers. */}
-      <svg viewBox="0 0 300 268" style={{width:"100%",maxWidth:290,height:"auto",display:"block",margin:"0 auto"}}>
+      <div style={{fontSize:11.5,color:C.ink4,marginBottom:2}}>Calculées sur ton historique.</div>
+      <svg viewBox="0 0 300 184" style={{width:"100%",height:"auto",display:"block"}}>
         {grid.map((g,i)=>(<polygon key={"g"+i} points={g} fill="none" stroke={C.s3} strokeWidth="1"/>))}
         {axes.map((_,i)=>{const[x,y]=pt(i,R);return <line key={"l"+i} x1={cx} y1={cy} x2={x} y2={y} stroke={C.s3} strokeWidth="1"/>;})}
         <polygon points={poly} fill={C.blue} fillOpacity="0.25" stroke={C.blue} strokeWidth="2"/>
         {axes.map((ax,i)=>{const[x,y]=pt(i,ax[1]/100*R);return <circle key={"c"+i} cx={x} cy={y} r="3" fill={C.blue}/>;})}
-        {axes.map((ax,i)=>{const[x,y]=pt(i,R+16);return <text key={"t"+i} x={x} y={y} fill={C.ink3} fontSize="11" fontWeight="600" textAnchor="middle" dominantBaseline="middle" fontFamily={F}>{ax[0]}</text>;})}
+        {axes.map((ax,i)=>{
+          const[x,y]=pt(i,R+11);
+          const dx=x-cx;
+          const anchor=dx>2?"start":(dx<-2?"end":"middle");
+          return <text key={"t"+i} x={x+(dx>2?3:(dx<-2?-3:0))} y={y} fill={C.ink3} fontSize="10.5"
+            fontWeight="500" textAnchor={anchor} dominantBaseline="middle" fontFamily={F}>{ax[0]}</text>;})}
       </svg>
     </div>
   );
@@ -2438,7 +2449,7 @@ function SkillsOctagon({sessions,profile}) {
 // pleine largeur de hauteurs toutes differentes : on scrollait quatre ecrans pour trois
 // questions distinctes. Une question par vue, une vue par ecran.
 //   Resume — ou j'en suis      Corps — comment j'evolue      Force — ce que je vaux
-function StatsTab({sessions,weights,accent,onOpenPhotos,pinnedPBs,onManagePBs,activeSkills,onManageSkills,onOpenRewards,trainingDaysPerWeek,profile,weighIns,onSaveWeighIn,children}) {
+function StatsTab({sessions,weights,accent,onOpenPhotos,pinnedPBs,onManagePBs,activeSkills,onManageSkills,onOpenRewards,trainingDaysPerWeek,profile,weighIns,onSaveWeighIn,photos,photoUrls,children}) {
   const [view,setView]=useState("resume");
   const total=sessions.length,totalKg=sessions.reduce((a,s)=>a+(s.totalKg||0),0);
   const avgScore=total?Math.round(sessions.reduce((a,s)=>a+computeScore(s.totalKg,s.totalSets,s.feedback,targetOf(s)),0)/total):0;
@@ -2539,14 +2550,16 @@ function StatsTab({sessions,weights,accent,onOpenPhotos,pinnedPBs,onManagePBs,ac
       <div key="corps" style={{animation:`riseIn 300ms ${EO} both`}}>
         <WeightChart weighIns={weighIns} accent={accent}/>
         {onSaveWeighIn&&<WeighInCard weighIns={weighIns} onSave={onSaveWeighIn}/>}
+        <PhotoStrip photos={photos} urls={photoUrls} onOpen={onOpenPhotos}/>
         {(()=>{
           const vs=(weighIns||[]).map(w=>Number(w.weight_kg)).filter(v=>v>0);
           const lo=vs.length?Math.min(...vs):null,hi=vs.length?Math.max(...vs):null;
+          const nb=vs.length;
           return(
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:9,marginBottom:11}}>
-              <Tile label="Photos" value="Progression" sub="Comparer deux clichés ›" icon="camera" onTap={onOpenPhotos}/>
-              <Tile label="Amplitude" value={lo!==null?String(Math.round((hi-lo)*10)/10).replace(".",","):"—"} unit="kg"
-                sub={lo!==null?`${String(lo).replace(".",",")} → ${String(hi).replace(".",",")} kg`:"Pas encore de pesée"} icon="weight"/>
+              <Tile label="Amplitude" value={nb?String(Math.round((hi-lo)*10)/10).replace(".",","):"—"} unit="kg"
+                sub={nb?`${String(lo).replace(".",",")} → ${String(hi).replace(".",",")} kg`:"Pas encore de pesée"} icon="weight"/>
+              <Tile label="Pesées" value={nb} sub={nb?"Enregistre quand tu veux":"Aucune pesée"} icon="check"/>
             </div>
           );
         })()}
@@ -2841,7 +2854,45 @@ function PhotoProgress({uid,photos,urls,onSavePhotos,onClose}) {
   );
 }
 
-function HistoryTab({sessions,onSelect,accent,onOpenPhotos,photos:photoMap,urls}) {
+// Bande photo. Elle vivait dans l'historique, donc dans la vue Resume : la
+// progression du corps n'a rien a y faire, elle appartient a la vue Corps.
+function PhotoStrip({photos,urls,onOpen}) {
+  const dates=Object.keys(photos||{}).sort().reverse();
+  return (
+    <Tap label="Progression photo" onTap={onOpen} style={{display:"block",background:C.bg,
+      border:`1px solid ${C.s2}`,boxShadow:`0 3px 16px ${C.ink5}`,borderRadius:22,
+      padding:"16px 17px",marginBottom:11}}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:10,
+        marginBottom:dates.length?13:0}}>
+        <div style={{minWidth:0}}>
+          <div style={{fontSize:14,fontWeight:600,color:C.ink}}>Progression photo</div>
+          <div style={{fontSize:11.5,color:C.ink4,marginTop:2}}>
+            {dates.length?`${dates.length} photo${dates.length>1?"s":""} · voir l'évolution`:"Ajoute ta première photo"}</div>
+        </div>
+        <span style={{fontSize:11.5,fontWeight:600,padding:"6px 12px",borderRadius:999,
+          background:C.s2,color:C.ink3,flexShrink:0}}>{dates.length?"Gérer ›":"+ Ajouter"}</span>
+      </div>
+      {dates.length>0&&(
+        <div style={{display:"flex",gap:9,overflowX:"auto",paddingBottom:3,scrollbarWidth:"none"}}>
+          {dates.slice(0,12).map(d=>(
+            <div key={d} style={{flexShrink:0,width:78,height:104,borderRadius:14,overflow:"hidden",
+              background:C.s2,position:"relative"}}>
+              <img src={(urls||{})[d]} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/>
+              <div style={{position:"absolute",left:0,right:0,bottom:0,padding:"4px 8px",
+                background:"linear-gradient(transparent,rgba(0,0,0,.75))",fontSize:10.5,fontWeight:600,
+                color:"#fff",fontVariantNumeric:"tabular-nums"}}>{d.slice(5)}</div>
+            </div>
+          ))}
+        </div>
+      )}
+    </Tap>
+  );
+}
+
+// Calendrier des seances. La liste "Seances recentes" qui le suivait disait exactement
+// la meme chose que lui : un jour marque s'ouvre d'un tap et donne le rapport complet.
+// Elle ajoutait un ecran de scroll pour un doublon.
+function HistoryTab({sessions,onSelect,accent}) {
   const[view,setView]=useState(new Date());
   const y=view.getFullYear(),m=view.getMonth();
   const first=new Date(y,m,1).getDay(),days=new Date(y,m+1,0).getDate();
@@ -2849,78 +2900,47 @@ function HistoryTab({sessions,onSelect,accent,onOpenPhotos,photos:photoMap,urls}
   const MN=["Jan","Fév","Mar","Avr","Mai","Juin","Juil","Août","Sep","Oct","Nov","Déc"];
   const DN=["L","M","M","J","V","S","D"];
   const dates=sessions.map(s=>s.date);
+  const monthCount=dates.filter(d=>d.slice(0,7)===`${y}-${String(m+1).padStart(2,"0")}`).length;
+  // Plus de conteneur a gouttiere propre : la carte se cale sur la grille de la page,
+  // sinon elle apparait plus etroite que les tuiles qui la precedent.
   return(
-    <div style={{padding:"20px 18px 100px",maxWidth:600,margin:"0 auto",fontFamily:F}}>
-      {(()=>{
-        const dates=Object.keys(photoMap||{}).sort().reverse();
-        return (
-          <Tap onTap={onOpenPhotos} style={{display:"block"}}>
-            <div style={{background:C.s1,borderRadius:22,padding:"20px",marginBottom:20}}>
-              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:dates.length?14:0}}>
-                <div>
-                  <div style={{fontSize:14,fontWeight:600,color:C.ink}}>Progression photo</div>
-                  <div style={{fontSize:12,color:C.ink4,marginTop:2}}>{dates.length?`${dates.length} photo${dates.length>1?"s":""} · voir l'évolution`:"Ajoute ta première photo"}</div>
-                </div>
-                <span style={{fontSize:13,fontWeight:600,color:C.blue}}>{dates.length?"Gérer ›":"+ Ajouter"}</span>
-              </div>
-              {dates.length>0&&<div style={{display:"flex",gap:10,overflowX:"auto",paddingBottom:4}}>
-                {dates.slice(0,12).map(d=>(
-                  <div key={d} style={{flexShrink:0,width:84,height:112,borderRadius:14,overflow:"hidden",background:C.s2,position:"relative"}}>
-                    <img src={(urls||{})[d]} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/>
-                    <div style={{position:"absolute",left:0,right:0,bottom:0,padding:"4px 8px",background:"linear-gradient(transparent,rgba(0,0,0,.75))",fontSize:11,fontWeight:600,color:"#fff"}}>{d.slice(5)}</div>
-                  </div>
-                ))}
-              </div>}
-            </div>
-          </Tap>
-        );
-      })()}
-      <div style={{background:C.s1,borderRadius:22,padding:"20px",marginBottom:20}}>
-        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:18}}>
-          <Tap onTap={()=>setView(new Date(y,m-1,1))} style={{width:36,height:36,borderRadius:8,background:C.s2,display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{fontSize:16,color:C.ink3}}>‹</span></Tap>
-          <span style={{fontSize:17,fontWeight:600,color:C.ink}}>{MN[m]} {y}</span>
-          <Tap onTap={()=>setView(new Date(y,m+1,1))} style={{width:36,height:36,borderRadius:8,background:C.s2,display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{fontSize:16,color:C.ink3}}>›</span></Tap>
+    <div style={{background:C.bg,border:`1px solid ${C.s2}`,boxShadow:`0 3px 16px ${C.ink5}`,
+      borderRadius:22,padding:"16px 17px",marginBottom:11,fontFamily:F}}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:10,marginBottom:14}}>
+        <Tap label="Mois précédent" onTap={()=>setView(new Date(y,m-1,1))}
+          style={{width:34,height:34,borderRadius:12,background:C.s2,display:"flex",alignItems:"center",justifyContent:"center"}}>
+          <Icon name="back" size={15} stroke={C.ink3}/></Tap>
+        <div style={{textAlign:"center",minWidth:0}}>
+          <div style={{fontSize:14,fontWeight:600,color:C.ink}}>{MN[m]} {y}</div>
+          <div style={{fontSize:11,color:C.ink4,marginTop:1}}>
+            {monthCount?`${monthCount} séance${monthCount>1?"s":""} · appuie pour le détail`:"Aucune séance"}</div>
         </div>
-        <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:4,marginBottom:8}}>
-          {DN.map((d,i)=><div key={i} style={{textAlign:"center",fontSize:11,fontWeight:600,color:C.ink4,paddingBottom:6}}>{d}</div>)}
-        </div>
-        <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:4}}>
-          {Array.from({length:off+days},(_,i)=>{
-            if(i<off) return <div key={i}/>;
-            const d=i-off+1;
-            const key=`${y}-${String(m+1).padStart(2,"0")}-${String(d).padStart(2,"0")}`;
-            const done=dates.includes(key),isToday=key===todayKey();
-            return(
-              <Tap key={i} onTap={()=>{if(done){const s=sessions.find(h=>h.date===key);if(s)onSelect(s);}}}
-                style={{aspectRatio:"1",borderRadius:8,background:done?accent||C.blue:isToday?C.s3:"transparent",border:isToday&&!done?`1px solid ${C.div}`:"none",display:"flex",alignItems:"center",justifyContent:"center",transition:`background 200ms ${EO}`}}>
-                <span style={{fontSize:13,fontWeight:done||isToday?600:400,color:done?"#000":isToday?C.ink:C.ink4}}>{d}</span>
-              </Tap>
-            );
-          })}
-        </div>
+        <Tap label="Mois suivant" onTap={()=>setView(new Date(y,m+1,1))}
+          style={{width:34,height:34,borderRadius:12,background:C.s2,display:"flex",alignItems:"center",
+            justifyContent:"center",transform:"scaleX(-1)"}}>
+          <Icon name="back" size={15} stroke={C.ink3}/></Tap>
       </div>
-      <div style={{fontSize:12,fontWeight:600,color:C.ink4,textTransform:"uppercase",letterSpacing:".1em",marginBottom:12}}>Séances récentes</div>
-      {sessions.length===0&&<div style={{textAlign:"center",padding:"40px 0",fontSize:17,color:C.ink4}}>Aucune séance terminée.</div>}
-      {sessions.slice().reverse().map((s,i)=>{
-        const prog=PROGRAM.find(p=>p.day===s.day);
-        const label=s.dayLabel||prog?.label||s.day||"Séance";
-        return(
-          <Tap key={i} onTap={()=>onSelect(s)} style={{background:C.s1,borderRadius:22,padding:"16px 18px",marginBottom:10}}>
-            <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:8}}>
-              <div>
-                <div style={{fontSize:17,fontWeight:600,color:C.ink}}>{label}</div>
-                <div style={{fontSize:13,color:C.ink4,marginTop:2}}>{s.day} · {s.date}</div>
-              </div>
-              {computeScore(s.totalKg,s.totalSets,s.feedback,targetOf(s))>0&&<span style={{fontSize:15,fontWeight:600,color:accent||C.blue,padding:"4px 12px",background:C.s3,borderRadius:8}}>{computeScore(s.totalKg,s.totalSets,s.feedback,targetOf(s))}</span>}
-            </div>
-            <div style={{display:"flex",gap:14,flexWrap:"wrap"}}>
-              {s.totalKg>0&&<span style={{fontSize:13,color:C.ink3}}>{s.totalKg.toLocaleString()}kg</span>}
-              {s.duration>0&&<span style={{fontSize:13,color:C.ink3}}>{fmtDur(s.duration)}</span>}
-              {s.totalSets>0&&<span style={{fontSize:13,color:C.ink3}}>{s.totalSets} séries</span>}
-            </div>
-          </Tap>
-        );
-      })}
+      <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:4,marginBottom:5}}>
+        {DN.map((d,i)=><div key={i} style={{textAlign:"center",fontSize:10,fontWeight:600,color:C.ink4}}>{d}</div>)}
+      </div>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:4}}>
+        {Array.from({length:off+days},(_,i)=>{
+          if(i<off) return <div key={i}/>;
+          const d=i-off+1;
+          const key=`${y}-${String(m+1).padStart(2,"0")}-${String(d).padStart(2,"0")}`;
+          const done=dates.includes(key),isToday=key===todayKey();
+          return(
+            <Tap key={i} label={done?`Séance du ${d}`:undefined}
+              onTap={()=>{if(done){const x=sessions.find(h=>h.date===key);if(x)onSelect(x);}}}
+              style={{aspectRatio:"1",borderRadius:11,background:done?(accent||C.blue):(isToday?C.s2:"transparent"),
+                border:isToday&&!done?`1px solid ${C.s4}`:"none",display:"flex",alignItems:"center",
+                justifyContent:"center",transition:`background 200ms ${EO}`}}>
+              <span style={{fontSize:12.5,fontWeight:done||isToday?600:400,
+                color:done?"#1B1B1B":(isToday?C.ink:C.ink4),fontVariantNumeric:"tabular-nums"}}>{d}</span>
+            </Tap>
+          );
+        })}
+      </div>
     </div>
   );
 }
@@ -3140,7 +3160,7 @@ function SettingsTab({user,excluded,onToggleExclude,onSignOut,onReset,onOpenLibr
           <span style={{fontSize:17,color:C.red}}>›</span>
         </Tap>
       </div>
-      <div style={{fontSize:12,color:C.ink4,textAlign:"center",marginTop:28}}>SŌMA · {"S"+weekNumber()} · {DB.length} exercices · build 23.88a</div>
+      <div style={{fontSize:12,color:C.ink4,textAlign:"center",marginTop:28}}>SŌMA · {"S"+weekNumber()} · {DB.length} exercices · version {VERSION}</div>
     </div>
   );
 }
@@ -4373,11 +4393,11 @@ const NAV=[{id:"home",l:"Accueil"},{id:"seance",l:"Séances"},{id:"stats",l:"Sta
                     marginBottom:11,boxShadow:`0 3px 16px ${C.ink5}`}}>
                     <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,marginBottom:4}}>
                       <span style={{fontSize:11.5,fontWeight:500,color:C.ink4}}>Bloc échauffement</span>
-                      <span style={{fontSize:10.5,fontWeight:600,padding:"4px 11px",borderRadius:999,background:C.s2,color:C.ink3}}>8 min</span>
+                      <span style={{fontSize:10.5,fontWeight:600,padding:"4px 11px",borderRadius:999,background:C.s2,color:C.ink3}}>5 min</span>
                     </div>
                     {(day.salle==="haut"
                       ?["Rotations épaules","Wall slide","Push-up to downdog","Mobilité thoracique"]
-                      :["Corde 3 min","Hip circle","Leg swing","KB Swing léger ×10"]).map((w,k)=>(
+                      :["Corde 2 min","Hip circle","Leg swing","KB Swing léger ×10"]).map((w,k)=>(
                       <div key={w} style={{display:"flex",alignItems:"center",gap:11,padding:"9px 0",
                         borderTop:k?`1px solid ${C.s2}`:"none"}}>
                         <span style={{width:4,height:26,borderRadius:2,flexShrink:0,background:C.s4}}/>
@@ -4513,7 +4533,7 @@ const NAV=[{id:"home",l:"Accueil"},{id:"seance",l:"Séances"},{id:"stats",l:"Sta
               )}
             </div>
           )}
-          {tab==="stats"&&<StatsTab sessions={sessions} weights={weights} accent={accent} trainingDaysPerWeek={trainingDaysPerWeek} profile={profile} weighIns={weighIns} onSaveWeighIn={saveWeighIn} onOpenPhotos={()=>setShowPhotos(true)} pinnedPBs={profile?.pinned_pbs} onManagePBs={()=>setShowPBManager(true)} activeSkills={profile?.active_skills} onManageSkills={()=>setShowSkillManager(true)} onOpenRewards={()=>setShowRewardsManager(true)}><HistoryTab sessions={sessions} onSelect={setShowReport} accent={accent} onOpenPhotos={()=>setShowPhotos(true)} photos={photos} urls={photoUrls}/></StatsTab>}
+          {tab==="stats"&&<StatsTab sessions={sessions} weights={weights} accent={accent} trainingDaysPerWeek={trainingDaysPerWeek} profile={profile} weighIns={weighIns} onSaveWeighIn={saveWeighIn} onOpenPhotos={()=>setShowPhotos(true)} photos={photos} photoUrls={photoUrls} pinnedPBs={profile?.pinned_pbs} onManagePBs={()=>setShowPBManager(true)} activeSkills={profile?.active_skills} onManageSkills={()=>setShowSkillManager(true)} onOpenRewards={()=>setShowRewardsManager(true)}><HistoryTab sessions={sessions} onSelect={setShowReport} accent={accent}/></StatsTab>}
           {tab==="settings"&&<SettingsTab user={user} excluded={excluded} onToggleExclude={toggleExclude} onOpenLibrary={()=>setShowLibrary(true)} profile={profile} schedule={schedule} avatarUrl={avatarUrl} onUpdateConfig={updateConfig} onOpenScheduleEditor={()=>setShowSched(true)} onRedoOnboarding={()=>setShowOnboardingRedo(true)}
             onSignOut={async()=>{await supabase.auth.signOut();setUser(null);setLog({});setWeights({});setSessions([]);setExcluded([]);setStreak(0);}}
             onReset={async()=>{
@@ -4614,6 +4634,8 @@ const NAV=[{id:"home",l:"Accueil"},{id:"seance",l:"Séances"},{id:"stats",l:"Sta
     </div>
   );
 }
+
+
 
 
 
