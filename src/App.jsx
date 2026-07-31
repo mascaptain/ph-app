@@ -156,7 +156,7 @@ const REST_TPL = {label:"Repos",salle:null,muscle:"Recuperation active",exercise
 const SESSION_TEMPLATES = [...PROGRAM.filter(d=>d.salle).map(d=>({label:d.label,salle:d.salle,muscle:d.muscle,exercises:d.exercises,abs:d.abs,ids:d.ids})), REST_TPL];
 
 // Rotation hebdo - mesocycle hybride (Volume -> Intensite -> Puissance -> Deload)
-const VERSION="1.38.1";
+const VERSION="1.38.2";
 const weekNumber = () => { const dt=new Date(); const d=new Date(Date.UTC(dt.getFullYear(),dt.getMonth(),dt.getDate())); const dn=(d.getUTCDay()+6)%7; d.setUTCDate(d.getUTCDate()-dn+3); const ft=new Date(Date.UTC(d.getUTCFullYear(),0,4)); const fn=(ft.getUTCDay()+6)%7; ft.setUTCDate(ft.getUTCDate()-fn+3); return 1+Math.round((d-ft)/604800000); };
 const PHASES12=[{n:"Accumulation",f:"Volume, base"},{n:"Accumulation",f:"Volume"},{n:"Accumulation",f:"Volume +"},{n:"Intensification",f:"Charges +"},{n:"Intensification",f:"Charges ++"},{n:"Intensification",f:"Lourd"},{n:"Réalisation",f:"Explosif"},{n:"Réalisation",f:"Puissance"},{n:"Réalisation",f:"Pic de force"},{n:"Deload",f:"Récupération"},{n:"Test / PR",f:"Validation"},{n:"Test / PR",f:"Nouveaux maxs"}];
 const programWeek=()=>((weekNumber()-1)%12)+1;
@@ -1301,7 +1301,7 @@ function SessionSettingsSheet({day,curMode,onClose,onApply}) {
     </div>
   </div>);
 }
-function CircuitPlayer({mode,exos,onClose,defMin,blocks,onAllDone,startBlock,log,onLogSet,sDate}) {
+function CircuitPlayer({mode,exos,onClose,defMin,blocks,onAllDone,startBlock,log,onLogSet,sDate,blockNo,blockCount}) {
   const BLK=(blocks&&blocks.length)?blocks:[{label:mode==="amrap"?"AMRAP":"EMOM",kind:mode,exercises:exos||[],durationMin:defMin||(mode==="amrap"?12:Math.max((exos||[]).length,8))}];
   const [bi,setBi]=useState(startBlock||0);
   const cur=BLK[Math.min(bi,BLK.length-1)]||{exercises:[]};
@@ -1400,7 +1400,7 @@ function CircuitPlayer({mode,exos,onClose,defMin,blocks,onAllDone,startBlock,log
     <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,padding:"16px 20px",flexShrink:0}}>
       <Tap onTap={onClose} style={{width:40,height:40,borderRadius:10,background:C.s2,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}><span style={{fontSize:20,color:C.ink3}}>‹</span></Tap>
       <div style={{textAlign:"center",minWidth:0,flex:1}}>
-        <div style={{fontSize:13,fontWeight:600,color:C.ink4,textTransform:"uppercase",letterSpacing:".1em"}}>Bloc {bi+1}/{BLK.length}</div>
+        <div style={{fontSize:13,fontWeight:600,color:C.ink4,textTransform:"uppercase",letterSpacing:".1em"}}>Bloc {blockNo||(bi+1)}/{blockCount||BLK.length}</div>
         <div style={{fontSize:15,fontWeight:600,color:C.ink,marginTop:2,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{cur.label||(kind==="amrap"?"AMRAP":kind==="emom"?"EMOM":kind==="circuit"?"Circuit":"Superset")}</div>
       </div>
       <div style={{width:40,flexShrink:0}}/>
@@ -1616,7 +1616,7 @@ function ExerciseRowCollapsed({ex,dayIdx,sDate,log,idx,onOpen,onReplace,doneSess
 }
 
 
-function ExerciseFocus({ex,dayIdx,sDate,log,onLogSet,onClose,onNext,hasNext,idx,count,onDetail,lastPerf,originY}) {
+function ExerciseFocus({ex,dayIdx,sDate,log,onLogSet,onClose,onNext,hasNext,idx,count,heading,onDetail,lastPerf,originY}) {
   // Fermeture animee : le composant reste monte le temps de l'animation de sortie, sinon
   // l'ecran disparaissait d'un coup et on perdait le lien avec la liste d'ou l'on venait.
   const [closing,setClosing]=useState(false);
@@ -1709,7 +1709,7 @@ function ExerciseFocus({ex,dayIdx,sDate,log,onLogSet,onClose,onNext,hasNext,idx,
       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"16px 20px"}}>
         <Tap onTap={()=>leave()} style={{width:40,height:40,borderRadius:10,background:C.s2,display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{fontSize:20,color:C.ink3}}>‹</span></Tap>
         <div style={{textAlign:"center",minWidth:0,flex:1}}>
-          <div style={{fontSize:13,fontWeight:600,color:C.ink4,textTransform:"uppercase",letterSpacing:".1em"}}>Exercice {idx+1}/{count}</div>
+          <div style={{fontSize:13,fontWeight:600,color:C.ink4,textTransform:"uppercase",letterSpacing:".1em"}}>{heading||`Exercice ${idx+1}/${count}`}</div>
         </div>
         <Tap onTap={()=>onDetail&&onDetail(ex)} style={{width:40,height:40,borderRadius:10,background:C.s2,display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{fontSize:15,fontWeight:600,color:C.blue}}>i</span></Tap>
       </div>
@@ -4273,6 +4273,12 @@ export default function SomaApp() {
   // a part entiere, dans la meme liste que les autres, donc lisibles par le meme
   // lecteur. Ils restent apres les exercices principaux pour ne pas decaler les index
   // deja utilises par les blocs, les supersets et les circuits.
+  // Position reelle de chaque exercice : le lecteur affichait son rang dans la liste
+  // brute, qui sert a le retrouver, et ignorait completement le decoupage en blocs.
+  const mainBlocks=(day&&!day.metcon)?groupBlocks(exos,effMode):[];
+  const blockOf={};
+  mainBlocks.forEach((blk,bi)=>blk.items.forEach(({idx},k)=>{
+    blockOf[idx]={no:bi+1,total:mainBlocks.length,pos:k+1,len:blk.items.length};}));
   const warmExos=day?.salle?warmupExos(day.salle):[];
   const absAsExos=absExos.map(absExo);
   const skillPairs=(day?.salle&&(profile?.active_skills||[]).length&&sessionIndex%2===0)
@@ -4552,7 +4558,7 @@ const NAV=[{id:"home",l:"Accueil"},{id:"seance",l:"Séances"},{id:"stats",l:"Sta
                   </div>}
                   <div>
                     {day.metcon&&!locked&&<div style={{marginBottom:16}}><div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}><span style={{fontSize:13,fontWeight:600,color:C.ink}}>Séance {sessionMode==="amrap"?"AMRAP":"EMOM"} · {day.blocks.length} blocs</span><span style={{fontSize:13,fontWeight:600,color:"#000",background:C.blue,padding:"2px 10px",borderRadius:8}}>~{day.totalMin} min</span></div><div style={{fontSize:12,color:C.ink4,marginBottom:10}}>Touchez un bloc pour le démarrer</div>{day.blocks.map((bl,bi)=>(<Tap key={bi} onTap={()=>{if(locked)return;setCircuitStart(bi);setShowCircuit(true);}} style={{marginBottom:12,background:C.s1,borderRadius:18,padding:"12px 14px"}}><div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}><span style={{fontSize:14,fontWeight:600,color:C.ink}}>{bl.label}</span><span style={{fontSize:12,fontWeight:600,color:C.ink3}}>{bl.kind==="emom"?bl.durationMin+" min · "+bl.rounds+" tours":bl.durationMin+" min"}</span></div>{bl.exercises.map((ex,ei)=>(<div key={ei} style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"5px 0",borderTop:ei?`1px solid ${C.s2}`:"none"}}><span style={{fontSize:14,color:C.ink2}}>{bl.kind==="emom"?("Min "+(ei+1)+" · "):""}{ex.n}</span><span style={{fontSize:13,fontWeight:600,color:C.ink3}}>{ex.kg>0?ex.kg+"kg · ":""}{ex.reps}{bl.kind==="emom"?"/min":"/tour"}</span></div>))}</Tap>))}</div>}
-                    {!day.metcon&&groupBlocks(exos,effMode).map((blk,bi)=>{
+                    {!day.metcon&&mainBlocks.map((blk,bi)=>{
                       // Une CARTE par bloc, comme la maquette : en-tete "Bloc N · type",
                       // pastille de tours ou mention Lourd, puis les exercices en lignes
                       // filetees. Avant, chaque exercice etait sa propre carte grise et le
@@ -4585,11 +4591,11 @@ const NAV=[{id:"home",l:"Accueil"},{id:"seance",l:"Séances"},{id:"stats",l:"Sta
                         {blk.items.map(({ex,idx},k)=>(
                           <ExerciseRowCollapsed key={ex.id} ex={ex} idx={k} first={k===0} barColor={barColor} grouped={isGroup&&k<blk.items.length-1}
                             dayIdx={dayIdx} sDate={sDate} log={log} doneSession={doneSession}
-                            onOpen={()=>{if(locked)return;if(sessionMode!=="classique"){setShowCircuit(true);return;}const _e=exos[idx];if(_e&&_e.circuitId){const _g=exos.filter(e=>e.circuitId===_e.circuitId);setSupBlock({label:_e.m||"Superset",kind:_g.length>=3?"circuit":"superset",exercises:_g,restSec:(_g[0]&&_g[0].groupRest)||90,tours:(_g[0]&&(_g[0].groupTours||_g[0].sets))||4});}else{setFocusIdx(idx);}}}
+                            onOpen={()=>{if(locked)return;if(sessionMode!=="classique"){setShowCircuit(true);return;}const _e=exos[idx];if(_e&&_e.circuitId){const _g=exos.filter(e=>e.circuitId===_e.circuitId);setSupBlock({label:_e.m||"Superset",kind:_g.length>=3?"circuit":"superset",exercises:_g,restSec:(_g[0]&&_g[0].groupRest)||90,tours:(_g[0]&&(_g[0].groupTours||_g[0].sets))||4,no:bi+1,total:mainBlocks.length});}else{setFocusIdx(idx);}}}
                             onReplace={locked?null:(e)=>setShowPicker(e)} onOriginY={setFocusOrigin}/>
                         ))}
                         {isGroup&&!locked&&!done&&<Tap label={`Démarrer le ${kind}`}
-                          onTap={()=>setSupBlock({label:blk.muscle,kind:blk.groupType==="circuit"?"circuit":"superset",exercises:blk.items.map(x=>x.ex),restSec:(blk.items[0]&&blk.items[0].ex&&blk.items[0].ex.groupRest)||90,tours})}
+                          onTap={()=>setSupBlock({label:blk.muscle,kind:blk.groupType==="circuit"?"circuit":"superset",exercises:blk.items.map(x=>x.ex),restSec:(blk.items[0]&&blk.items[0].ex&&blk.items[0].ex.groupRest)||90,tours,no:bi+1,total:mainBlocks.length})}
                           style={{marginTop:11,padding:"11px",borderRadius:14,background:C.blueDim,border:`1px solid ${C.blue}`,display:"flex",alignItems:"center",justifyContent:"center",gap:7}}>
                           <Icon name="play" size={14} stroke={C.ink} fill={C.ink}/>
                           <span style={{fontSize:13.5,fontWeight:600,color:C.ink}}>Démarrer le {kind}</span></Tap>}
@@ -4658,21 +4664,29 @@ const NAV=[{id:"home",l:"Accueil"},{id:"seance",l:"Séances"},{id:"stats",l:"Sta
         const seg=(focusIdx<WARM_OFF)?[0,WARM_OFF]
           :(focusIdx<ABS_OFF)?[WARM_OFF,ABS_OFF]
           :(focusIdx<SKILL_OFF)?[ABS_OFF,SKILL_OFF]:[SKILL_OFF,focusList.length];
+        // L'en-tete situe l'exercice la ou l'oeil le cherche : dans son bloc.
+        const _b=blockOf[focusIdx];
+        const heading=(focusIdx<WARM_OFF)
+          ?(_b?`Bloc ${_b.no}/${_b.total} · Exercice ${_b.pos}/${_b.len}`:`Exercice ${focusIdx+1}/${exos.length}`)
+          :(focusIdx<ABS_OFF)?`Échauffement · ${focusIdx-WARM_OFF+1}/${warmExos.length}`
+          :(focusIdx<SKILL_OFF)?`Gainage · ${focusIdx-ABS_OFF+1}/${absAsExos.length}`
+          :`Apprentissage · ${focusIdx-SKILL_OFF+1}/${skillPairs.length}`;
         return (
         <ExerciseFocus key={focusList[focusIdx].id} ex={focusList[focusIdx]} idx={focusIdx-seg[0]} count={seg[1]-seg[0]} dayIdx={dayIdx} sDate={sDate}
-          log={log} onLogSet={saveLog} onDetail={e=>setDetailEx(e)} lastPerf={perf[focusList[focusIdx].id]} originY={focusOrigin}
+          log={log} onLogSet={saveLog} heading={heading} onDetail={e=>setDetailEx(e)} lastPerf={perf[focusList[focusIdx].id]} originY={focusOrigin}
           onClose={()=>setFocusIdx(null)} hasNext={focusIdx<seg[1]-1} onNext={()=>{
             const _n=focusList[focusIdx+1];
             if(_n&&_n.circuitId){
               const _g=exos.filter(e=>e.circuitId===_n.circuitId);
               setFocusIdx(null);
-              setSupBlock({label:_n.m||"Superset",kind:_g.length>=3?"circuit":"superset",exercises:_g,restSec:(_g[0]&&_g[0].groupRest)||90,tours:(_g[0]&&(_g[0].groupTours||_g[0].sets))||4});
+              const _b=blockOf[focusIdx+1];
+              setSupBlock({label:_n.m||"Superset",kind:_g.length>=3?"circuit":"superset",exercises:_g,restSec:(_g[0]&&_g[0].groupRest)||90,tours:(_g[0]&&(_g[0].groupTours||_g[0].sets))||4,no:_b&&_b.no,total:_b&&_b.total});
             }else{
               setFocusIdx(focusIdx+1);
             }
           }}/>);
       })()}
-      {supBlock&&<CircuitPlayer mode={supBlock.kind} exos={supBlock.exercises} blocks={[supBlock]} onClose={()=>setSupBlock(null)} onAllDone={()=>{}} log={log} onLogSet={saveLog} sDate={sDate}/>}
+      {supBlock&&<CircuitPlayer mode={supBlock.kind} exos={supBlock.exercises} blocks={[supBlock]} blockNo={supBlock.no} blockCount={supBlock.total} onClose={()=>setSupBlock(null)} onAllDone={()=>{}} log={log} onLogSet={saveLog} sDate={sDate}/>}
       {showCircuit&&sessionMode!=="classique"&&exos.length>0&&(
         <CircuitPlayer mode={sessionMode} exos={exos} blocks={day.blocks} defMin={sessionMode==="amrap"?(day.timeCapMin||12):(day.emomMinutes||Math.max(exos.length,8))} onClose={()=>setShowCircuit(false)} onAllDone={()=>{clock.stop();setShowFeedback(true);}} startBlock={circuitStart} log={log} onLogSet={saveLog} sDate={sDate}/>
       )}
@@ -4731,6 +4745,7 @@ const NAV=[{id:"home",l:"Accueil"},{id:"seance",l:"Séances"},{id:"stats",l:"Sta
     </div>
   );
 }
+
 
 
 
