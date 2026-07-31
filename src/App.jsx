@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { supabase } from "./supabase.js";
+import { DB } from "./catalog.js";
 
 // ─── DESIGN TOKENS ───────────────────────────────────────────────────────────
 // Apple dark system + Emil micro-interactions + Impeccable rules
@@ -43,521 +44,7 @@ const DUR = { btn: "160ms", tooltip: "125ms", dropdown: "200ms", modal: "340ms",
 const Z = { sticky: 100, overlay: 200, sheet: 300, rest: 400, fullscreen: 500, auth: 900 };
 
 // ─── EXERCISE DATABASE — 150+ ─────────────────────────────────────────────────
-const DB = [
-  // KETTLEBELL (25)
-  {id:"kb01",n:"Swing KB deux mains",m:"Fessiers · Ischios",eq:"kb",kg:20,reps:"15",rest:60,rpe:7,cue:"Poussée de hanches explosive. Dos neutre. KB à hauteur d'épaules."},
-  {id:"kb02",n:"Swing KB unilatéral",m:"Fessiers · Core",eq:"kb",kg:16,reps:"10",rest:60,rpe:7,cue:"Même mécanique. Résiste à la rotation du tronc."},
-  {id:"kb03",n:"Clean KB",m:"Full body",eq:"kb",kg:16,reps:"8",rest:90,rpe:7,cue:"KB tracte sur le côté. Vient en rack sans impact au poignet."},
-  {id:"kb04",n:"Clean & Press KB",m:"Épaules · Full body",eq:"kb",kg:14,reps:"6",rest:120,rpe:8,cue:"Clean + press vertical. Core serré."},
-  {id:"kb05",n:"Push Press KB",m:"Épaules · Jambes",eq:"kb",kg:16,reps:"8",rest:90,rpe:7,cue:"Légère impulsion jambes. Bras verrouillé en haut. Descente lente."},
-  {id:"kb06",n:"Snatch KB",m:"Full body",eq:"kb",kg:12,reps:"5",rest:120,rpe:8,cue:"Du sol au lockout en un geste. Punch vers le haut en fin de trajectoire."},
-  {id:"kb07",n:"Turkish Get-Up",m:"Full body · Core",eq:"kb",kg:12,reps:"3",rest:120,rpe:8,cue:"KB verrouillé bras tendu. 7 étapes. Lent et contrôlé."},
-  {id:"kb08",n:"Gobelet Squat KB",m:"Quads · Fessiers",eq:"kb",kg:20,reps:"12",rest:90,rpe:6,cue:"KB contre la poitrine. Coudes entre genoux. Sous la parallèle."},
-  {id:"kb09",n:"Halo KB",m:"Épaules · Core",eq:"kb",kg:10,reps:"10",rest:60,rpe:5,cue:"Orbite complète autour de la tête. Core anti-rotation."},
-  {id:"kb10",n:"Farmer Carry KB",m:"Trapèzes · Core",eq:"kb",kg:24,reps:"40m",rest:90,rpe:7,cue:"Épaules en arrière. Regard horizontal. Core engagé."},
-  {id:"kb11",n:"Row KB unilatéral",m:"Dos · Biceps",eq:"kb",kg:20,reps:"10",rest:90,rpe:7,cue:"Coude vers la hanche. Rétraction omoplate avant."},
-  {id:"kb12",n:"Deadlift KB",m:"Ischios · Fessiers",eq:"kb",kg:24,reps:"8",rest:90,rpe:7,cue:"Charnière hanche. KB entre les pieds. Dos neutre."},
-  {id:"kb13",n:"Windmill KB",m:"Core · Épaules",eq:"kb",kg:12,reps:"5",rest:90,rpe:7,cue:"KB verrouillé en haut. Rotation hanche pure. Regard sur le KB."},
-  {id:"kb14",n:"Floor Press KB",m:"Pecs · Triceps",eq:"kb",kg:16,reps:"10",rest:90,rpe:7,cue:"Au sol. Coude 45°. Amplitude réduite, tension maximale."},
-  {id:"kb15",n:"Complex KB Swing+Clean+Press",m:"Full body",eq:"kb",kg:14,reps:"5",rest:120,rpe:9,cue:"Swing+Clean+Press = 1 rep. Rythme constant. Qualité avant vitesse."},
-  {id:"kb16",n:"EMOM Swing KB",m:"Full body",eq:"kb",kg:20,reps:"20",rest:30,rpe:8,cue:"20 swings toutes les minutes. Repos = temps restant."},
-  {id:"kb17",n:"Rack Walk KB",m:"Core · Épaules",eq:"kb",kg:20,reps:"30m",rest:90,rpe:6,cue:"KB en rack. Tronc anti-rotation."},
-  {id:"kb18",n:"Figure 8 KB",m:"Core · Épaules",eq:"kb",kg:14,reps:"10",rest:60,rpe:5,cue:"Transfert entre jambes. Dos neutre à chaque passage."},
-  {id:"kb19",n:"Sumo Deadlift KB",m:"Fessiers · Adducteurs",eq:"kb",kg:24,reps:"10",rest:90,rpe:6,cue:"Stance large. Genoux vers l'extérieur. KB descend vertical."},
-  {id:"kb20",n:"Press KB assis",m:"Épaules · Core",eq:"kb",kg:12,reps:"8",rest:90,rpe:7,cue:"Assis en tailleur. Aucune aide des jambes. Force brute."},
-  {id:"kb21",n:"Deadlift KB unilatéral",m:"Ischios · Équilibre",eq:"kb",kg:20,reps:"8",rest:90,rpe:7,cue:"Charnière sur une jambe. KB le long de la jambe d'appui."},
-  {id:"kb22",n:"Around the World KB",m:"Core · Épaules",eq:"kb",kg:12,reps:"8",rest:60,rpe:5,cue:"Passage fluide d'une main à l'autre dans le plan frontal."},
-  {id:"kb23",n:"Pass Under KB",m:"Core · Fessiers",eq:"kb",kg:14,reps:"10",rest:60,rpe:5,cue:"KB sous le genou levé. Transfert propre."},
-  {id:"kb24",n:"Hip Thrust KB",m:"Fessiers",eq:"kb",kg:24,reps:"12",rest:90,rpe:6,cue:"KB sur les hanches. Extension complète en haut."},
-  {id:"kb25",n:"Snatch KB low rep",m:"Full body",eq:"kb",kg:16,reps:"3",rest:120,rpe:9,cue:"Concentre-toi sur la qualité. Pause lockout 1 sec."},
-  // BARBELL (18)
-  {id:"bb01",n:"Développé couché barre",m:"Pecs",eq:"bar",kg:60,reps:"5",rest:240,rpe:8,cue:"Pause 1s sur la poitrine. Pas de rebond."},
-  {id:"bb02",n:"Développé militaire barre",m:"Épaules",eq:"bar",kg:40,reps:"5",rest:180,rpe:8,cue:"Core serré. Verrouillage complet en haut."},
-  {id:"bb03",n:"Squat barre",m:"Quads · Fessiers",eq:"bar",kg:80,reps:"5",rest:240,rpe:8,cue:"Sous la parallèle. Regard 45°."},
-  {id:"bb04",n:"Soulevé de terre conv.",m:"Full body",eq:"bar",kg:100,reps:"3",rest:300,rpe:9,cue:"Dos neutre absolu. Barre collée aux tibias."},
-  {id:"bb05",n:"Hip Thrust barre",m:"Fessiers",eq:"bar",kg:80,reps:"10",rest:150,rpe:7,cue:"Dos sur banc. Barre sur hanches. Extension complète."},
-  {id:"bb06",n:"Rowing barre pronation",m:"Dos épais",eq:"bar",kg:60,reps:"8",rest:150,rpe:7,cue:"Buste 45°. Barre vers le nombril. Rétraction omoplates."},
-  {id:"bb07",n:"Romanian Deadlift barre",m:"Ischios · Fessiers",eq:"bar",kg:70,reps:"8",rest:180,rpe:7,cue:"Charnière hanche. Barre le long des cuisses."},
-  {id:"bb08",n:"Curl barre EZ",m:"Biceps",eq:"bar",kg:30,reps:"10",rest:90,rpe:7,cue:"Coudes fixes. 3s descente."},
-  {id:"bb09",n:"Front Squat barre",m:"Quads · Core",eq:"bar",kg:60,reps:"5",rest:240,rpe:8,cue:"Coudes hauts. Torse vertical."},
-  {id:"bb10",n:"Skull Crusher EZ",m:"Triceps",eq:"bar",kg:25,reps:"10",rest:90,rpe:7,cue:"Coudes fixes. Descente vers le front. Extension explosive."},
-  {id:"bb11",n:"Good Morning barre",m:"Ischios · Lombaires",eq:"bar",kg:40,reps:"8",rest:120,rpe:6,cue:"Genoux légèrement fléchis. Charnière hanche pure."},
-  {id:"bb12",n:"Power Clean barre",m:"Full body",eq:"bar",kg:50,reps:"3",rest:180,rpe:9,cue:"Triple extension. Tirage haut. Coulissement sous la barre."},
-  {id:"bb13",n:"Bench Press prise serrée",m:"Triceps · Pecs",eq:"bar",kg:50,reps:"8",rest:120,rpe:7,cue:"Prise épaule-largeur. Coudes collés au corps."},
-  {id:"bb14",n:"Deadlift roumain barre",m:"Ischios",eq:"bar",kg:70,reps:"8",rest:150,rpe:7,cue:"Hanches en arrière. Ressens l'étirement ischios."},
-  {id:"bb15",n:"Rowing Pendlay",m:"Dos épais",eq:"bar",kg:60,reps:"5",rest:180,rpe:8,cue:"Barre au sol entre chaque rep. Explosif. Torse horizontal."},
-  {id:"bb16",n:"Squat bulgare barre",m:"Quads · Fessiers",eq:"bar",kg:40,reps:"8",rest:150,rpe:8,cue:"Pied arrière surélevé. Descente verticale."},
-  {id:"bb17",n:"Développé incliné barre",m:"Pecs sup",eq:"bar",kg:50,reps:"8",rest:150,rpe:7,cue:"Banc 30°. Focus partie haute des pecs."},
-  {id:"bb18",n:"Zercher Squat",m:"Quads · Core · Biceps",eq:"bar",kg:50,reps:"6",rest:180,rpe:8,cue:"Barre dans les creux des coudes. Torse vertical. Core maximal."},
-  // DUMBBELL (20)
-  {id:"db01",n:"Développé couché haltères",m:"Pecs",eq:"db",kg:24,reps:"10",rest:120,rpe:7,cue:"Rotation interne en haut. Descente coudes 45°."},
-  {id:"db02",n:"Développé incliné haltères",m:"Pecs sup",eq:"db",kg:20,reps:"10",rest:120,rpe:7,cue:"Banc 30°. Contraction en haut."},
-  {id:"db03",n:"Curl haltères alternés",m:"Biceps",eq:"db",kg:14,reps:"10",rest:90,rpe:6,cue:"Supination complète. Coudes fixes. 3s descente."},
-  {id:"db04",n:"Curl marteau haltères",m:"Biceps · Brachial",eq:"db",kg:16,reps:"10",rest:90,rpe:6,cue:"Prise neutre. Coudes fixes."},
-  {id:"db05",n:"Curl incliné haltères",m:"Biceps long",eq:"db",kg:12,reps:"10",rest:90,rpe:6,cue:"Banc 60°. Stretch maximal en bas."},
-  {id:"db06",n:"Rowing haltère unilatéral",m:"Dos épais",eq:"db",kg:24,reps:"10",rest:90,rpe:7,cue:"Coude vers la hanche. Omoplate rétractée."},
-  {id:"db07",n:"Élévations latérales",m:"Deltoïdes lat.",eq:"db",kg:10,reps:"15",rest:75,rpe:6,cue:"Légère flexion coude. Horizontal. 3s descente."},
-  {id:"db08",n:"Oiseau inversé haltères",m:"Rear delt",eq:"db",kg:8,reps:"15",rest:60,rpe:6,cue:"Buste horizontal. Pincement omoplates."},
-  {id:"db09",n:"Arnold Press",m:"Épaules complet",eq:"db",kg:14,reps:"10",rest:90,rpe:7,cue:"Rotation pronation→supination pendant le press."},
-  {id:"db10",n:"RDL haltères",m:"Ischios · Fessiers",eq:"db",kg:22,reps:"10",rest:120,rpe:7,cue:"Charnière hanche. Haltères le long des cuisses."},
-  {id:"db11",n:"Fentes marchées haltères",m:"Quads · Fessiers",eq:"db",kg:16,reps:"12",rest:90,rpe:7,cue:"Genou avant 90°. Genou arrière effleure le sol."},
-  {id:"db12",n:"Pullover haltère",m:"Grand dorsal · Pecs",eq:"db",kg:20,reps:"12",rest:90,rpe:6,cue:"Arc de cercle. Côtes fermées. Étirement maximal."},
-  {id:"db13",n:"Extensions triceps haltère",m:"Triceps",eq:"db",kg:12,reps:"12",rest:75,rpe:6,cue:"Coude immobile. Extension complète."},
-  {id:"db14",n:"Développé militaire haltères",m:"Épaules",eq:"db",kg:18,reps:"10",rest:90,rpe:7,cue:"Coudes 90° en bas. Extension complète."},
-  {id:"db15",n:"Step-up haltères",m:"Quads · Fessiers",eq:"db",kg:16,reps:"10",rest:90,rpe:6,cue:"Appui sur le talon en haut. Extension complète de hanche."},
-  {id:"db16",n:"Shrug haltères",m:"Trapèzes",eq:"db",kg:26,reps:"15",rest:60,rpe:6,cue:"Haussement pur. Pas de rotation. Maintien 1s en haut."},
-  {id:"db17",n:"Gobelet Squat haltère",m:"Quads · Fessiers",eq:"db",kg:24,reps:"12",rest:90,rpe:6,cue:"Haltère vertical sous le menton. Coudes entre genoux."},
-  {id:"db18",n:"Fly haltères couché",m:"Pecs",eq:"db",kg:14,reps:"12",rest:90,rpe:6,cue:"Arc de cercle. Légère flexion coude. Étirement maximal."},
-  {id:"db19",n:"Reverse fly haltères",m:"Rear delt · Dos",eq:"db",kg:8,reps:"15",rest:60,rpe:5,cue:"Buste à 45°. Élévation latérale arrière. Lent."},
-  {id:"db20",n:"Concentration curl",m:"Biceps",eq:"db",kg:12,reps:"12",rest:75,rpe:7,cue:"Coude contre la cuisse. Isolation totale. Lent."},
-  // BODYWEIGHT (15)
-  {id:"bw01",n:"Tractions prise large",m:"Dos large · Biceps",eq:"bw",kg:0,reps:"6",rest:180,rpe:8,cue:"Descente bras tendus complète. Sternum vers la barre."},
-  {id:"bw02",n:"Chin-up supination",m:"Biceps · Dos",eq:"bw",kg:0,reps:"8",rest:150,rpe:7,cue:"Supination complète. Coudes vers les hanches en haut."},
-  {id:"bw03",n:"Tractions neutres",m:"Dos · Brachial",eq:"bw",kg:0,reps:"7",rest:150,rpe:7,cue:"Prise en marteau. Elbows back."},
-  {id:"bw04",n:"Dips barres parallèles",m:"Triceps · Pecs",eq:"bw",kg:0,reps:"10",rest:120,rpe:7,cue:"Descente lente 3s. Coudes derrière."},
-  {id:"bw05",n:"Push-up",m:"Pecs · Triceps",eq:"bw",kg:0,reps:"20",rest:60,rpe:5,cue:"Corps aligné. Coudes 45°. Poitrine touche le sol."},
-  {id:"bw06",n:"Push-up archer",m:"Pecs · Épaules",eq:"bw",kg:0,reps:"8",rest:90,rpe:7,cue:"Un bras tendu sur le côté pendant la descente."},
-  {id:"bw07",n:"Pike Push-up",m:"Épaules",eq:"bw",kg:0,reps:"12",rest:90,rpe:6,cue:"Hanches hautes. Tête vers le sol."},
-  {id:"bw08",n:"Dragon Flag",m:"Core complet",eq:"bw",kg:0,reps:"6",rest:120,rpe:9,cue:"Corps rigide. Descente lente contrôlée."},
-  {id:"bw09",n:"L-Sit",m:"Core · Triceps",eq:"bw",kg:0,reps:"20s",rest:90,rpe:8,cue:"Bras verrouillés. Jambes horizontales."},
-  {id:"bw10",n:"Relevé de jambes suspendu",m:"Abdos bas",eq:"bw",kg:0,reps:"12",rest:90,rpe:7,cue:"Pas de balancement. Contrôle descente."},
-  {id:"bw11",n:"Pistol Squat",m:"Quads · Équilibre",eq:"bw",kg:0,reps:"5",rest:120,rpe:9,cue:"Descente contrôlée. Jambe libre tendue."},
-  {id:"bw12",n:"Nordic Curl",m:"Ischios",eq:"bw",kg:0,reps:"5",rest:120,rpe:9,cue:"Descente lente excentrique. Pousse avec les mains en bas."},
-  {id:"bw13",n:"Handstand Push-up",m:"Épaules · Triceps",eq:"bw",kg:0,reps:"5",rest:120,rpe:9,cue:"Contre le mur. Core serré. Descente lente."},
-  {id:"bw14",n:"Ab Rollout",m:"Core complet",eq:"bw",kg:0,reps:"10",rest:90,rpe:8,cue:"Bras tendus. Corps rigide. Ne laisse pas le dos se creuser."},
-  {id:"bw15",n:"Muscle-up",m:"Dos · Triceps · Core",eq:"bw",kg:0,reps:"3",rest:180,rpe:10,cue:"Transition explosive. Pousse au-dessus de la barre."},
-  // MACHINE (12)
-  {id:"mc01",n:"Lat Pulldown câble",m:"Dos large",eq:"mc",kg:50,reps:"12",rest:90,rpe:6,cue:"Barre vers haut de la poitrine. Coudes vers les hanches."},
-  {id:"mc02",n:"Rowing câble assis",m:"Dos épais",eq:"mc",kg:50,reps:"12",rest:90,rpe:6,cue:"Tirage vers le nombril. Rétraction omoplates."},
-  {id:"mc03",n:"Face Pull câble",m:"Rear delt",eq:"mc",kg:15,reps:"15",rest:60,rpe:5,cue:"Tirage vers le visage. Coudes à hauteur des épaules."},
-  {id:"mc04",n:"Leg Press",m:"Quads · Fessiers",eq:"mc",kg:100,reps:"12",rest:120,rpe:7,cue:"Pieds largeur d'épaules. Descente 90°. Pas de rebond."},
-  {id:"mc05",n:"Leg Curl",m:"Ischios",eq:"mc",kg:35,reps:"12",rest:90,rpe:6,cue:"Hanche collée. Flexion 90°. Descente 3s."},
-  {id:"mc06",n:"Chest Press machine",m:"Pecs",eq:"mc",kg:50,reps:"12",rest:90,rpe:6,cue:"Poignées hauteur de poitrine. Pression constante."},
-  {id:"mc07",n:"Leg Extension",m:"Quads",eq:"mc",kg:40,reps:"15",rest:90,rpe:6,cue:"Extension complète. Maintien 1s en haut. Descente lente."},
-  {id:"mc08",n:"Calf Raise machine",m:"Mollets",eq:"mc",kg:60,reps:"20",rest:60,rpe:6,cue:"Amplitude complète. Monte sur la pointe."},
-  {id:"mc09",n:"Pec Deck machine",m:"Pecs",eq:"mc",kg:40,reps:"15",rest:75,rpe:6,cue:"Coudes légèrement fléchis. Pince forte en fermeture."},
-  {id:"mc10",n:"Shoulder Press machine",m:"Épaules",eq:"mc",kg:40,reps:"12",rest:90,rpe:6,cue:"Extension complète sans hyperextension."},
-  {id:"mc11",n:"Cable Fly",m:"Pecs",eq:"mc",kg:12,reps:"15",rest:75,rpe:6,cue:"Poulies en haut. Arc de cercle vers le bas. Contraction."},
-  {id:"mc12",n:"Triceps Pushdown câble",m:"Triceps",eq:"mc",kg:20,reps:"15",rest:75,rpe:6,cue:"Coudes fixes. Extension complète. Descente contrôlée."},
-  // CARDIO (8)
-  {id:"cd01",n:"SkiErg Sprints 20/10",m:"Full body · Cardio",eq:"cd",kg:0,reps:"8×20s",rest:10,rpe:9,cue:"Double bras. Poussée hanches + bras. Max effort 20s."},
-  {id:"cd02",n:"Rameur Intervals 500m",m:"Full body · Cardio",eq:"cd",kg:0,reps:"4×500m",rest:60,rpe:8,cue:"Drive jambes → tronc → bras. Ratio 1:2."},
-  {id:"cd03",n:"Vélo HIIT 30/30",m:"Cardio · Jambes",eq:"cd",kg:0,reps:"10×30s",rest:30,rpe:8,cue:"Sprint 30s / récup 30s."},
-  {id:"cd04",n:"Corde à sauter",m:"Cardio",eq:"cd",kg:0,reps:"3×1min",rest:30,rpe:7,cue:"Appuis avant du pied. Poignets, pas les bras."},
-  {id:"cd05",n:"Battle Ropes",m:"Cardio · Bras",eq:"cd",kg:0,reps:"4×30s",rest:30,rpe:8,cue:"Genoux fléchis. Core engagé."},
-  {id:"cd06",n:"Burpee",m:"Full body · Cardio",eq:"cd",kg:0,reps:"10",rest:60,rpe:8,cue:"Planche → push-up → saut. Pas de pause."},
-  {id:"cd07",n:"Box Jump",m:"Jambes · Puissance",eq:"cd",kg:0,reps:"8",rest:90,rpe:7,cue:"Atterrissage amorti. Extension complète en haut."},
-  {id:"cd08",n:"Sprint 100m",m:"Full body · Cardio",eq:"cd",kg:0,reps:"6×100m",rest:120,rpe:9,cue:"Départ bas. Montée progressive. Max effort."},
-  // ABS (10)
-  {id:"ab01",n:"Crunch câble",m:"Abdos",eq:"mc",kg:15,reps:"15",rest:60,rpe:6,cue:"Flexion colonne, pas hanches. Contraction maximale en bas."},
-  {id:"ab02",n:"Russian Twist",m:"Obliques",eq:"bw",kg:0,reps:"20",rest:60,rpe:6,cue:"Pieds décollés. Rotation complète. Contrôle."},
-  {id:"ab03",n:"Hollow Body Hold",m:"Core complet",eq:"bw",kg:0,reps:"30s",rest:60,rpe:7,cue:"Bas du dos collé. Bras et jambes décollés. Banane."},
-  {id:"ab04",n:"Planche",m:"Core",eq:"bw",kg:0,reps:"45s",rest:45,rpe:6,cue:"Corps rigide. Core engagé. Respiration normale."},
-  {id:"ab05",n:"Planche dynamique",m:"Core · Épaules",eq:"bw",kg:0,reps:"10",rest:60,rpe:7,cue:"De la planche au push-up et retour. Corps rigide."},
-  {id:"ab06",n:"Dead Bug",m:"Core · Coordination",eq:"bw",kg:0,reps:"10",rest:60,rpe:5,cue:"Bas du dos collé. Étends bras et jambe opposés simultanément."},
-  {id:"ab07",n:"Side Planche",m:"Obliques · Core",eq:"bw",kg:0,reps:"30s",rest:45,rpe:7,cue:"Corps aligné. Hanche décollée. Regard droit."},
-  {id:"ab08",n:"Pallof Press câble",m:"Core anti-rotation",eq:"mc",kg:10,reps:"12",rest:60,rpe:6,cue:"Résiste à la rotation. Presse et ramène. Lent."},
-  {id:"ab09",n:"Hanging Knee Raise",m:"Abdos · Fléchisseurs",eq:"bw",kg:0,reps:"15",rest:60,rpe:6,cue:"Pas de balancement. Genou vers la poitrine. Contrôle."},
-  {id:"ab10",n:"L-Sit pull-up",m:"Core · Dos · Abdos",eq:"bw",kg:0,reps:"5",rest:120,rpe:9,cue:"Jambes horizontales pendant la traction. Ultra intense."},
-
-  // ── EXTENSION BIBLIOTHÈQUE (hybride) ──
-  {id:"x001",n:"Back Squat",m:"Quads · Fessiers",eq:"bar",kg:60,reps:"5",rest:180,rpe:8,cue:"Barre haute. Descends sous parallèle. Gainage max."},
-  {id:"x002",n:"Front Squat",m:"Quads · Core",eq:"bar",kg:50,reps:"5",rest:180,rpe:8,cue:"Coudes hauts. Tronc vertical. Talons ancrés."},
-  {id:"x003",n:"Box Squat",m:"Quads · Fessiers",eq:"bar",kg:60,reps:"5",rest:180,rpe:7,cue:"Assieds sur la box. Explose à la remontée."},
-  {id:"x004",n:"Pause Squat",m:"Quads",eq:"bar",kg:50,reps:"3",rest:180,rpe:8,cue:"2s en bas sans rebond. Reste serré."},
-  {id:"x005",n:"Soulevé de terre",m:"Ischios · Dos",eq:"bar",kg:80,reps:"5",rest:210,rpe:8,cue:"Barre contre tibias. Dos neutre. Pousse le sol."},
-  {id:"x006",n:"Soulevé sumo",m:"Fessiers · Adducteurs",eq:"bar",kg:80,reps:"5",rest:210,rpe:8,cue:"Pieds larges. Genoux vers l'extérieur. Buste droit."},
-  {id:"x007",n:"Soulevé roumain",m:"Ischios · Fessiers",eq:"bar",kg:60,reps:"8",rest:150,rpe:7,cue:"Charnière hanche. Légère flexion genoux. Étire."},
-  {id:"x008",n:"Deficit Deadlift",m:"Ischios · Dos",eq:"bar",kg:70,reps:"4",rest:210,rpe:8,cue:"Debout sur disque. Amplitude accrue."},
-  {id:"x009",n:"Rack Pull",m:"Dos · Trapèzes",eq:"bar",kg:90,reps:"5",rest:180,rpe:8,cue:"Départ aux genoux. Tire fort en fin."},
-  {id:"x010",n:"Good Morning",m:"Ischios · Lombaires",eq:"bar",kg:40,reps:"8",rest:120,rpe:7,cue:"Barre haut du dos. Hanche en arrière. Dos plat."},
-  {id:"x011",n:"Hip Thrust barre",m:"Fessiers",eq:"bar",kg:70,reps:"10",rest:120,rpe:7,cue:"Dos sur banc. Verrouille fessiers en haut 1s."},
-  {id:"x012",n:"Développé couché",m:"Pecs · Triceps",eq:"bar",kg:60,reps:"5",rest:180,rpe:8,cue:"Omoplates serrées. Barre au sternum. Pieds ancrés."},
-  {id:"x013",n:"Couché incliné",m:"Pecs sup",eq:"bar",kg:45,reps:"8",rest:150,rpe:7,cue:"Banc 30°. Trajectoire vers le haut des pecs."},
-  {id:"x014",n:"Couché prise serrée",m:"Triceps · Pecs",eq:"bar",kg:45,reps:"8",rest:120,rpe:7,cue:"Mains largeur épaules. Coudes près du corps."},
-  {id:"x015",n:"Floor Press",m:"Pecs · Triceps",eq:"bar",kg:50,reps:"6",rest:120,rpe:7,cue:"Au sol. Coudes touchent puis explose."},
-  {id:"x016",n:"Développé militaire",m:"Épaules",eq:"bar",kg:40,reps:"5",rest:150,rpe:8,cue:"Debout. Barre au menton. Verrouille au-dessus."},
-  {id:"x017",n:"Push Press barre",m:"Épaules · Jambes",eq:"bar",kg:45,reps:"5",rest:150,rpe:7,cue:"Impulsion jambes. Lockout franc."},
-  {id:"x018",n:"Rowing barre",m:"Dos épais",eq:"bar",kg:50,reps:"8",rest:120,rpe:7,cue:"Buste à 45°. Barre au nombril. Squeeze."},
-  {id:"x019",n:"Rowing Pendlay",m:"Dos épais",eq:"bar",kg:55,reps:"6",rest:120,rpe:8,cue:"Barre repart du sol chaque rep. Explosif."},
-  {id:"x020",n:"Rowing Yates",m:"Dos · Biceps",eq:"bar",kg:55,reps:"8",rest:120,rpe:7,cue:"Prise supination. Buste 60°. Coudes serrés."},
-  {id:"x021",n:"Curl barre",m:"Biceps",eq:"bar",kg:25,reps:"10",rest:90,rpe:7,cue:"Coudes fixes. Pas d'élan. Contraction haute."},
-  {id:"x022",n:"Hip Hinge clean",m:"Full body",eq:"bar",kg:40,reps:"5",rest:120,rpe:7,cue:"Tire explosif. Réception en rack."},
-  {id:"x023",n:"Power Clean",m:"Full body",eq:"bar",kg:45,reps:"3",rest:180,rpe:9,cue:"Triple extension. Réception quart de squat."},
-  {id:"x024",n:"Hang Clean",m:"Full body",eq:"bar",kg:40,reps:"3",rest:180,rpe:8,cue:"Départ aux genoux. Coudes rapides."},
-  {id:"x025",n:"Power Snatch",m:"Full body",eq:"bar",kg:30,reps:"3",rest:180,rpe:9,cue:"Du sol au lockout en un geste. Punch."},
-  {id:"x026",n:"Overhead Squat",m:"Full body · Mobilité",eq:"bar",kg:30,reps:"5",rest:150,rpe:8,cue:"Barre verrouillée au-dessus. Squat profond."},
-  {id:"x027",n:"Thruster barre",m:"Full body",eq:"bar",kg:40,reps:"8",rest:120,rpe:8,cue:"Front squat enchaîné au press. Fluide."},
-  {id:"x028",n:"Zercher Squat",m:"Quads · Core",eq:"bar",kg:45,reps:"6",rest:150,rpe:8,cue:"Barre au creux des coudes. Tronc gainé."},
-  {id:"x029",n:"Split Squat barre",m:"Quads · Fessiers",eq:"bar",kg:40,reps:"8",rest:120,rpe:7,cue:"Fente arrière. Genou frôle le sol."},
-  {id:"x030",n:"Goblet Squat haltère",m:"Quads · Fessiers",eq:"db",kg:24,reps:"12",rest:90,rpe:6,cue:"Haltère vertical contre poitrine. Profond."},
-  {id:"x031",n:"Fentes haltères",m:"Quads · Fessiers",eq:"db",kg:18,reps:"10",rest:90,rpe:7,cue:"Pas long. Genou arrière vers le sol."},
-  {id:"x032",n:"Fentes marchées",m:"Quads · Fessiers",eq:"db",kg:16,reps:"20m",rest:90,rpe:7,cue:"Avance en alternant. Buste droit."},
-  {id:"x033",n:"Bulgarian Split Squat",m:"Quads · Fessiers",eq:"db",kg:16,reps:"10",rest:90,rpe:8,cue:"Pied arrière sur banc. Descente verticale."},
-  {id:"x034",n:"Step-up haltères",m:"Quads · Fessiers",eq:"db",kg:16,reps:"10",rest:90,rpe:7,cue:"Pousse sur le talon. Contrôle la descente."},
-  {id:"x035",n:"Soulevé roumain haltères",m:"Ischios",eq:"db",kg:22,reps:"10",rest:120,rpe:7,cue:"Charnière hanche. Haltères longent les jambes."},
-  {id:"x036",n:"Développé haltères",m:"Pecs",eq:"db",kg:24,reps:"10",rest:120,rpe:7,cue:"Descente large. Presse en convergence."},
-  {id:"x037",n:"Couché incliné haltères",m:"Pecs sup",eq:"db",kg:20,reps:"10",rest:120,rpe:7,cue:"Banc 30°. Étire bien en bas."},
-  {id:"x038",n:"Écarté haltères",m:"Pecs",eq:"db",kg:12,reps:"12",rest:90,rpe:6,cue:"Arc large. Léger fléchi des coudes."},
-  {id:"x039",n:"Pull-over haltère",m:"Pecs · Dos",eq:"db",kg:16,reps:"12",rest:90,rpe:6,cue:"Bras semi-tendus. Étire la cage."},
-  {id:"x040",n:"Développé Arnold",m:"Épaules",eq:"db",kg:14,reps:"10",rest:90,rpe:7,cue:"Rotation paume vers l'avant en montant."},
-  {id:"x041",n:"Développé épaules haltères",m:"Épaules",eq:"db",kg:16,reps:"10",rest:120,rpe:7,cue:"Coudes sous poignets. Lockout contrôlé."},
-  {id:"x042",n:"Élévations latérales",m:"Épaules",eq:"db",kg:8,reps:"15",rest:60,rpe:6,cue:"Monte à l'horizontale. Coudes légers fléchis."},
-  {id:"x043",n:"Élévations frontales",m:"Épaules ant",eq:"db",kg:8,reps:"12",rest:60,rpe:6,cue:"Monte devant à hauteur d'yeux. Sans élan."},
-  {id:"x044",n:"Oiseau haltères",m:"Rear delt",eq:"db",kg:8,reps:"15",rest:60,rpe:6,cue:"Buste penché. Serre les omoplates."},
-  {id:"x045",n:"Rowing haltère un bras",m:"Dos épais",eq:"db",kg:26,reps:"10",rest:90,rpe:7,cue:"Appui sur banc. Coude vers la hanche."},
-  {id:"x046",n:"Rowing haltères buste penché",m:"Dos",eq:"db",kg:20,reps:"10",rest:90,rpe:7,cue:"Double traction. Squeeze en haut."},
-  {id:"x047",n:"Curl haltères",m:"Biceps",eq:"db",kg:14,reps:"12",rest:75,rpe:7,cue:"Supination en montant. Pas de balancier."},
-  {id:"x048",n:"Curl marteau",m:"Biceps · Avant-bras",eq:"db",kg:14,reps:"12",rest:75,rpe:7,cue:"Prise neutre. Coudes fixes."},
-  {id:"x049",n:"Curl incliné",m:"Biceps",eq:"db",kg:10,reps:"12",rest:75,rpe:7,cue:"Banc incliné. Étire le biceps en bas."},
-  {id:"x050",n:"Extension triceps nuque",m:"Triceps",eq:"db",kg:16,reps:"12",rest:75,rpe:7,cue:"Coudes serrés. Descends derrière la tête."},
-  {id:"x051",n:"Kickback triceps",m:"Triceps",eq:"db",kg:8,reps:"15",rest:60,rpe:6,cue:"Bras parallèle au sol. Verrouille en arrière."},
-  {id:"x052",n:"Shrug haltères",m:"Trapèzes",eq:"db",kg:26,reps:"15",rest:60,rpe:6,cue:"Hausse pur. Pause 1s en haut."},
-  {id:"x053",n:"Renegade Row",m:"Dos · Core",eq:"db",kg:16,reps:"10",rest:90,rpe:8,cue:"Position pompe. Tire sans tourner les hanches."},
-  {id:"x054",n:"Thruster haltères",m:"Full body",eq:"db",kg:16,reps:"10",rest:90,rpe:8,cue:"Squat puis press. Enchaîné."},
-  {id:"x055",n:"Devil Press",m:"Full body · Cardio",eq:"db",kg:14,reps:"8",rest:120,rpe:9,cue:"Burpee + snatch haltères. Brutal."},
-  {id:"x056",n:"Man Maker",m:"Full body · Cardio",eq:"db",kg:14,reps:"6",rest:120,rpe:9,cue:"Pompe-row + clean + press. Complet."},
-  {id:"x057",n:"Swing haltère",m:"Fessiers · Cardio",eq:"db",kg:20,reps:"15",rest:75,rpe:7,cue:"Poussée hanche. Comme un swing KB."},
-  {id:"x058",n:"Double Swing KB",m:"Fessiers · Cardio",eq:"kb",kg:16,reps:"12",rest:75,rpe:7,cue:"Deux KB. Hanche explosive synchronisée."},
-  {id:"x059",n:"Double Clean KB",m:"Full body",eq:"kb",kg:16,reps:"6",rest:120,rpe:8,cue:"Deux KB en rack simultané."},
-  {id:"x060",n:"Double Front Squat KB",m:"Quads · Core",eq:"kb",kg:16,reps:"8",rest:120,rpe:8,cue:"Deux KB en rack. Coudes hauts."},
-  {id:"x061",n:"Double Press KB",m:"Épaules",eq:"kb",kg:14,reps:"6",rest:120,rpe:8,cue:"Deux KB au-dessus. Core anti-extension."},
-  {id:"x062",n:"KB Snatch alterné",m:"Full body",eq:"kb",kg:12,reps:"10",rest:120,rpe:8,cue:"Alterne les bras. Lockout franc."},
-  {id:"x063",n:"KB Sots Press",m:"Épaules · Mobilité",eq:"kb",kg:10,reps:"6",rest:120,rpe:8,cue:"En bas du squat. Press vertical."},
-  {id:"x064",n:"KB Suitcase Deadlift",m:"Core · Ischios",eq:"kb",kg:24,reps:"10",rest:90,rpe:7,cue:"KB d'un côté. Anti-inclinaison."},
-  {id:"x065",n:"KB Single Leg Deadlift",m:"Ischios · Équilibre",eq:"kb",kg:16,reps:"8",rest:90,rpe:7,cue:"Sur une jambe. Charnière contrôlée."},
-  {id:"x066",n:"KB Bottoms-Up Press",m:"Épaules · Poignet",eq:"kb",kg:10,reps:"6",rest:90,rpe:7,cue:"KB tête en bas. Poignet stable."},
-  {id:"x067",n:"KB Around the World",m:"Core",eq:"kb",kg:12,reps:"10",rest:60,rpe:5,cue:"Orbite autour de la taille. Lent."},
-  {id:"x068",n:"KB Russian Twist",m:"Core",eq:"kb",kg:12,reps:"20",rest:60,rpe:6,cue:"Assis. Rotation tronc KB en main."},
-  {id:"x069",n:"KB Goblet Reverse Lunge",m:"Quads · Fessiers",eq:"kb",kg:20,reps:"10",rest:90,rpe:7,cue:"Goblet. Fente arrière profonde."},
-  {id:"x070",n:"KB High Pull",m:"Dos · Épaules",eq:"kb",kg:16,reps:"10",rest:90,rpe:7,cue:"Tire le KB au menton. Coude haut."},
-  {id:"x071",n:"KB Figure 8",m:"Core · Cardio",eq:"kb",kg:12,reps:"10",rest:60,rpe:6,cue:"Passe le KB en 8 entre les jambes."},
-  {id:"x072",n:"Traction pronation",m:"Dos · Biceps",eq:"bw",kg:0,reps:"8",rest:120,rpe:8,cue:"Menton au-dessus. Descente complète."},
-  {id:"x073",n:"Traction supination",m:"Dos · Biceps",eq:"bw",kg:0,reps:"8",rest:120,rpe:8,cue:"Paumes vers soi. Squeeze biceps."},
-  {id:"x074",n:"Traction prise large",m:"Dos large",eq:"bw",kg:0,reps:"6",rest:120,rpe:8,cue:"Coudes vers le bas. Cible le grand dorsal."},
-  {id:"x075",n:"Traction lestée",m:"Dos · Biceps",eq:"bw",kg:10,reps:"5",rest:150,rpe:9,cue:"Ceinture lestée. Amplitude pleine."},
-  {id:"x076",n:"Muscle-up",m:"Full body",eq:"bw",kg:0,reps:"3",rest:180,rpe:9,cue:"Transition explosive au-dessus de la barre."},
-  {id:"x077",n:"Australian Row",m:"Dos",eq:"bw",kg:0,reps:"12",rest:90,rpe:6,cue:"Corps gainé. Tire la poitrine à la barre."},
-  {id:"x078",n:"Pompes",m:"Pecs · Triceps",eq:"bw",kg:0,reps:"15",rest:60,rpe:6,cue:"Corps aligné. Poitrine frôle le sol."},
-  {id:"x079",n:"Pompes diamant",m:"Triceps",eq:"bw",kg:0,reps:"12",rest:60,rpe:7,cue:"Mains en losange. Coudes serrés."},
-  {id:"x080",n:"Pompes déclinées",m:"Pecs sup",eq:"bw",kg:0,reps:"12",rest:60,rpe:7,cue:"Pieds surélevés. Cible le haut."},
-  {id:"x081",n:"Pompes archer",m:"Pecs · Force",eq:"bw",kg:0,reps:"8",rest:90,rpe:8,cue:"Poids sur un bras. L'autre tendu."},
-  {id:"x082",n:"Pompes pseudo planche",m:"Épaules · Pecs",eq:"bw",kg:0,reps:"8",rest:90,rpe:8,cue:"Mains au niveau taille. Penche en avant."},
-  {id:"x083",n:"Pike Push-up",m:"Épaules",eq:"bw",kg:0,reps:"10",rest:90,rpe:7,cue:"Bassin haut. Tête vers le sol."},
-  {id:"x084",n:"Handstand Push-up",m:"Épaules",eq:"bw",kg:0,reps:"5",rest:150,rpe:9,cue:"Contre le mur. Descends contrôlé."},
-  {id:"x085",n:"Dips barres",m:"Pecs · Triceps",eq:"bw",kg:0,reps:"10",rest:120,rpe:8,cue:"Descends jusqu'à 90°. Buste penché pour pecs."},
-  {id:"x086",n:"Dips lestés",m:"Pecs · Triceps",eq:"bw",kg:15,reps:"6",rest:150,rpe:9,cue:"Ceinture lestée. Contrôle total."},
-  {id:"x087",n:"Dips banc",m:"Triceps",eq:"bw",kg:0,reps:"15",rest:60,rpe:6,cue:"Mains sur banc. Coudes vers l'arrière."},
-  {id:"x088",n:"Pistol Squat",m:"Quads · Équilibre",eq:"bw",kg:0,reps:"6",rest:120,rpe:8,cue:"Une jambe. Descente complète contrôlée."},
-  {id:"x089",n:"Squat bulgare au poids",m:"Quads",eq:"bw",kg:0,reps:"15",rest:75,rpe:6,cue:"Pied arrière surélevé. Tempo lent."},
-  {id:"x090",n:"Squat sauté",m:"Quads · Cardio",eq:"bw",kg:0,reps:"15",rest:60,rpe:7,cue:"Explose vers le haut. Réception douce."},
-  {id:"x091",n:"Fentes sautées",m:"Quads · Cardio",eq:"bw",kg:0,reps:"20",rest:60,rpe:7,cue:"Change de jambe en l'air."},
-  {id:"x092",n:"Nordic Curl",m:"Ischios",eq:"bw",kg:0,reps:"6",rest:120,rpe:9,cue:"Genoux ancrés. Descente freinée max."},
-  {id:"x093",n:"Glute Bridge",m:"Fessiers",eq:"bw",kg:0,reps:"20",rest:45,rpe:5,cue:"Pousse les hanches. Squeeze en haut."},
-  {id:"x094",n:"Hip Thrust une jambe",m:"Fessiers",eq:"bw",kg:0,reps:"12",rest:60,rpe:7,cue:"Une jambe. Bassin stable."},
-  {id:"x095",n:"Mollets debout",m:"Mollets",eq:"bw",kg:0,reps:"20",rest:45,rpe:5,cue:"Monte sur la pointe. Pause en haut."},
-  {id:"x096",n:"Gainage planche",m:"Core",eq:"bw",kg:0,reps:"60s",rest:45,rpe:5,cue:"Corps aligné. Bassin verrouillé."},
-  {id:"x097",n:"Planche latérale",m:"Core oblique",eq:"bw",kg:0,reps:"45s",rest:45,rpe:5,cue:"Hanche haute. Corps en ligne."},
-  {id:"x098",n:"Hollow Hold",m:"Core",eq:"bw",kg:0,reps:"40s",rest:45,rpe:6,cue:"Bas du dos plaqué. Épaules décollées."},
-  {id:"x099",n:"Hollow Rock",m:"Core",eq:"bw",kg:0,reps:"20",rest:45,rpe:6,cue:"Bascule en gardant la forme hollow."},
-  {id:"x100",n:"L-Sit",m:"Core · Force",eq:"bw",kg:0,reps:"20s",rest:90,rpe:8,cue:"Jambes tendues à l'horizontale. Épaules basses."},
-  {id:"x101",n:"Dragon Flag",m:"Core",eq:"bw",kg:0,reps:"6",rest:90,rpe:9,cue:"Corps droit. Descente ultra-contrôlée."},
-  {id:"x102",n:"Relevé jambes suspendu",m:"Core bas",eq:"bw",kg:0,reps:"12",rest:75,rpe:7,cue:"Sans balancier. Bassin enroulé."},
-  {id:"x103",n:"Toes to Bar",m:"Core · Cardio",eq:"bw",kg:0,reps:"10",rest:90,rpe:8,cue:"Pieds à la barre. Rythme contrôlé."},
-  {id:"x104",n:"Mountain Climber",m:"Core · Cardio",eq:"bw",kg:0,reps:"40",rest:45,rpe:6,cue:"Genoux vers la poitrine. Vite."},
-  {id:"x105",n:"Superman",m:"Lombaires",eq:"bw",kg:0,reps:"15",rest:45,rpe:5,cue:"Bras et jambes décollés. Pause en haut."},
-  {id:"x106",n:"Bird Dog",m:"Core · Stabilité",eq:"bw",kg:0,reps:"12",rest:45,rpe:5,cue:"Bras et jambe opposés. Anti-rotation."},
-  {id:"x107",n:"Front Lever progression",m:"Dos · Core",eq:"bw",kg:0,reps:"10s",rest:120,rpe:9,cue:"Corps horizontal. Tucks selon niveau."},
-  {id:"x108",n:"Burpee",m:"Full body · Cardio",eq:"bw",kg:0,reps:"15",rest:60,rpe:8,cue:"Pompe + saut. Rythme soutenu."},
-  {id:"x109",n:"Rameur intervalle",m:"Full body · Cardio",eq:"cd",kg:0,reps:"500m",rest:90,rpe:8,cue:"Tire jambes-hanches-bras. Retour bras-hanches-jambes."},
-  {id:"x110",n:"Rameur endurance",m:"Full body · Cardio",eq:"cd",kg:0,reps:"2000m",rest:0,rpe:6,cue:"Cadence régulière. Respiration contrôlée."},
-  {id:"x111",n:"Assault Bike sprint",m:"Full body · Cardio",eq:"cd",kg:0,reps:"30s",rest:90,rpe:9,cue:"Bras et jambes à fond. All-out."},
-  {id:"x112",n:"Assault Bike calories",m:"Cardio",eq:"cd",kg:0,reps:"20cal",rest:90,rpe:8,cue:"Rythme constant et puissant."},
-  {id:"x113",n:"Corde à sauter",m:"Cardio · Mollets",eq:"cd",kg:0,reps:"100",rest:45,rpe:6,cue:"Poignets relâchés. Petits sauts."},
-  {id:"x114",n:"Double Unders",m:"Cardio",eq:"cd",kg:0,reps:"40",rest:60,rpe:8,cue:"Deux tours par saut. Timing serré."},
-  {id:"x115",n:"Sprint navette",m:"Cardio · Jambes",eq:"cd",kg:0,reps:"10x20m",rest:90,rpe:9,cue:"Accélère, touche, repart. Explosif."},
-  {id:"x116",n:"Montées de genoux",m:"Cardio",eq:"cd",kg:0,reps:"50",rest:45,rpe:6,cue:"Genoux hauts. Rythme rapide."},
-  {id:"x117",n:"Ski Erg",m:"Full body · Cardio",eq:"cd",kg:0,reps:"500m",rest:90,rpe:8,cue:"Tire vers le bas. Engage le tronc."},
-  {id:"x118",n:"Box Jump",m:"Jambes · Cardio",eq:"cd",kg:0,reps:"12",rest:75,rpe:7,cue:"Réception souple. Extension complète en haut."},
-  {id:"x119",n:"Wall Ball",m:"Full body · Cardio",eq:"cd",kg:6,reps:"15",rest:75,rpe:8,cue:"Squat puis lance la balle à la cible."},
-  {id:"x120",n:"Battle Rope",m:"Bras · Cardio",eq:"cd",kg:0,reps:"30s",rest:60,rpe:8,cue:"Vagues continues. Gainage constant."},
-  {id:"x121",n:"Sled Push",m:"Jambes · Cardio",eq:"cd",kg:40,reps:"20m",rest:120,rpe:8,cue:"Pousse bas. Pas courts et puissants."},
-  {id:"x122",n:"Course tempo",m:"Cardio",eq:"cd",kg:0,reps:"5min",rest:0,rpe:6,cue:"Allure soutenue mais tenable."},
-  {id:"x123",n:"Tirage vertical",m:"Dos large",eq:"mc",kg:55,reps:"12",rest:90,rpe:6,cue:"Tire au haut des pecs. Coudes vers les côtes."},
-  {id:"x124",n:"Tirage horizontal",m:"Dos épais",eq:"mc",kg:55,reps:"12",rest:90,rpe:6,cue:"Buste droit. Squeeze omoplates."},
-  {id:"x125",n:"Tirage bras tendus",m:"Grand dorsal",eq:"mc",kg:25,reps:"15",rest:60,rpe:6,cue:"Bras tendus. Pousse la barre vers les cuisses."},
-  {id:"x126",n:"Presse à cuisses",m:"Quads · Fessiers",eq:"mc",kg:120,reps:"12",rest:120,rpe:7,cue:"Pieds largeur épaules. Ne verrouille pas les genoux."},
-  {id:"x127",n:"Leg Extension",m:"Quads",eq:"mc",kg:40,reps:"15",rest:75,rpe:6,cue:"Verrouille en haut 1s. Descente lente."},
-  {id:"x128",n:"Leg Curl allongé",m:"Ischios",eq:"mc",kg:35,reps:"12",rest:75,rpe:6,cue:"Talons vers les fessiers. Contrôle."},
-  {id:"x129",n:"Mollets à la presse",m:"Mollets",eq:"mc",kg:80,reps:"15",rest:60,rpe:6,cue:"Amplitude pleine. Pause étirée."},
-  {id:"x130",n:"Pec Deck",m:"Pecs",eq:"mc",kg:40,reps:"15",rest:75,rpe:6,cue:"Coudes hauts. Serre au centre."},
-  {id:"x131",n:"Cable Crossover",m:"Pecs",eq:"mc",kg:15,reps:"15",rest:60,rpe:6,cue:"Arc descendant. Croise devant."},
-  {id:"x132",n:"Cable Fly haut",m:"Pecs inf",eq:"mc",kg:15,reps:"15",rest:60,rpe:6,cue:"Poulies hautes. Vers le bas."},
-  {id:"x133",n:"Triceps poulie corde",m:"Triceps",eq:"mc",kg:25,reps:"15",rest:60,rpe:6,cue:"Écarte la corde en bas. Coudes fixes."},
-  {id:"x134",n:"Triceps poulie barre",m:"Triceps",eq:"mc",kg:30,reps:"12",rest:60,rpe:6,cue:"Pousse vers le bas. Verrouille."},
-  {id:"x135",n:"Curl poulie basse",m:"Biceps",eq:"mc",kg:25,reps:"12",rest:60,rpe:6,cue:"Tension constante. Pas d'élan."},
-  {id:"x136",n:"Face Pull",m:"Rear delt · Dos",eq:"mc",kg:20,reps:"15",rest:60,rpe:6,cue:"Tire vers le visage. Rotation externe."},
-  {id:"x137",n:"Cable Lateral Raise",m:"Épaules",eq:"mc",kg:8,reps:"15",rest:45,rpe:6,cue:"Poulie basse. Monte à l'horizontale."},
-  {id:"x138",n:"Pallof Press",m:"Core anti-rotation",eq:"mc",kg:12,reps:"12",rest:60,rpe:6,cue:"Résiste à la rotation. Bras tendus lent."},
-  {id:"x139",n:"Cable Woodchopper",m:"Core · Obliques",eq:"mc",kg:15,reps:"12",rest:60,rpe:6,cue:"Diagonale haut-bas. Pivote les hanches."},
-  {id:"x140",n:"Cable Pull-through",m:"Fessiers · Ischios",eq:"mc",kg:25,reps:"15",rest:75,rpe:6,cue:"Charnière hanche. Poulie entre les jambes."},
-  {id:"x141",n:"Hack Squat machine",m:"Quads",eq:"mc",kg:80,reps:"10",rest:120,rpe:7,cue:"Dos plaqué. Descente profonde."},
-  {id:"x142",n:"Hip Abduction",m:"Fessiers moyens",eq:"mc",kg:40,reps:"15",rest:60,rpe:5,cue:"Écarte contre résistance. Squeeze."},
-  {id:"x143",n:"Dead Bug",m:"Core · Stabilité",eq:"bw",kg:0,reps:"12",rest:45,rpe:5,cue:"Bras et jambe opposés. Bas du dos plaqué."},
-  {id:"x144",n:"Bear Crawl",m:"Full body · Core",eq:"bw",kg:0,reps:"20m",rest:45,rpe:6,cue:"Genoux à 2cm du sol. Dos plat."},
-  {id:"x145",n:"Ours latéral",m:"Épaules · Core",eq:"bw",kg:0,reps:"15",rest:45,rpe:6,cue:"Déplacement latéral gainé."},
-  {id:"x146",n:"Cossack Squat",m:"Mobilité · Adducteurs",eq:"bw",kg:0,reps:"10",rest:60,rpe:6,cue:"Squat latéral. Jambe opposée tendue."},
-  {id:"x147",n:"90/90 Hanche",m:"Mobilité hanche",eq:"bw",kg:0,reps:"10",rest:45,rpe:4,cue:"Pivote les hanches au sol. Buste droit."},
-  {id:"x148",n:"Couch Stretch",m:"Mobilité quad",eq:"bw",kg:0,reps:"40s",rest:30,rpe:3,cue:"Genou au mur. Ouvre le psoas."},
-  {id:"x149",n:"Cat-Cow",m:"Mobilité dos",eq:"bw",kg:0,reps:"12",rest:30,rpe:3,cue:"Alterne flexion-extension de la colonne."},
-  {id:"x150",n:"Wall Slide",m:"Mobilité épaule",eq:"bw",kg:0,reps:"12",rest:30,rpe:4,cue:"Dos au mur. Glisse les bras vers le haut."},
-  {id:"x151",n:"Scapular Pull-up",m:"Dos · Scapula",eq:"bw",kg:0,reps:"10",rest:60,rpe:6,cue:"Bras tendus. Descends puis remonte par les omoplates."},
-  {id:"x152",n:"Hanging Hold",m:"Grip · Dos",eq:"bw",kg:0,reps:"40s",rest:60,rpe:6,cue:"Suspension passive. Relâche les épaules."},
-  {id:"x153",n:"Copenhagen Plank",m:"Adducteurs · Core",eq:"bw",kg:0,reps:"30s",rest:45,rpe:7,cue:"Jambe haute sur appui. Anti-chute du bassin."},
-  {id:"x154",n:"Reverse Plank",m:"Core postérieur",eq:"bw",kg:0,reps:"30s",rest:45,rpe:5,cue:"Face vers le haut. Hanches hautes."},
-  {id:"x155",n:"Sit-up",m:"Core",eq:"bw",kg:0,reps:"20",rest:45,rpe:5,cue:"Enroule la colonne. Contrôle la descente."},
-  {id:"x156",n:"V-up",m:"Core",eq:"bw",kg:0,reps:"15",rest:60,rpe:7,cue:"Bras et jambes se rejoignent. Forme V."},
-  {id:"x157",n:"Flutter Kicks",m:"Core bas",eq:"bw",kg:0,reps:"40",rest:45,rpe:6,cue:"Battements de jambes. Bas du dos plaqué."},
-  {id:"x158",n:"Russian Twist au poids",m:"Core obliques",eq:"bw",kg:0,reps:"24",rest:45,rpe:6,cue:"Rotation tronc. Pieds décollés."},
-  {id:"x159",n:"Ab Wheel",m:"Core",eq:"bw",kg:0,reps:"10",rest:75,rpe:8,cue:"Déroule loin. Anti-extension lombaire."},
-  {id:"x160",n:"Plank Up-Down",m:"Core · Épaules",eq:"bw",kg:0,reps:"16",rest:45,rpe:6,cue:"Passe coudes-mains en gardant le bassin stable."},
-  {id:"x161",n:"Pendlay déficit",m:"Dos épais",eq:"bar",kg:50,reps:"8",rest:120,rpe:8,cue:"Sur disque. Tire explosif depuis le sol."},
-  {id:"x162",n:"Shrug barre",m:"Trapèzes",eq:"bar",kg:60,reps:"15",rest:75,rpe:6,cue:"Hausse vertical. Pause en haut."},
-  {id:"x163",n:"Curl Larry Scott",m:"Biceps",eq:"db",kg:10,reps:"12",rest:75,rpe:7,cue:"Bras sur pupitre incliné. Isole le biceps."},
-  {id:"x164",n:"Préacheur poulie",m:"Biceps",eq:"mc",kg:20,reps:"12",rest:60,rpe:6,cue:"Coudes calés. Tension continue."},
-  {id:"x165",n:"JM Press",m:"Triceps",eq:"bar",kg:35,reps:"10",rest:90,rpe:7,cue:"Hybride couché-extension. Coudes vers l'avant."},
-  {id:"x166",n:"Skullcrusher",m:"Triceps",eq:"bar",kg:25,reps:"10",rest:90,rpe:7,cue:"Barre vers le front. Coudes fixes."},
-  {id:"x167",n:"Reverse Curl",m:"Avant-bras · Biceps",eq:"bar",kg:20,reps:"12",rest:75,rpe:6,cue:"Prise pronation. Cible les extenseurs."},
-  {id:"x168",n:"Wrist Curl",m:"Avant-bras",eq:"db",kg:8,reps:"15",rest:45,rpe:5,cue:"Flexion poignet sur banc. Amplitude pleine."},
-  {id:"x169",n:"Incline Y Raise",m:"Rear delt · Trapèze inf",eq:"db",kg:6,reps:"15",rest:60,rpe:5,cue:"Buste sur banc incliné. Bras en Y."},
-  {id:"x170",n:"Tate Press",m:"Triceps",eq:"db",kg:10,reps:"12",rest:75,rpe:6,cue:"Coudes ouverts. Haltères vers la poitrine."},
-  {id:"x171",n:"Kettlebell Complex",m:"Full body · Cardio",eq:"kb",kg:16,reps:"5x3",rest:120,rpe:9,cue:"Clean-squat-press enchaînés sans poser."},
-  {id:"x172",n:"Barbell Complex",m:"Full body · Cardio",eq:"bar",kg:40,reps:"5x3",rest:150,rpe:9,cue:"Deadlift-row-clean-press-squat sans lâcher."},
-  {id:"x173",n:"EMOM Thruster",m:"Full body · Cardio",eq:"bar",kg:40,reps:"10x5",rest:0,rpe:8,cue:"5 reps en haut de chaque minute."},
-  {id:"x174",n:"AMRAP Burpee Pull-up",m:"Full body · Cardio",eq:"bw",kg:0,reps:"10min",rest:0,rpe:9,cue:"Max de tours burpee + traction."},
-  {id:"x175",n:"Sprint colline",m:"Cardio · Jambes",eq:"cd",kg:0,reps:"8x15m",rest:90,rpe:9,cue:"Montée explosive. Récup en marchant."},
-  {id:"x176",n:"Tabata Squat",m:"Cardio · Jambes",eq:"cd",kg:0,reps:"8x20s",rest:10,rpe:9,cue:"20s effort / 10s repos. 8 rounds."},
-  {id:"x177",n:"Carry mixte",m:"Core · Grip",eq:"kb",kg:24,reps:"40m",rest:90,rpe:7,cue:"Un KB en rack, un en farmer. Anti-rotation."},
-  {id:"x178",n:"Yoke Carry",m:"Full body · Grip",eq:"bar",kg:60,reps:"20m",rest:120,rpe:8,cue:"Charge lourde sur le dos. Pas contrôlés."},
-  {id:"x179",n:"Sandbag Clean",m:"Full body",eq:"db",kg:30,reps:"8",rest:120,rpe:8,cue:"Ramène le sac à la poitrine. Hanche explosive."},
-  {id:"x180",n:"Broad Jump",m:"Jambes · Puissance",eq:"bw",kg:0,reps:"8",rest:90,rpe:7,cue:"Saut horizontal max. Réception stable."},
-  {id:"x181",n:"Depth Jump",m:"Jambes · Puissance",eq:"bw",kg:0,reps:"6",rest:120,rpe:8,cue:"Descends de la box puis rebondis vite."},
-  {id:"x182",n:"Pogo Jumps",m:"Mollets · Réactivité",eq:"bw",kg:0,reps:"20",rest:45,rpe:6,cue:"Petits sauts raides. Contact bref au sol."},
-  {id:"x183",n:"Single Leg RDL haltère",m:"Ischios · Équilibre",eq:"db",kg:14,reps:"10",rest:90,rpe:7,cue:"Une jambe. Charnière hanche. Dos plat."},
-  {id:"x184",n:"Step Down",m:"Quads · Contrôle",eq:"bw",kg:0,reps:"10",rest:60,rpe:6,cue:"Descends une jambe d'une box. Lent."},
-  {id:"x185",n:"Shrimp Squat",m:"Quads · Équilibre",eq:"bw",kg:0,reps:"6",rest:120,rpe:9,cue:"Une jambe. Genou arrière au sol."},
-  {id:"x186",n:"Sissy Squat",m:"Quads",eq:"bw",kg:0,reps:"12",rest:75,rpe:7,cue:"Bascule arrière sur la pointe. Étire les quads."},
-  {id:"x187",n:"Calf Raise une jambe",m:"Mollets",eq:"bw",kg:0,reps:"15",rest:45,rpe:6,cue:"Sur une jambe. Amplitude complète."},
-  {id:"x188",n:"Wall Sit",m:"Quads · Endurance",eq:"bw",kg:0,reps:"60s",rest:60,rpe:6,cue:"Dos au mur. Cuisses à l'horizontale."},
-  {id:"x189",n:"Jefferson Curl",m:"Mobilité · Chaîne post",eq:"db",kg:16,reps:"8",rest:75,rpe:6,cue:"Déroule la colonne vertèbre par vertèbre."},
-  {id:"x190",n:"Hyperextension",m:"Lombaires · Fessiers",eq:"bw",kg:0,reps:"15",rest:60,rpe:6,cue:"Remonte jusqu'à l'alignement. Sans hyperextension."},
-  {id:"x191",n:"Reverse Hyper",m:"Fessiers · Lombaires",eq:"mc",kg:20,reps:"15",rest:75,rpe:6,cue:"Jambes montent derrière. Décompresse le bas du dos."},
-  {id:"x192",n:"Cable Kickback fessier",m:"Fessiers",eq:"mc",kg:15,reps:"15",rest:60,rpe:5,cue:"Pousse la jambe en arrière. Squeeze."},
-  {id:"x193",n:"Standing Cable Crunch",m:"Core",eq:"mc",kg:25,reps:"15",rest:60,rpe:6,cue:"Enroule le tronc contre la poulie."},
-  {id:"x194",n:"Landmine Press",m:"Épaules · Core",eq:"bar",kg:25,reps:"10",rest:90,rpe:7,cue:"Barre en angle. Presse en diagonale."},
-  {id:"x195",n:"Landmine Row",m:"Dos épais",eq:"bar",kg:30,reps:"10",rest:90,rpe:7,cue:"Barre en T. Tire vers la poitrine."},
-  {id:"x196",n:"Landmine Squat to Press",m:"Full body",eq:"bar",kg:25,reps:"10",rest:90,rpe:8,cue:"Squat puis press en un mouvement."},
-  {id:"x197",n:"Z Press",m:"Épaules · Core",eq:"bar",kg:30,reps:"6",rest:120,rpe:8,cue:"Assis jambes tendues. Press strict."},
-  {id:"x198",n:"Bradford Press",m:"Épaules",eq:"bar",kg:30,reps:"10",rest:90,rpe:7,cue:"Alterne nuque-devant sans verrouiller."},
-
-  // NOUVEAUX EXERCICES (S4) - tagges par objectif
-  {id:"kb26",n:"Halo KB",m:"Épaules · Core",eq:"kb",kg:10,reps:"10",rest:60,rpe:6,cue:"Cercle du KB autour de la tête, coudes proches.",goals:["seche","endurance","performance"]},
-  {id:"kb27",n:"Figure 8 to Hold KB",m:"Core · Full body",eq:"kb",kg:12,reps:"10",rest:60,rpe:7,cue:"Passe le KB entre les jambes en huit puis tient en rack.",goals:["seche","endurance"]},
-  {id:"kb28",n:"Renegade Row KB",m:"Dos · Core",eq:"kb",kg:14,reps:"8",rest:75,rpe:7,cue:"Position planche, tire le KB sans faire pivoter le bassin.",goals:["seche","hypertrophie","endurance"]},
-  {id:"kb29",n:"Single Arm Overhead Carry KB",m:"Core · Épaules",eq:"kb",kg:16,reps:"20m",rest:90,rpe:7,cue:"Bras verrouillé au-dessus, marche stable.",goals:["seche","performance","endurance"]},
-  {id:"kb30",n:"Double KB Front Squat",m:"Quads · Fessiers",eq:"kb",kg:16,reps:"10",rest:90,rpe:7,cue:"Deux KB en rack, torse droit, descend profond.",goals:["seche","hypertrophie","performance"]},
-  {id:"kb31",n:"KB Thruster",m:"Full body",eq:"kb",kg:14,reps:"8",rest:90,rpe:8,cue:"Squat puis press explosif en un mouvement.",goals:["seche","endurance","performance"]},
-  {id:"kb32",n:"Single Leg RDL KB",m:"Ischios · Fessiers",eq:"kb",kg:14,reps:"8",rest:75,rpe:7,cue:"Jambe tendue arrière, bascule du bassin, dos plat.",goals:["seche","hypertrophie","performance"]},
-  {id:"kb33",n:"KB Around the Body Pass",m:"Core",eq:"kb",kg:10,reps:"12",rest:60,rpe:6,cue:"Passe le KB autour de la taille, garde le tronc gainé.",goals:["seche","endurance"]},
-  {id:"kb34",n:"KB Man Maker",m:"Full body",eq:"kb",kg:12,reps:"6",rest:120,rpe:8,cue:"Pompe + row + clean + press, enchâine sans reposer.",goals:["seche","endurance","performance"]},
-  {id:"kb35",n:"KB Sumo Deadlift High Pull",m:"Fessiers · Épaules",eq:"kb",kg:16,reps:"10",rest:75,rpe:7,cue:"Squat sumo puis tire le KB haut sous le menton.",goals:["seche","endurance"]},
-  {id:"kb36",n:"Bottoms-Up Clean KB",m:"Avant-bras · Full body",eq:"kb",kg:8,reps:"6",rest:90,rpe:8,cue:"KB tenu tête en bas, exige un grip et gainage strict.",goals:["performance","endurance"]},
-  {id:"kb37",n:"KB Push-up Row",m:"Dos · Pecs",eq:"kb",kg:14,reps:"8",rest:75,rpe:7,cue:"Pompe sur KB puis row unilatéral, alterne les côtés.",goals:["seche","hypertrophie"]},
-  {id:"kb38",n:"KB Lateral Lunge",m:"Fessiers · Adducteurs",eq:"kb",kg:14,reps:"10",rest:60,rpe:7,cue:"Fente latérale, KB en goblet, genou aligné.",goals:["seche","endurance","performance"]},
-  {id:"kb39",n:"KB Overhead Squat",m:"Full body",eq:"kb",kg:10,reps:"6",rest:90,rpe:8,cue:"KB verrouillé au-dessus, squat profond et contrôlé.",goals:["performance","seche"]},
-  {id:"kb40",n:"Double KB Clean & Jerk",m:"Full body",eq:"kb",kg:14,reps:"5",rest:120,rpe:8,cue:"Deux KB, clean puis jerk explosif.",goals:["performance","endurance"]},
-  {id:"kb41",n:"KB Bear Crawl Drag",m:"Full body · Core",eq:"kb",kg:10,reps:"20m",rest:75,rpe:7,cue:"Rampé en traînant le KB à côté, hanches basses.",goals:["seche","endurance"]},
-  {id:"kb42",n:"KB Reverse Lunge to Press",m:"Full body",eq:"kb",kg:12,reps:"8",rest:90,rpe:7,cue:"Fente arrière puis press vertical au sommet.",goals:["performance","seche"]},
-  {id:"kb43",n:"KB Windmill lourd",m:"Obliques · Épaules",eq:"kb",kg:10,reps:"6",rest:90,rpe:7,cue:"Bras verrouillé, hanche recule, regard sur le KB.",goals:["performance","endurance"]},
-  {id:"kb44",n:"KB Single Arm Swing",m:"Fessiers · Core",eq:"kb",kg:16,reps:"12",rest:60,rpe:7,cue:"Swing unilatéral, résiste à la rotation du buste.",goals:["seche","endurance"]},
-  {id:"kb45",n:"KB Goblet Reverse Lunge",m:"Quads · Fessiers",eq:"kb",kg:16,reps:"10",rest:75,rpe:7,cue:"KB en goblet, fente arrière contrôlée.",goals:["hypertrophie","seche","endurance"]},
-  {id:"kb46",n:"KB Alternating Floor Press",m:"Pecs · Triceps",eq:"kb",kg:14,reps:"8",rest:75,rpe:7,cue:"Allé au sol, presse en alternant les bras.",goals:["hypertrophie","seche"]},
-  {id:"kb47",n:"KB Suitcase Carry",m:"Core · Avant-bras",eq:"kb",kg:20,reps:"20m",rest:90,rpe:7,cue:"Un seul KB au sol, marche sans se pencher.",goals:["performance","seche","endurance"]},
-  {id:"kb48",n:"KB High Pull unilatéral",m:"Épaules · Dos",eq:"kb",kg:12,reps:"10",rest:75,rpe:7,cue:"Coude haut, KB proche du corps.",goals:["seche","endurance"]},
-  {id:"kb49",n:"KB Clean Pull",m:"Full body",eq:"kb",kg:16,reps:"6",rest:90,rpe:7,cue:"Tire le KB explosivement sans le recevoir en rack.",goals:["performance","seche"]},
-  {id:"kb50",n:"KB Cossack Squat",m:"Adducteurs · Quads",eq:"kb",kg:10,reps:"8",rest:75,rpe:7,cue:"KB en goblet, descend d'un côté en gardant l'autre jambe tendue.",goals:["hypertrophie","seche","performance"]},
-  {id:"bb19",n:"Squat Pause",m:"Quads · Fessiers",eq:"bar",kg:70,reps:"5",rest:180,rpe:8,cue:"Pause 2s au fond, remonte explosif.",goals:["force","performance"]},
-  {id:"bb20",n:"Bench Press Tempo",m:"Pecs · Triceps",eq:"bar",kg:55,reps:"6",rest:150,rpe:8,cue:"Descente 3s, pause 1s, pousse rapide.",goals:["force","hypertrophie"]},
-  {id:"bb21",n:"Sumo Deadlift",m:"Fessiers · Ischios",eq:"bar",kg:90,reps:"5",rest:180,rpe:8,cue:"Pieds larges, prise étroite, pousse le sol.",goals:["force","performance"]},
-  {id:"bb22",n:"Overhead Squat",m:"Full body",eq:"bar",kg:30,reps:"5",rest:150,rpe:8,cue:"Barre verrouillée au-dessus, mobilité requise.",goals:["performance","force"]},
-  {id:"bb23",n:"Push Jerk",m:"Full body",eq:"bar",kg:40,reps:"3",rest:180,rpe:9,cue:"Dip léger puis pousse explosive sous la barre.",goals:["performance"]},
-  {id:"bb24",n:"Hip Thrust Barre",m:"Fessiers",eq:"bar",kg:60,reps:"8",rest:120,rpe:7,cue:"Dos sur banc, pousse les hanches, contracte en haut.",goals:["hypertrophie","force"]},
-  {id:"bb25",n:"Barbell Row Pendlay",m:"Dos",eq:"bar",kg:60,reps:"6",rest:120,rpe:8,cue:"Barre au sol à chaque rep, tire explosif.",goals:["force","hypertrophie"]},
-  {id:"bb26",n:"Close Grip Bench Press",m:"Triceps · Pecs",eq:"bar",kg:50,reps:"6",rest:120,rpe:7,cue:"Prise étroite, coudes proches du corps.",goals:["hypertrophie","force"]},
-  {id:"bb27",n:"Front Squat",m:"Quads · Core",eq:"bar",kg:50,reps:"5",rest:150,rpe:8,cue:"Barre en rack avant, torse vertical.",goals:["force","performance"]},
-  {id:"bb28",n:"Barbell Hip Thrust Lourd",m:"Fessiers",eq:"bar",kg:80,reps:"5",rest:150,rpe:8,cue:"Charge lourde, verrouillage complet en haut.",goals:["force","hypertrophie"]},
-  {id:"bb29",n:"Incline Bench Press",m:"Pecs sup",eq:"bar",kg:45,reps:"8",rest:120,rpe:7,cue:"Banc incliné 30°, contrôle la descente.",goals:["hypertrophie","force"]},
-  {id:"bb30",n:"Barbell Lunge",m:"Quads · Fessiers",eq:"bar",kg:40,reps:"8",rest:90,rpe:7,cue:"Barre sur les trapèzes, fentes alternées.",goals:["hypertrophie","performance"]},
-  {id:"bb31",n:"Snatch Grip Deadlift",m:"Dos · Ischios",eq:"bar",kg:60,reps:"5",rest:150,rpe:8,cue:"Prise large, tire depuis le sol, dos plat.",goals:["force","performance"]},
-  {id:"bb32",n:"Barbell Shrug",m:"Trapèzes",eq:"bar",kg:70,reps:"10",rest:90,rpe:7,cue:"Hausse les épaules, contracte 1s en haut.",goals:["hypertrophie"]},
-  {id:"bb33",n:"Good Morning Léger",m:"Ischios · Lombaires",eq:"bar",kg:30,reps:"10",rest:90,rpe:6,cue:"Bascule le buste hanches reculées, dos plat.",goals:["hypertrophie","force"]},
-  {id:"bb34",n:"Power Clean",m:"Full body",eq:"bar",kg:50,reps:"3",rest:180,rpe:9,cue:"Tire puis reçoit en rack, explosif.",goals:["performance","force"]},
-  {id:"bb35",n:"Barbell Step-Up",m:"Quads · Fessiers",eq:"bar",kg:30,reps:"8",rest:90,rpe:7,cue:"Barre sur les trapèzes, monte sur banc.",goals:["hypertrophie","performance"]},
-  {id:"bb36",n:"Floor Press Barre",m:"Triceps · Pecs",eq:"bar",kg:50,reps:"6",rest:120,rpe:7,cue:"Coudes touchent le sol, presse depuis le bas.",goals:["force","hypertrophie"]},
-  {id:"bb37",n:"Barbell Curl",m:"Biceps",eq:"bar",kg:25,reps:"10",rest:75,rpe:6,cue:"Coudes fixes, monte sans balancer.",goals:["hypertrophie"]},
-  {id:"bb38",n:"Seal Row",m:"Dos",eq:"bar",kg:50,reps:"8",rest:90,rpe:7,cue:"Allongé sur banc, tire sans triche.",goals:["hypertrophie","force"]},
-  {id:"bb39",n:"Box Squat Lourd",m:"Fessiers · Quads",eq:"bar",kg:80,reps:"5",rest:180,rpe:8,cue:"S'assoit sur box, repart explosif sans rebondir.",goals:["force"]},
-  {id:"bb40",n:"Barbell Rollout",m:"Core",eq:"bar",kg:20,reps:"8",rest:90,rpe:7,cue:"Genoux au sol, roule la barre en gainant fort.",goals:["hypertrophie","performance"]},
-  {id:"bb41",n:"Push Press Lourd",m:"Épaules · Jambes",eq:"bar",kg:50,reps:"5",rest:150,rpe:8,cue:"Légère impulsion jambes puis verrouille au-dessus.",goals:["performance","force"]},
-  {id:"bb42",n:"Deadlift Déficit",m:"Ischios · Dos",eq:"bar",kg:70,reps:"5",rest:180,rpe:8,cue:"Pieds sur plateforme, amplitude augmentée.",goals:["force"]},
-  {id:"bb43",n:"Barbell Landmine Press",m:"Épaules",eq:"bar",kg:25,reps:"10",rest:90,rpe:7,cue:"Barre en landmine, presse en diagonale.",goals:["hypertrophie","performance"]},
-  {id:"db21",n:"Arnold Press",m:"Épaules",eq:"db",kg:14,reps:"10",rest:90,rpe:7,cue:"Rotation des paumes en montant.",goals:["hypertrophie"]},
-  {id:"db22",n:"Renegade Row Haltères",m:"Dos · Core",eq:"db",kg:12,reps:"8",rest:90,rpe:7,cue:"Position planche, tire sans tourner le bassin.",goals:["hypertrophie","seche"]},
-  {id:"db23",n:"Single Arm Snatch DB",m:"Full body",eq:"db",kg:14,reps:"6",rest:90,rpe:8,cue:"Tire puis verrouille au-dessus en un mouvement.",goals:["performance","endurance"]},
-  {id:"db24",n:"Goblet Lunge Haltère",m:"Quads · Fessiers",eq:"db",kg:16,reps:"10",rest:75,rpe:7,cue:"Haltère en goblet, fente contrôlée.",goals:["hypertrophie","seche"]},
-  {id:"db25",n:"Skull Crusher Haltères",m:"Triceps",eq:"db",kg:10,reps:"12",rest:75,rpe:6,cue:"Coudes fixes, descend derrière la tête.",goals:["hypertrophie"]},
-  {id:"db26",n:"Concentration Curl",m:"Biceps",eq:"db",kg:10,reps:"12",rest:60,rpe:6,cue:"Coude appuyé sur la cuisse, isole le biceps.",goals:["hypertrophie"]},
-  {id:"db27",n:"DB Bench Press Prise Neutre",m:"Pecs",eq:"db",kg:22,reps:"10",rest:90,rpe:7,cue:"Paumes face à face, amplitude complète.",goals:["hypertrophie"]},
-  {id:"db28",n:"Single Arm Overhead Press DB",m:"Épaules · Core",eq:"db",kg:14,reps:"8",rest:90,rpe:7,cue:"Anti-rotation du tronc pendant la press.",goals:["hypertrophie","performance"]},
-  {id:"db29",n:"DB Romanian Deadlift Unilatéral",m:"Ischios · Fessiers",eq:"db",kg:16,reps:"8",rest:75,rpe:7,cue:"Un haltère, jambe libre en équilibre.",goals:["hypertrophie","force"]},
-  {id:"db30",n:"DB Pullover",m:"Dos · Pecs",eq:"db",kg:18,reps:"10",rest:90,rpe:7,cue:"Allongé sur banc, descend l'haltère derrière la tête.",goals:["hypertrophie"]},
-  {id:"db31",n:"DB Thruster",m:"Full body",eq:"db",kg:14,reps:"10",rest:90,rpe:7,cue:"Squat puis press, enchâine sans pause.",goals:["seche","endurance"]},
-  {id:"db32",n:"DB Step-Up",m:"Quads · Fessiers",eq:"db",kg:16,reps:"10",rest:75,rpe:7,cue:"Monte sur banc, contrôle la descente.",goals:["hypertrophie","seche"]},
-  {id:"db33",n:"DB Farmer Carry",m:"Core · Avant-bras",eq:"db",kg:24,reps:"20m",rest:90,rpe:7,cue:"Deux haltères, marche droite et stable.",goals:["performance","seche"]},
-  {id:"db34",n:"DB Hammer Curl",m:"Biceps · Avant-bras",eq:"db",kg:12,reps:"12",rest:60,rpe:6,cue:"Prise neutre, coudes fixes.",goals:["hypertrophie"]},
-  {id:"db35",n:"DB Lateral Raise Lourd",m:"Épaules",eq:"db",kg:8,reps:"12",rest:60,rpe:6,cue:"Légère flexion du coude, monte à hauteur d'épaule.",goals:["hypertrophie"]},
-  {id:"db36",n:"DB Squat Jump",m:"Quads · Fessiers",eq:"db",kg:10,reps:"10",rest:75,rpe:7,cue:"Squat puis saut explosif, atterrit souple.",goals:["seche","endurance","performance"]},
-  {id:"db37",n:"DB Chest Fly Incliné",m:"Pecs sup",eq:"db",kg:12,reps:"12",rest:75,rpe:6,cue:"Légère flexion des coudes, étire les pecs.",goals:["hypertrophie"]},
-  {id:"db38",n:"DB Single Leg RDL",m:"Ischios · Fessiers",eq:"db",kg:14,reps:"8",rest:75,rpe:7,cue:"Équilibre sur une jambe, dos plat.",goals:["hypertrophie","performance"]},
-  {id:"db39",n:"DB Zottman Curl",m:"Biceps · Avant-bras",eq:"db",kg:10,reps:"10",rest:60,rpe:6,cue:"Monte paume en haut, descend paume en bas.",goals:["hypertrophie"]},
-  {id:"db40",n:"DB Clean & Press",m:"Full body",eq:"db",kg:14,reps:"8",rest:90,rpe:7,cue:"Clean puis press, un mouvement fluide.",goals:["performance","seche"]},
-  {id:"db41",n:"DB Bulgarian Split Squat",m:"Quads · Fessiers",eq:"db",kg:16,reps:"8",rest:90,rpe:7,cue:"Pied arrière surélevé, descend droit.",goals:["hypertrophie","force"]},
-  {id:"db42",n:"DB Reverse Fly",m:"Deltoïdes lat.",eq:"db",kg:8,reps:"12",rest:60,rpe:6,cue:"Buste penché, écarte les bras en arrière.",goals:["hypertrophie"]},
-  {id:"db43",n:"DB Front Raise",m:"Épaules ant",eq:"db",kg:8,reps:"12",rest:60,rpe:6,cue:"Monte tendu jusqu'à hauteur d'épaule.",goals:["hypertrophie"]},
-  {id:"db44",n:"DB Man Maker",m:"Full body",eq:"db",kg:12,reps:"6",rest:120,rpe:8,cue:"Pompe + row + clean + press, enchâîne.",goals:["seche","endurance","performance"]},
-  {id:"db45",n:"DB Incline Curl",m:"Biceps",eq:"db",kg:10,reps:"12",rest:60,rpe:6,cue:"Banc incliné, étirement maximal du biceps.",goals:["hypertrophie"]},
-  {id:"bw16",n:"Pistol Squat",m:"Quads · Fessiers",eq:"bw",kg:0,reps:"5",rest:90,rpe:8,cue:"Jambe tendue devant, descend contrôlé.",goals:["hypertrophie","seche","performance"]},
-  {id:"bw17",n:"Nordic Curl",m:"Ischios",eq:"bw",kg:0,reps:"5",rest:90,rpe:8,cue:"Genoux bloqués, descend le plus lentement possible.",goals:["force","hypertrophie","performance"]},
-  {id:"bw18",n:"Handstand Push-up Progression",m:"Épaules",eq:"bw",kg:0,reps:"5",rest:120,rpe:8,cue:"Pieds contre un mur, descend la tête vers le sol.",goals:["hypertrophie","performance"]},
-  {id:"bw19",n:"Broad Jump",m:"Full body",eq:"bw",kg:0,reps:"5",rest:90,rpe:7,cue:"Saut horizontal max, atterrit souple.",goals:["performance","seche"]},
-  {id:"bw20",n:"Bear Crawl",m:"Full body · Core",eq:"bw",kg:0,reps:"20m",rest:60,rpe:6,cue:"Genoux proches du sol sans toucher.",goals:["seche","endurance"]},
-  {id:"bw21",n:"Muscle-up",m:"Dos · Pecs",eq:"bw",kg:0,reps:"3",rest:120,rpe:9,cue:"Traction puis passage au-dessus de la barre.",goals:["performance","hypertrophie"]},
-  {id:"bw22",n:"Front Lever Progression",m:"Dos · Core",eq:"bw",kg:0,reps:"15s",rest:90,rpe:8,cue:"Corps horizontal suspendu, gaine fort.",goals:["performance","force"]},
-  {id:"bw23",n:"Hollow Rock",m:"Core",eq:"bw",kg:0,reps:"20",rest:60,rpe:6,cue:"Corps en banane, balance sans casser la position.",goals:["seche","endurance"]},
-  {id:"bw24",n:"Pike Push-up",m:"Épaules",eq:"bw",kg:0,reps:"10",rest:75,rpe:7,cue:"Hanches hautes, descend la tête vers les mains.",goals:["hypertrophie"]},
-  {id:"bw25",n:"Sissy Squat",m:"Quads",eq:"bw",kg:0,reps:"10",rest:75,rpe:7,cue:"Genoux vers l'avant, buste et tibias alignés.",goals:["hypertrophie","seche"]},
-  {id:"bw26",n:"Copenhagen Plank",m:"Adducteurs · Core",eq:"bw",kg:0,reps:"20s",rest:60,rpe:7,cue:"Jambe sur un banc, corps gainé latéralement.",goals:["performance","seche"]},
-  {id:"bw27",n:"Broad Jump Latéral",m:"Fessiers · Adducteurs",eq:"bw",kg:0,reps:"6",rest:75,rpe:7,cue:"Saut latéral, réception stable.",goals:["performance","seche","endurance"]},
-  {id:"bw28",n:"Wall Walk",m:"Épaules · Core",eq:"bw",kg:0,reps:"4",rest:120,rpe:8,cue:"Pieds contre le mur, marche vers une posture verticale.",goals:["performance"]},
-  {id:"bw29",n:"Shrimp Squat",m:"Quads · Fessiers",eq:"bw",kg:0,reps:"6",rest:90,rpe:8,cue:"Genou arrière proche du sol, jambe avant travaille.",goals:["hypertrophie","seche","performance"]},
-  {id:"bw30",n:"Superman Hold",m:"Lombaires · Fessiers",eq:"bw",kg:0,reps:"20s",rest:60,rpe:6,cue:"Bras et jambes levés, gaine le bas du dos.",goals:["seche","hypertrophie"]},
-  {id:"bw31",n:"Archer Pull-up",m:"Dos · Biceps",eq:"bw",kg:0,reps:"5",rest:120,rpe:8,cue:"Traction en déportant le poids sur un bras.",goals:["performance","hypertrophie"]},
-  {id:"bw32",n:"Plank to Push-up",m:"Core · Triceps",eq:"bw",kg:0,reps:"10",rest:75,rpe:7,cue:"Passe d'avant-bras à mains sans bouger le bassin.",goals:["seche","endurance"]},
-  {id:"bw33",n:"Jump Lunge",m:"Quads · Fessiers",eq:"bw",kg:0,reps:"10",rest:75,rpe:7,cue:"Fente sautée, alterne les jambes en l'air.",goals:["seche","endurance","performance"]},
-  {id:"bw34",n:"Dragon Squat",m:"Quads · Core",eq:"bw",kg:0,reps:"5",rest:90,rpe:8,cue:"Rotation profonde en squat sur une jambe.",goals:["performance","hypertrophie"]},
-  {id:"bw35",n:"L-Sit Progression",m:"Core · Hanches",eq:"bw",kg:0,reps:"15s",rest:75,rpe:7,cue:"Jambes tendues devant, appui sur les mains.",goals:["performance","seche"]},
-  {id:"mc13",n:"Leg Press",m:"Quads · Fessiers",eq:"mc",kg:100,reps:"10",rest:120,rpe:7,cue:"Pieds à largeur d'épaules, ne verrouille pas les genoux.",goals:["hypertrophie","force"]},
-  {id:"mc14",n:"Hack Squat",m:"Quads",eq:"mc",kg:80,reps:"10",rest:120,rpe:7,cue:"Dos plaqué, descend contrôlé.",goals:["hypertrophie","force"]},
-  {id:"mc15",n:"Leg Curl Allongé",m:"Ischios",eq:"mc",kg:35,reps:"12",rest:90,rpe:6,cue:"Contracte en haut, descend lentement.",goals:["hypertrophie"]},
-  {id:"mc16",n:"Leg Extension",m:"Quads",eq:"mc",kg:35,reps:"12",rest:90,rpe:6,cue:"Extension complète, contrôle la descente.",goals:["hypertrophie"]},
-  {id:"mc17",n:"Lat Pulldown Prise Serrée",m:"Dos",eq:"mc",kg:45,reps:"10",rest:90,rpe:7,cue:"Tire vers la poitrine, coudes proches du corps.",goals:["hypertrophie"]},
-  {id:"mc18",n:"Cable Crossover",m:"Pecs",eq:"mc",kg:15,reps:"12",rest:75,rpe:6,cue:"Croise les câbles devant, contracte les pecs.",goals:["hypertrophie"]},
-  {id:"mc19",n:"Seated Row Prise Large",m:"Dos",eq:"mc",kg:45,reps:"10",rest:90,rpe:7,cue:"Tire large, écarte les coudes.",goals:["hypertrophie"]},
-  {id:"mc20",n:"Chest Press Machine",m:"Pecs",eq:"mc",kg:40,reps:"10",rest:90,rpe:7,cue:"Presse devant, contrôle le retour.",goals:["hypertrophie"]},
-  {id:"mc21",n:"Hip Abduction Machine",m:"Fessiers moyens",eq:"mc",kg:30,reps:"15",rest:60,rpe:6,cue:"Écarte les genoux contre la résistance.",goals:["hypertrophie"]},
-  {id:"mc22",n:"Hip Thrust Machine",m:"Fessiers",eq:"mc",kg:50,reps:"10",rest:90,rpe:7,cue:"Pousse avec les talons, contracte en haut.",goals:["hypertrophie","force"]},
-  {id:"mc23",n:"Preacher Curl Machine",m:"Biceps",eq:"mc",kg:20,reps:"12",rest:75,rpe:6,cue:"Coudes fixes sur le pupitre.",goals:["hypertrophie"]},
-  {id:"mc24",n:"Triceps Dip Machine",m:"Triceps",eq:"mc",kg:30,reps:"12",rest:75,rpe:6,cue:"Descend contrôlé, verrouille en haut.",goals:["hypertrophie"]},
-  {id:"mc25",n:"Smith Machine Squat",m:"Quads · Fessiers",eq:"mc",kg:60,reps:"10",rest:120,rpe:7,cue:"Barre guidée, pieds légèrement avancés.",goals:["hypertrophie","force"]},
-  {id:"mc26",n:"Reverse Pec Deck",m:"Deltoïdes lat.",eq:"mc",kg:25,reps:"12",rest:75,rpe:6,cue:"Écarte les bras en arrière, contracte les déltoïdes.",goals:["hypertrophie"]},
-  {id:"mc27",n:"Calf Press Leg Press",m:"Mollets",eq:"mc",kg:80,reps:"15",rest:60,rpe:6,cue:"Pousse sur la pointe des pieds, amplitude complète.",goals:["hypertrophie"]},
-  {id:"cd09",n:"Assault Bike Sprint",m:"Cardio",eq:"cd",kg:0,reps:"30s",rest:60,rpe:8,cue:"Effort maximal 30s, jambes et bras ensemble.",goals:["endurance","seche"]},
-  {id:"cd10",n:"Sled Push",m:"Cardio · Jambes",eq:"cd",kg:40,reps:"20m",rest:90,rpe:8,cue:"Pousse fort, pas courts et puissants.",goals:["endurance","seche","performance"]},
-  {id:"cd11",n:"Sled Pull",m:"Cardio · Dos",eq:"cd",kg:30,reps:"20m",rest:90,rpe:7,cue:"Tire en marchant en arrière, dos droit.",goals:["endurance","seche"]},
-  {id:"cd12",n:"Battle Ropes",m:"Cardio · Épaules",eq:"cd",kg:0,reps:"30s",rest:45,rpe:7,cue:"Vagues alternées, garde le buste gainé.",goals:["endurance","seche"]},
-  {id:"cd13",n:"Box Step-Up Cardio",m:"Cardio · Jambes",eq:"cd",kg:0,reps:"15",rest:45,rpe:6,cue:"Rythme soutenu, alterne les jambes.",goals:["endurance","seche"]},
-  {id:"cd14",n:"Ski Erg",m:"Cardio · Dos",eq:"cd",kg:0,reps:"500m",rest:90,rpe:7,cue:"Tire avec tout le corps, rythme constant.",goals:["endurance","seche"]},
-  {id:"cd15",n:"Shuttle Run",m:"Cardio",eq:"cd",kg:0,reps:"6x20m",rest:90,rpe:8,cue:"Sprint aller-retour, touche la ligne à chaque fois.",goals:["endurance","performance"]},
-  {id:"cd16",n:"Burpee Broad Jump",m:"Cardio · Full body",eq:"cd",kg:0,reps:"10",rest:75,rpe:8,cue:"Burpee puis saut en longueur immédiat.",goals:["endurance","seche","performance"]},
-  {id:"cd17",n:"Jump Rope Double Under",m:"Cardio · Mollets",eq:"cd",kg:0,reps:"30",rest:60,rpe:7,cue:"Deux tours de corde par saut.",goals:["endurance","seche"]},
-  {id:"cd18",n:"Rowing Sprint 250m",m:"Cardio",eq:"cd",kg:0,reps:"250m",rest:90,rpe:8,cue:"Effort maximal, technique propre malgré la vitesse.",goals:["endurance","performance"]},
-  {id:"ab11",n:"Cable Woodchop",m:"Obliques · Core",eq:"mc",kg:15,reps:"12",rest:60,rpe:6,cue:"Rotation du haut vers le bas, hanches stables.",goals:["hypertrophie","seche"]},
-  {id:"ab12",n:"Ab Wheel Rollout",m:"Core",eq:"bw",kg:0,reps:"8",rest:90,rpe:7,cue:"Roule en avant sans casser le dos, revient contrôlé.",goals:["seche","performance","hypertrophie"]},
-  {id:"ab13",n:"Weighted Sit-up",m:"Abdos",eq:"db",kg:8,reps:"12",rest:75,rpe:7,cue:"Disque sur la poitrine, monte complètement.",goals:["hypertrophie"]},
-  {id:"ab14",n:"Pallof Press",m:"Core anti-rotation",eq:"mc",kg:15,reps:"10",rest:60,rpe:6,cue:"Résiste à la rotation du câble, presse devant soi.",goals:["hypertrophie","performance"]},
-  {id:"ab15",n:"Hanging Windshield Wiper",m:"Obliques",eq:"bw",kg:0,reps:"8",rest:90,rpe:8,cue:"Suspendu, balance les jambes tendues de côté.",goals:["performance","hypertrophie"]},
-  {id:"ab16",n:"Cable Crunch",m:"Abdos",eq:"mc",kg:25,reps:"12",rest:75,rpe:6,cue:"À genoux, enroule le buste vers le bas.",goals:["hypertrophie"]},
-  {id:"ab17",n:"Dead Bug Lesté",m:"Core",eq:"db",kg:4,reps:"10",rest:60,rpe:6,cue:"Bras et jambe opposée s'étendent lentement.",goals:["hypertrophie","seche"]},
-  {id:"ab18",n:"V-Up",m:"Abdos",eq:"bw",kg:0,reps:"12",rest:60,rpe:6,cue:"Mains et pieds se rejoignent au sommet.",goals:["seche","endurance"]},
-  {id:"ab19",n:"Landmine Rotation",m:"Obliques · Core",eq:"bar",kg:10,reps:"10",rest:75,rpe:6,cue:"Rotation contrôlée de la barre en landmine.",goals:["performance","hypertrophie"]},
-  {id:"ab20",n:"Suitcase Crunch",m:"Abdos · Hanches",eq:"bw",kg:0,reps:"12",rest:60,rpe:6,cue:"Genou et coude opposé se rejoignent au centre.",goals:["seche","hypertrophie"]},
-
-  // NOUVEAUX EXERCICES (S4 batch 2 - pile 500)
-  {id:"kb51",n:"KB Snatch Alterné Lourd",m:"Full body",eq:"kb",kg:16,reps:"6",rest:120,rpe:8,cue:"Alterne les bras sans reposer le KB au sol.",goals:["performance","endurance"]},
-  {id:"kb52",n:"KB Double Front Rack Carry",m:"Core · Avant-bras",eq:"kb",kg:16,reps:"20m",rest:90,rpe:7,cue:"Deux KB en rack, marche stable et droite.",goals:["seche","performance"]},
-  {id:"kb53",n:"KB Deck Squat",m:"Full body",eq:"kb",kg:12,reps:"8",rest:90,rpe:7,cue:"S'allonge puis se relève avec le KB en un mouvement.",goals:["endurance","seche"]},
-  {id:"kb54",n:"KB Bottoms-Up Carry",m:"Avant-bras · Core",eq:"kb",kg:8,reps:"20m",rest:90,rpe:8,cue:"KB tête en bas, exige un grip strict en marchant.",goals:["performance","endurance"]},
-  {id:"kb55",n:"KB Single Arm Push Press",m:"Épaules · Jambes",eq:"kb",kg:16,reps:"6",rest:90,rpe:7,cue:"Légère impulsion jambes, verrouille au-dessus.",goals:["performance","seche"]},
-  {id:"kb56",n:"KB Plank Drag",m:"Core · Full body",eq:"kb",kg:10,reps:"10",rest:75,rpe:7,cue:"Position planche, tire le KB sous le corps.",goals:["seche","endurance"]},
-  {id:"kb57",n:"KB Rotational Swing",m:"Fessiers · Obliques",eq:"kb",kg:14,reps:"10",rest:60,rpe:7,cue:"Swing avec rotation de la hanche en fin de mouvement.",goals:["seche","endurance"]},
-  {id:"kb58",n:"KB Single Leg Deadlift Lourd",m:"Ischios · Fessiers",eq:"kb",kg:18,reps:"6",rest:90,rpe:8,cue:"Charge lourde, équilibre strict sur une jambe.",goals:["force","hypertrophie"]},
-  {id:"kb59",n:"KB Waiter Carry",m:"Épaules · Core",eq:"kb",kg:12,reps:"20m",rest:90,rpe:7,cue:"KB verrouillé au-dessus d'une main, marche stable.",goals:["performance","seche"]},
-  {id:"kb60",n:"KB Around the World Lourd",m:"Core · Avant-bras",eq:"kb",kg:14,reps:"10",rest:60,rpe:7,cue:"Passe le KB autour de la taille, sens alterné.",goals:["seche","endurance"]},
-  {id:"bb44",n:"Deadlift Sumo Déficit",m:"Fessiers · Ischios",eq:"bar",kg:70,reps:"5",rest:180,rpe:8,cue:"Amplitude augmentée, prise sumo, dos plat.",goals:["force"]},
-  {id:"bb45",n:"Barbell Overhead Lunge",m:"Full body",eq:"bar",kg:30,reps:"8",rest:90,rpe:7,cue:"Barre verrouillée au-dessus, fentes contrôlées.",goals:["performance"]},
-  {id:"bb46",n:"Pin Press",m:"Pecs · Triceps",eq:"bar",kg:55,reps:"5",rest:150,rpe:8,cue:"Démarre depuis les pins, aucune élasticité.",goals:["force"]},
-  {id:"bb47",n:"Barbell Glute Bridge",m:"Fessiers",eq:"bar",kg:50,reps:"10",rest:90,rpe:7,cue:"Version légère du hip thrust, dos au sol.",goals:["hypertrophie"]},
-  {id:"bb48",n:"Barbell Reverse Lunge",m:"Quads · Fessiers",eq:"bar",kg:40,reps:"8",rest:90,rpe:7,cue:"Fente arrière, barre sur les trapèzes.",goals:["hypertrophie","performance"]},
-  {id:"bb49",n:"Snatch Complet",m:"Full body",eq:"bar",kg:40,reps:"3",rest:180,rpe:9,cue:"Du sol au verrouillage au-dessus en un mouvement.",goals:["performance"]},
-  {id:"bb50",n:"Barbell Skull Crusher",m:"Triceps",eq:"bar",kg:25,reps:"10",rest:75,rpe:6,cue:"Coudes fixes, descend vers le front.",goals:["hypertrophie"]},
-  {id:"bb51",n:"Barbell Walking Lunge",m:"Quads · Fessiers",eq:"bar",kg:35,reps:"10",rest:90,rpe:7,cue:"Fentes en marchant, barre sur les trapèzes.",goals:["hypertrophie","performance"]},
-  {id:"bb52",n:"Deadlift Prise Mixte",m:"Dos · Ischios",eq:"bar",kg:90,reps:"5",rest:180,rpe:8,cue:"Une main pronation, une supination pour tenir la charge.",goals:["force"]},
-  {id:"bb53",n:"Barbell Thruster",m:"Full body",eq:"bar",kg:35,reps:"8",rest:120,rpe:8,cue:"Squat puis press explosif.",goals:["performance","seche"]},
-  {id:"bb54",n:"Behind the Neck Press",m:"Épaules",eq:"bar",kg:30,reps:"8",rest:120,rpe:7,cue:"Presse derrière la nuque, mobilité requise.",goals:["force","performance"]},
-  {id:"bb55",n:"Barbell Good Morning Lourd",m:"Ischios · Lombaires",eq:"bar",kg:50,reps:"8",rest:120,rpe:7,cue:"Bascule hanches reculées, dos plat rigide.",goals:["force","hypertrophie"]},
-  {id:"bb56",n:"Rack Pull",m:"Dos · Trapèzes",eq:"bar",kg:100,reps:"5",rest:150,rpe:8,cue:"Barre à hauteur de genou, tire fort en haut.",goals:["force"]},
-  {id:"bb57",n:"Barbell Complex Squat+Press",m:"Full body",eq:"bar",kg:30,reps:"5",rest:150,rpe:8,cue:"Squat puis press militaire enchâînés.",goals:["performance"]},
-  {id:"bb58",n:"Spoto Press",m:"Pecs · Triceps",eq:"bar",kg:50,reps:"6",rest:120,rpe:7,cue:"Pause quelques cm au-dessus de la poitrine.",goals:["force","hypertrophie"]},
-  {id:"db46",n:"DB Bench Press Tempo",m:"Pecs",eq:"db",kg:20,reps:"8",rest:90,rpe:7,cue:"Descente lente 3s, pousse explosif.",goals:["hypertrophie"]},
-  {id:"db47",n:"DB Sumo Deadlift",m:"Fessiers · Ischios",eq:"db",kg:24,reps:"8",rest:90,rpe:7,cue:"Pieds larges, haltère entre les jambes.",goals:["hypertrophie","force"]},
-  {id:"db48",n:"DB Push Press",m:"Épaules · Jambes",eq:"db",kg:16,reps:"8",rest:90,rpe:7,cue:"Légère impulsion jambes, verrouille en haut.",goals:["performance","seche"]},
-  {id:"db49",n:"DB Curl 21s",m:"Biceps",eq:"db",kg:8,reps:"21",rest:75,rpe:7,cue:"7 reps basses, 7 hautes, 7 complètes.",goals:["hypertrophie"]},
-  {id:"db50",n:"DB Incline Row",m:"Dos",eq:"db",kg:18,reps:"10",rest:90,rpe:7,cue:"Poitrine sur banc incliné, tire vers les hanches.",goals:["hypertrophie"]},
-  {id:"db51",n:"DB Deadlift",m:"Ischios · Fessiers",eq:"db",kg:20,reps:"10",rest:90,rpe:7,cue:"Haltères le long du corps, dos plat.",goals:["hypertrophie","force"]},
-  {id:"db52",n:"DB Overhead Triceps Extension",m:"Triceps",eq:"db",kg:12,reps:"12",rest:75,rpe:6,cue:"Deux mains sur un haltère, coudes fixes.",goals:["hypertrophie"]},
-  {id:"db53",n:"DB Single Arm Row Lourd",m:"Dos",eq:"db",kg:26,reps:"8",rest:90,rpe:7,cue:"Charge lourde, dos plat, tire vers la hanche.",goals:["hypertrophie","force"]},
-  {id:"db54",n:"DB Squat to Press",m:"Full body",eq:"db",kg:14,reps:"10",rest:90,rpe:7,cue:"Squat puis press, enchâîne fluide.",goals:["seche","performance"]},
-  {id:"db55",n:"DB Rear Delt Row",m:"Deltoïdes lat.",eq:"db",kg:10,reps:"12",rest:75,rpe:6,cue:"Coudes hauts, tire vers les épaules.",goals:["hypertrophie"]},
-  {id:"db56",n:"DB Waiter Carry",m:"Épaules · Core",eq:"db",kg:14,reps:"20m",rest:90,rpe:7,cue:"Haltère verrouillé au-dessus, marche stable.",goals:["performance","seche"]},
-  {id:"db57",n:"DB Preacher Curl",m:"Biceps",eq:"db",kg:10,reps:"12",rest:75,rpe:6,cue:"Bras appuyé sur le pupitre, isole le biceps.",goals:["hypertrophie"]},
-  {id:"db58",n:"DB Decline Press",m:"Pecs inf",eq:"db",kg:20,reps:"10",rest:90,rpe:7,cue:"Banc décliné, cible le bas des pecs.",goals:["hypertrophie"]},
-  {id:"db59",n:"DB Suitcase Squat",m:"Quads · Core",eq:"db",kg:16,reps:"10",rest:75,rpe:7,cue:"Un haltère sur le côté, anti-flexion latérale.",goals:["hypertrophie","seche"]},
-  {id:"db60",n:"DB Cuban Press",m:"Épaules · Rotateurs",eq:"db",kg:6,reps:"12",rest:75,rpe:6,cue:"Rotation externe puis press, contrôle total.",goals:["hypertrophie","performance"]},
-  {id:"bw36",n:"Handstand Hold Mur",m:"Épaules · Core",eq:"bw",kg:0,reps:"20s",rest:90,rpe:7,cue:"Dos ou face au mur, gaine tout le corps.",goals:["performance","hypertrophie"]},
-  {id:"bw37",n:"Single Leg Glute Bridge",m:"Fessiers",eq:"bw",kg:0,reps:"12",rest:60,rpe:6,cue:"Une jambe tendue, pousse avec le talon au sol.",goals:["hypertrophie","seche"]},
-  {id:"bw38",n:"Skater Jump",m:"Quads · Fessiers",eq:"bw",kg:0,reps:"10",rest:75,rpe:7,cue:"Saut latéral, réception sur une jambe.",goals:["seche","endurance","performance"]},
-  {id:"bw39",n:"Wall Sit",m:"Quads",eq:"bw",kg:0,reps:"30s",rest:60,rpe:6,cue:"Dos au mur, cuisses parallèles au sol.",goals:["seche","endurance"]},
-  {id:"bw40",n:"Diamond Push-up",m:"Triceps · Pecs",eq:"bw",kg:0,reps:"12",rest:75,rpe:7,cue:"Mains en losange sous la poitrine.",goals:["hypertrophie"]},
-  {id:"bw41",n:"Reverse Snow Angel",m:"Dos · Épaules",eq:"bw",kg:0,reps:"12",rest:60,rpe:6,cue:"Allongé face au sol, bras dessinent un arc.",goals:["hypertrophie","seche"]},
-  {id:"bw42",n:"Step-Up Explosif",m:"Quads · Fessiers",eq:"bw",kg:0,reps:"10",rest:75,rpe:7,cue:"Monte sur banc puis saute en haut.",goals:["seche","endurance","performance"]},
-  {id:"bw43",n:"Plank Shoulder Tap",m:"Core · Épaules",eq:"bw",kg:0,reps:"20",rest:60,rpe:6,cue:"Planche haute, touche l'épaule opposée sans bouger le bassin.",goals:["seche","endurance"]},
-  {id:"bw44",n:"Tuck Jump",m:"Quads · Fessiers",eq:"bw",kg:0,reps:"10",rest:75,rpe:7,cue:"Genoux vers la poitrine en l'air, réception souple.",goals:["performance","seche"]},
-  {id:"bw45",n:"Side Plank Rotation",m:"Obliques · Core",eq:"bw",kg:0,reps:"10",rest:60,rpe:6,cue:"Planche latérale, passe le bras sous le corps en rotation.",goals:["seche","hypertrophie"]},
-  {id:"mc28",n:"Assisted Pull-up Machine",m:"Dos · Biceps",eq:"mc",kg:30,reps:"10",rest:90,rpe:7,cue:"Assistance dégressive, travaille l'amplitude complète.",goals:["hypertrophie"]},
-  {id:"mc29",n:"Glute Kickback Machine",m:"Fessiers",eq:"mc",kg:25,reps:"12",rest:75,rpe:6,cue:"Pousse la jambe en arrière, contracte le fessier.",goals:["hypertrophie"]},
-  {id:"mc30",n:"Seated Calf Raise",m:"Mollets",eq:"mc",kg:30,reps:"15",rest:60,rpe:6,cue:"Genoux plies, amplitude complète.",goals:["hypertrophie"]},
-  {id:"mc31",n:"Torso Rotation Machine",m:"Obliques · Core",eq:"mc",kg:20,reps:"12",rest:60,rpe:6,cue:"Rotation contrôlée du buste, hanches fixes.",goals:["hypertrophie"]},
-  {id:"mc32",n:"Shoulder Press Machine",m:"Épaules",eq:"mc",kg:35,reps:"10",rest:90,rpe:7,cue:"Presse verticale guidée, contrôle la descente.",goals:["hypertrophie"]},
-  {id:"cd19",n:"Bike Erg Intervals",m:"Cardio",eq:"cd",kg:0,reps:"40s",rest:60,rpe:7,cue:"Effort soutenu puis récup courte, répète.",goals:["endurance","seche"]},
-  {id:"cd20",n:"Farmer Carry Sprint",m:"Cardio · Avant-bras",eq:"cd",kg:0,reps:"20m",rest:75,rpe:7,cue:"Charge dans chaque main, marche rapide.",goals:["endurance","performance"]},
-  {id:"cd21",n:"Suicide Sprint",m:"Cardio",eq:"cd",kg:0,reps:"5x10m",rest:90,rpe:8,cue:"Sprint navette avec distances croissantes.",goals:["endurance","performance"]},
-  {id:"cd22",n:"Stair Sprint",m:"Cardio · Jambes",eq:"cd",kg:0,reps:"30s",rest:75,rpe:8,cue:"Monte les marches deux à deux si possible.",goals:["endurance","seche"]},
-  {id:"cd23",n:"Air Bike Calories",m:"Cardio",eq:"cd",kg:0,reps:"15cal",rest:75,rpe:7,cue:"Objectif calories plutôt que temps, rythme régulier.",goals:["endurance","seche"]},
-  {id:"ab21",n:"Reverse Crunch",m:"Abdos bas",eq:"bw",kg:0,reps:"15",rest:60,rpe:6,cue:"Genoux vers la poitrine, bas du dos au sol.",goals:["seche","hypertrophie"]},
-  {id:"ab22",n:"Standing Cable Crunch",m:"Abdos",eq:"mc",kg:20,reps:"12",rest:60,rpe:6,cue:"Debout, enroule le buste contre la résistance.",goals:["hypertrophie"]},
-  {id:"ab23",n:"Weighted Plank",m:"Core",eq:"db",kg:10,reps:"30s",rest:75,rpe:6,cue:"Disque sur le dos, planche stable.",goals:["seche","hypertrophie"]},
-  {id:"ab24",n:"Toes to Bar",m:"Abdos · Grip",eq:"bw",kg:0,reps:"8",rest:90,rpe:8,cue:"Suspendu, pieds touchent la barre sans balancer.",goals:["performance","seche"]},
-];
+/* Catalogue deplace dans ./catalog.js */
 
 const EQ_LABELS = {kb:"KB",bar:"Barre",db:"Haltères",bw:"Corps",mc:"Machine",cd:"Cardio"};
 
@@ -629,6 +116,36 @@ const fmtDateShort=(d)=>{ if(!d) return ""; const dd=(typeof d==="string")?new D
 // derniere performance et du RPE ressenti - sans RPE collecte, aucune progression
 // automatique n'est possible, c'est pour cela qu'il est demande en fin d'exercice.
 // RPE = reps en reserve : 10 = plus rien, 9 = 1 rep, 8 = 2 reps, 7 = 3 reps.
+// ─── 1RM ESTIME ─────────────────────────────────────────────────────────────
+// profiles.rms etait LU en priorite par le moteur et n'a jamais ete rempli : {} en base.
+// Chaque serie charge x reps x RPE permet pourtant de l'estimer. Formule d'Epley corrigee
+// par les repetitions en reserve : une serie a RPE 8 en laissait 2, il faut les compter.
+const RIR={6:4,7:3,8:2,9:1,10:0};
+const e1rmOf=(kg,reps,rpe)=>{
+  const w=Number(kg)||0,r=Number(reps)||0;
+  if(!(w>0)||!(r>0)) return 0;
+  const rr=Math.round(Number(rpe));
+  const rir=(rr>=6&&rr<=10)?RIR[rr]:1;           // sans RPE, hypothese prudente d'1 rep
+  return Math.round(w*(1+(r+rir)/30)*10)/10;
+};
+// Meilleur 1RM estime par exercice sur l'historique, avec la date qui l'a produit.
+const rmIndex=(sessions)=>{
+  const m={};
+  (sessions||[]).forEach(s=>{
+    (s.exercises||[]).forEach(e=>{
+      if(!e||!e.id) return;
+      const sets=Array.isArray(e.setsDetail)&&e.setsDetail.length
+        ? e.setsDetail.map(x=>({kg:x.weight,reps:x.reps}))
+        : [{kg:e.weight,reps:e.reps}];
+      sets.forEach(st=>{
+        const v=e1rmOf(st.kg,st.reps,e.rpe);
+        if(v>0&&(!m[e.id]||v>m[e.id].kg)) m[e.id]={kg:v,date:s.date};
+      });
+    });
+  });
+  return m;
+};
+
 const RPE_STEP={6:0.05,7:0.035,8:0.02,9:0,10:-0.05};
 // Increment reel du materiel : une barre monte par 2,5 kg, un kettlebell ou une paire
 // d'halteres par 2 kg. Sans cela, un ajustement de 5% sur 10 kg (0,5 kg) etait avale par
@@ -967,6 +484,19 @@ const orm = (kg,reps) => kg>0?Math.round(kg*(1+(parseFloat(String(reps).split("�
 // rejouait. Toute ecriture passe desormais par cette file, rejouee automatiquement au
 // retour du reseau avec un repli exponentiel. Les ecritures repetitives (log en cours,
 // configuration) sont dedoublonnees par cle : seule la derniere version compte.
+// Quinze console.error et aucune surface utilisateur : quand une ecriture ou un envoi de
+// photo echouait, rien ne le disait. Le compteur de file ne couvre que l'attente reseau,
+// pas l'echec.
+const TOASTS=[];const toastSubs=new Set();
+let toastSeq=0;
+const toastNotify=()=>{toastSubs.forEach(f=>{try{f(TOASTS.slice());}catch(_e){}});};
+const notify=(msg)=>{
+  if(!msg) return;
+  const t={id:++toastSeq,msg};
+  TOASTS.push(t); toastNotify();
+  setTimeout(()=>{const i=TOASTS.findIndex(x=>x.id===t.id);if(i>=0){TOASTS.splice(i,1);toastNotify();}},5200);
+};
+
 const OUTBOX=[];
 let outboxTimer=null,outboxBusy=false;
 const outboxSubs=new Set();
@@ -993,6 +523,9 @@ async function outboxFlush(){
     }catch(e){
       job.tries=(job.tries||0)+1;
       console.error("outbox "+job.label+":",e&&e.message);
+      // On alerte a la troisieme tentative : les coupures breves se resolvent seules et
+      // n'ont pas a inquieter, un echec persistant si.
+      if(job.tries===3) notify("Enregistrement en attente : "+job.label);
       outboxBusy=false;
       // Repli exponentiel plafonne a 30 s : inutile de marteler un reseau absent.
       outboxSchedule(Math.min(30000,1000*Math.pow(2,Math.min(5,job.tries))));
@@ -1220,10 +753,19 @@ function useCountUp(target,duration=1200) {
 }
 
 // ─── TAP — Emil: scale(0.97) on press, specific property transition ───────────
-function Tap({children,onTap,style,disabled}) {
+// Toute l'interaction de l'application passe par ce composant. C'etait un simple <div> avec
+// des evenements de pointeur : aucun role, aucun focus, aucune navigation au clavier, rien
+// pour un lecteur d'ecran - l'application entiere etait inutilisable autrement qu'au doigt.
+// On garde un div (un <button> imbrique dans un autre serait du HTML invalide, et il y a des
+// Tap dans des Tap) mais avec le role, le focus et le clavier qui vont avec.
+function Tap({children,onTap,style,disabled,label}) {
   const[p,setP]=useState(false);
+  const fire=(e)=>{ if(!disabled) onTap?.(e); };
   return(
-    <div onPointerDown={()=>!disabled&&setP(true)} onPointerUp={(e)=>{setP(false);!disabled&&onTap?.(e);}} onPointerLeave={()=>setP(false)}
+    <div role="button" tabIndex={disabled?-1:0} aria-disabled={disabled?true:undefined} aria-label={label}
+      onPointerDown={()=>!disabled&&setP(true)} onPointerUp={(e)=>{setP(false);fire(e);}} onPointerLeave={()=>setP(false)}
+      onKeyDown={(e)=>{ if(e.key==="Enter"||e.key===" "){ e.preventDefault(); setP(true); } }}
+      onKeyUp={(e)=>{ if(e.key==="Enter"||e.key===" "){ e.preventDefault(); setP(false); fire(e); } }}
       style={{...style,transform:p&&!disabled?"scale(0.97)":"scale(1)",transition:`transform ${DUR.btn} ${EO}`,cursor:disabled?"default":"pointer",WebkitTapHighlightColor:"transparent",userSelect:"none"}}>
       {children}
     </div>
@@ -2592,13 +2134,22 @@ function SkillsOctagon({sessions,profile}) {
     const covered=Object.keys(patterns).filter(k=>patterns[k]>0).length;
     const equilibre=clamp(covered/8*100);
     const explosivite=clamp(allSets?powerSets/allSets*200:0);
+    // Progression mesuree sur le 1RM ESTIME des exercices communs aux deux moities, et non
+    // plus sur le tonnage : soulever plus lourd et soulever plus longtemps ne sont pas la
+    // meme chose, et seul le premier est une progression de force.
     let prog=50;
     if(ord.length>=4){
       const h=Math.floor(ord.length/2);
-      const oldH=ord.slice(0,h),newH=ord.slice(h);
-      const avgOld=(oldH.reduce((x,s)=>x+(s.totalKg||0),0)/oldH.length)||1;
-      const avgNew=newH.reduce((x,s)=>x+(s.totalKg||0),0)/newH.length;
-      prog=clamp(50+(avgNew-avgOld)/avgOld*100);
+      const a=rmIndex(ord.slice(0,h)),b=rmIndex(ord.slice(h));
+      const common=Object.keys(b).filter(k=>a[k]);
+      if(common.length){
+        const ratio=common.reduce((x,k)=>x+(b[k].kg/a[k].kg),0)/common.length;
+        prog=clamp(50+(ratio-1)*250);
+      }else{
+        const avgOld=(ord.slice(0,h).reduce((x,s)=>x+(s.totalKg||0),0)/h)||1;
+        const avgNew=ord.slice(h).reduce((x,s)=>x+(s.totalKg||0),0)/(ord.length-h);
+        prog=clamp(50+(avgNew-avgOld)/avgOld*100);
+      }
     }
     return [["Force",force],["Volume",volume],["Endurance",endurance],["Régularité",regularite],
             ["Intensité",intensite],["Progression",prog],["Équilibre",equilibre],["Explosivité",explosivite]];
@@ -2892,7 +2443,7 @@ function PhotoProgress({uid,photos,urls,onSavePhotos,onClose}) {
           try{
             const path=await uploadPhoto(uid,date,blob);
             await onSavePhotos({...photos,[date]:path});
-          }catch(ex){ setErr("Envoi impossible. Reessaie."); console.error("upload photo",ex&&ex.message); }
+          }catch(ex){ setErr("Envoi impossible. Réessaie."); notify("La photo n'a pas pu être envoyée."); console.error("upload photo",ex&&ex.message); }
           setBusy(false);
         },"image/jpeg",0.72);
       };
@@ -3238,7 +2789,7 @@ function SettingsTab({user,excluded,onToggleExclude,onSignOut,onReset,onOpenLibr
           <span style={{fontSize:17,color:C.red}}>›</span>
         </Tap>
       </div>
-      <div style={{fontSize:12,color:C.ink4,textAlign:"center",marginTop:28}}>SŌMA · {"S"+weekNumber()} · {DB.length} exercices · build 23.74a</div>
+      <div style={{fontSize:12,color:C.ink4,textAlign:"center",marginTop:28}}>SŌMA · {"S"+weekNumber()} · {DB.length} exercices · build 23.75a</div>
     </div>
   );
 }
@@ -3707,6 +3258,8 @@ export default function SomaApp() {
   // une seance enregistree d'une seance qui n'a pas encore quitte le telephone.
   const[pending,setPending]=useState(0);
   useEffect(()=>{ outboxSubs.add(setPending); return()=>{outboxSubs.delete(setPending);}; },[]);
+  const[toasts,setToasts]=useState([]);
+  useEffect(()=>{ toastSubs.add(setToasts); return()=>{toastSubs.delete(setToasts);}; },[]);
   const clock=useStopwatch(clockPersist);
   const rest=useCountdown(()=>setShowRestFull(true));
   // Photos : la base ne contient que des chemins Storage, l'affichage passe par des URL
@@ -3739,7 +3292,11 @@ export default function SomaApp() {
     if(alive) setAvatarUrl(u.a||"");
   })(); return()=>{alive=false;}; },[avatarPath]);
   const wk=weekNumber();
-  const viewSchedule=useMemo(()=>{let s=autoRotate?schedule.map(d=>rotateDay(d,wk)):schedule;const eq=profile?.equipment;if(eq&&eq.length)s=s.map(d=>adaptEquip(d,eq));const g=profile?.goal;if(g&&g!=="hybride")s=s.map(d=>adaptGoal(d,g));s=s.map(d=>personalizeDay(d,profile,progWeekOf(profile?.program_start),perfRef.current));const _mp=weeklyModePlan(s,profile,progWeekOf(profile?.program_start));s=s.map((d,i)=>(d&&d.salle)?{...d,recommendedMode:(_mp[i]&&_mp[i].mode)||"classique",circuit:(_mp[i]&&_mp[i].circuit)||false}:d);return s;},[schedule,autoRotate,wk,profile]);
+  // La rotation des variantes suivait la semaine du CALENDRIER alors que tout le reste est
+  // passe sur le numero de seance au S9 : sauter une semaine faisait tourner les exercices
+  // sans que la moindre seance ait ete faite.
+  const rotIdx=Math.max(1,Math.floor((Number(profile&&profile.session_index)||0)/SESSIONS_PER_BLOCK)+1);
+  const viewSchedule=useMemo(()=>{let s=autoRotate?schedule.map(d=>rotateDay(d,rotIdx)):schedule;const eq=profile?.equipment;if(eq&&eq.length)s=s.map(d=>adaptEquip(d,eq));const g=profile?.goal;if(g&&g!=="hybride")s=s.map(d=>adaptGoal(d,g));s=s.map(d=>personalizeDay(d,profile,progWeekOf(profile?.program_start),perfRef.current));const _mp=weeklyModePlan(s,profile,progWeekOf(profile?.program_start));s=s.map((d,i)=>(d&&d.salle)?{...d,recommendedMode:(_mp[i]&&_mp[i].mode)||"classique",circuit:(_mp[i]&&_mp[i].circuit)||false}:d);return s;},[schedule,autoRotate,rotIdx,profile]);
 
 
   // ── Auth listener ──
@@ -4072,6 +3629,13 @@ export default function SomaApp() {
     // 2. State React
     setSessions(prev=>{
       const next=[...prev.filter(s=>s.date!==sDate),entry];
+      // Le 1RM estime est remis a jour et ENFIN ecrit dans profiles.rms, que le moteur lit
+      // en priorite depuis toujours sans que rien ne l'alimente.
+      try{
+        const idx=rmIndex(next),rms={};
+        Object.keys(idx).forEach(k=>{rms[k]=idx[k].kg;});
+        if(updateConfigRef.current) updateConfigRef.current({rms});
+      }catch(_e){}
       computeStreak(next);
       return next;
     });
@@ -4107,7 +3671,7 @@ export default function SomaApp() {
         .filter(e=>e.weight>0&&e.completedSets>0&&e.weight>(Number(weights[e.id])||0))
         .map(e=>({
           user_id:uid,exercise_id:e.id,exercise_name:e.n||e.name||"",
-          weight_kg:e.weight,reps:e.reps||8,one_rm:orm(e.weight,String(e.reps||8)),achieved_at:sDate
+          weight_kg:e.weight,reps:e.reps||8,one_rm:e1rmOf(e.weight,e.reps||8,e.rpe)||orm(e.weight,String(e.reps||8)),achieved_at:sDate
         }));
       if(pbRows.length) enqueue(`pb:${sDate}`,"records",()=>supabase.from("personal_bests").upsert(pbRows,{onConflict:"user_id,exercise_id"}));
     }
@@ -4274,6 +3838,9 @@ const NAV=[{id:"home",l:"Accueil"},{id:"seance",l:"Séances"},{id:"stats",l:"Sta
         @keyframes dropIn{from{opacity:0;transform:translateY(-14px)}to{opacity:1;transform:none}}
         @keyframes popIn{0%{transform:scale(.7);opacity:.4}60%{transform:scale(1.14)}100%{transform:scale(1);opacity:1}}
         @keyframes shimmer{from{background-position:-360px 0}to{background-position:360px 0}}
+        [role="button"]:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{
+          outline:2px solid ${C.ink};outline-offset:3px;border-radius:10px}
+        [role="button"]:focus:not(:focus-visible){outline:none}
         @keyframes pulse{0%,100%{opacity:.3;transform:scale(.8)}50%{opacity:1;transform:scale(1.2)}}
         textarea::placeholder,input::placeholder{color:${C.ink4};}
         ::-webkit-scrollbar{display:none;}
@@ -4541,6 +4108,16 @@ const NAV=[{id:"home",l:"Accueil"},{id:"seance",l:"Séances"},{id:"stats",l:"Sta
       {showFeedback&&<FeedbackSheet onClose={()=>setShowFeedback(false)} onSave={handleFeedbackSave}/>}
       {showSettings&&<SessionSettingsSheet day={day} curMode={effMode} onClose={()=>setShowSettings(false)} onApply={({mode,cons})=>{setModeOverride(mode);setDayCons(cons);setShowSettings(false);}}/>}
       {showAI&&<AISheet onClose={()=>setShowAI(false)} onResult={o=>{setAiOverride(o);setShowAI(false);}} excluded={excluded}/>}
+      {/* Alertes : jusqu'ici tout echec partait dans la console et l'utilisateur n'en savait rien. */}
+      {toasts.length>0&&(
+        <div role="status" aria-live="polite" style={{position:"fixed",left:0,right:0,bottom:"calc(78px + env(safe-area-inset-bottom))",zIndex:Z.fullscreen+200,display:"flex",flexDirection:"column",alignItems:"center",gap:8,pointerEvents:"none",padding:"0 20px"}}>
+          {toasts.map(t=>(
+            <div key={t.id} style={{maxWidth:560,width:"100%",background:C.ink,color:"#fff",borderRadius:14,padding:"13px 16px",fontSize:14,fontWeight:600,fontFamily:F,boxShadow:"0 10px 30px rgba(0,0,0,.22)",animation:`riseIn 260ms ${EO} both`}}>
+              {t.msg}
+            </div>
+          ))}
+        </div>
+      )}
       {showPhotos&&<PhotoProgress uid={user?.id} photos={photos} urls={photoUrls} onClose={()=>setShowPhotos(false)} onSavePhotos={(map)=>updateConfig({photos:map})}/>}
       {showTimer&&<IntervalTimer onClose={()=>setShowTimer(false)}/>}
       {showPicker&&<ExPicker onSelect={newEx=>handleReplaceEx(showPicker,newEx)} onClose={()=>setShowPicker(null)} currentId={showPicker.id} excluded={excluded}/>}
