@@ -665,6 +665,22 @@ const LEVEL_LOAD={debutant:0.78,inter:1.0,avance:1.18,athlete:1.32};
 const SEX_LOAD={homme:1.0,femme:0.62,autre:0.85};
 const ENG_REF_BW=75;
 const engineScale=(profile)=>{ const bw=Number(profile&&profile.weight_kg)||ENG_REF_BW; const lvl=LEVEL_LOAD[profile&&profile.level]||1.0; const sx=SEX_LOAD[profile&&profile.sex]||0.9; const bwf=Math.max(0.7,Math.min(1.3,bw/ENG_REF_BW)); return lvl*sx*bwf; };
+// Repos fonde sur la NATURE de l'exercice. Il ne dependait que du nombre de repetitions et
+// du materiel : un squat barre a 12 reps recevait 90 s quand une elevation laterale a 5 reps
+// en aurait recu 180. Et le facteur de phase utilisait ph.r, concu comme multiplicateur de
+// rotation (0,85 a 1,35), ce qui gonflait le repos jusqu'a 5 minutes sur des exercices
+// d'isolation. Base par etage, ajustee par les reps, l'objectif, et une phase bornee.
+const REST_BY_TIER={lourd:210,compound:120,isolation:75,core:45,cardio:60};
+const restFor=(ex,goal,ph)=>{
+  const base0=REST_BY_TIER[metaOf(ex).tier]||90;
+  const rn=repsNum(ex.reps);
+  let base=base0;
+  if(rn>0){ if(rn<=5) base*=1.15; else if(rn>=15) base*=0.70; else if(rn>=12) base*=0.85; }
+  const gf=goal==="force"?1.2:goal==="endurance"?0.6:goal==="seche"?0.75:1.0;
+  const pf=(ph&&ph.deload)?0.9:((ph&&ph.peak)?1.1:1.0);
+  return snapRest(Math.max(30,Math.min(300,base*gf*pf)));
+};
+
 const personalizeDay=(day,profile,week,perf)=>{
   if(!day||!day.salle) return day;
   const scale=engineScale(profile);
@@ -674,8 +690,7 @@ const personalizeDay=(day,profile,week,perf)=>{
   const lvlSets=(profile&&profile.level==="debutant")?-1:(profile&&profile.level==="avance")?1:0;
   const rms=(profile&&profile.rms)||{};
   const goal=profile&&profile.goal;
-  const gf=goal==="force"?1.25:goal==="endurance"?0.6:goal==="seche"?0.75:1.0;
-  const restPF=ph.r;
+
   const exercises=(day.exercises||[]).map(ex=>{
     let kg=ex.kg;
     const rm=rms[ex.id];
@@ -689,9 +704,7 @@ const personalizeDay=(day,profile,week,perf)=>{
     else if(typeof ex.kg==="number"&&ex.kg>0&&ex.eq!=="bw"){ kg=Math.max(2.5,Math.round(ex.kg*scale*intensity/2.5)*2.5); }
     let sets=ex.sets;
     if(typeof ex.sets==="number"){ sets=Math.max(2,Math.min(6,ex.sets+setAdj+lvlSets)); }
-    const rn=repsNum(ex.reps);
-    let base; if(ex.eq==="bw"){ base=(rn>0&&rn<=8)?75:45; } else if(rn>0&&rn<=5){ base=180; } else if(rn<=8){ base=150; } else if(rn<=10){ base=120; } else if(rn<=12){ base=90; } else if(rn<=15){ base=75; } else { base=45; }
-    const rest=snapRest(base*gf*restPF);
+    const rest=restFor({...ex,reps:ex.reps},goal,ph);
     return {...ex,kg,sets,rest};
   });
   return {...day,exercises};
@@ -709,10 +722,10 @@ const noAccent=(t)=>String(t||"").normalize("NFD").replace(/[̀-ͯ]/g,"").toLowe
 // Patron de mouvement. L'ordre des regles compte : du plus specifique au plus general.
 const PATTERN_RULES=[
   [/gainage|planche|hollow|l-?sit|crunch|twist|releve.*jambe|jambe.*suspendu|ab ?wheel|ab ?rollout|dead ?bug|sit-?up|situp|dragon flag|bird ?dog|pallof/,"core"],
-  [/rameur|velo|corde a sauter|corde 3|course|sprint|burpee|mountain climber|jumping jack|assault|ski erg|wall ball/,"cardio"],
+  [/rameur|velo|corde a sauter|corde 3|course|sprint|burpee|mountain climber|jumping jack|assault|ski erg|wall ball/,"cardio"],
   [/traction|chin-?up|pull-?up|tirage vertical|lat pulldown|muscle-?up|front lever/,"pull_v"],
   [/rowing|row |row$|tirage horizontal|face pull|tirage buste/,"pull_h"],
-  [/souleve de terre|deadlift|romanian|good morning|hip thrust|glute bridge|swing|clean|snatch|kettlebell complex|sumo/,"hinge"],
+  [/souleve de terre|deadlift|romanian|good morning|hip thrust|glute bridge|swing|clean|snatch|kettlebell complex|sumo|turkish|get-?up|windmill/,"hinge"],
   [/squat|fente|lunge|presse a cuisse|leg press|step-?up|pistol|box jump|hack|bulgare/,"squat"],
   [/curl|biceps/,"arm_pull"],
   [/triceps|kickback|skull|barre au front|extension.*bras|dips triceps/,"arm_push"],
@@ -829,8 +842,12 @@ const buildCircuits=(day,profile)=>{
     cid++;
     const gt=group.length>=3?"circuit":"superset";
     const tours=Math.max(...group.map(g=>(typeof out[g].sets==="number"&&out[g].sets>0)?out[g].sets:4));
+    // Dans un superset on enchaine sans repos ; le repos se prend APRES le tour, et c'est
+    // le plus long des membres qui commande. La valeur etait codee en dur a 90 s.
+    const grest=Math.max(...group.map(g=>Number(out[g].rest)||90));
     group.forEach((g,k)=>{
       used[g]=true;
+      out[g].groupRest=grest;
       // Un superset tourne le MEME nombre de tours pour tous ses membres, par definition.
       out[g].circuitId=cid; out[g].circuitPos=k+1; out[g].circuitSize=group.length;
       out[g].groupType=gt; out[g].groupTours=tours; out[g].sets=tours;
@@ -1608,10 +1625,17 @@ function CircuitPlayer({mode,exos,onClose,defMin,blocks,onAllDone,startBlock,log
     if(si<cexos.length-1){ setSi(si+1); } else { setSi(0); setRounds(r=>r+1); }
   };
   const validateSup=()=>{if(resting>0)return;logOccurrence(cexos[si]);if(si<cexos.length-1){setSi(si+1);}else{setSi(0);if(stour>=supTours){finishBlock();}else{setStour(stour+1);startRest();}}};
+  // Meme grammaire d'en-tete que l'ecran d'exercice : retour a gauche, intitule au centre,
+  // emplacement d'action a droite. Les deux ecrans presentaient une croix ou une fleche
+  // selon le type de seance, au meme endroit et avec le meme geste attendu.
   const HEAD=(
-    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"16px 20px",flexShrink:0}}>
-      <div><div style={{fontSize:20,fontWeight:700,color:C.ink}}>{cur.label||(kind==="amrap"?"AMRAP":kind==="emom"?"EMOM":kind==="circuit"?"Circuit":"Superset")}</div><div style={{fontSize:12,color:C.ink4,marginTop:2}}>Bloc {bi+1}/{BLK.length} · {cexos.length} exercices</div></div>
-      <Tap onTap={onClose} style={{width:40,height:40,borderRadius:10,background:C.s2,display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{fontSize:14,color:C.ink3}}>✕</span></Tap>
+    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,padding:"16px 20px",flexShrink:0}}>
+      <Tap onTap={onClose} style={{width:40,height:40,borderRadius:10,background:C.s2,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}><span style={{fontSize:20,color:C.ink3}}>‹</span></Tap>
+      <div style={{textAlign:"center",minWidth:0,flex:1}}>
+        <div style={{fontSize:13,fontWeight:600,color:C.ink4,textTransform:"uppercase",letterSpacing:".1em"}}>Bloc {bi+1}/{BLK.length}</div>
+        <div style={{fontSize:15,fontWeight:700,color:C.ink,marginTop:2,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{cur.label||(kind==="amrap"?"AMRAP":kind==="emom"?"EMOM":kind==="circuit"?"Circuit":"Superset")}</div>
+      </div>
+      <div style={{width:40,flexShrink:0}}/>
     </div>);
   // ─── "Une chose a la fois" applique aux lecteurs de bloc ────────────────────
   // Les trois regimes partagent desormais la meme grammaire : un anneau pour le temps,
@@ -1896,7 +1920,9 @@ function ExerciseFocus({ex,dayIdx,sDate,log,onLogSet,onClose,onNext,hasNext,idx,
     <div style={{width:"100%",maxWidth:600,display:"flex",flexDirection:"column",flex:1,minHeight:0}}>
       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"16px 20px"}}>
         <Tap onTap={()=>leave()} style={{width:40,height:40,borderRadius:10,background:C.s2,display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{fontSize:20,color:C.ink3}}>‹</span></Tap>
-        <span style={{fontSize:13,fontWeight:600,color:C.ink4,textTransform:"uppercase",letterSpacing:".1em"}}>Exercice {idx+1}/{count}</span>
+        <div style={{textAlign:"center",minWidth:0,flex:1}}>
+          <div style={{fontSize:13,fontWeight:600,color:C.ink4,textTransform:"uppercase",letterSpacing:".1em"}}>Exercice {idx+1}/{count}</div>
+        </div>
         <Tap onTap={()=>onDetail&&onDetail(ex)} style={{width:40,height:40,borderRadius:10,background:C.s2,display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{fontSize:15,fontWeight:700,color:C.blue}}>i</span></Tap>
       </div>
 
@@ -2498,23 +2524,62 @@ function IntervalTimer({onClose}) {
   );
 }
 
-function SkillsOctagon({sessions}) {
+function SkillsOctagon({sessions,profile}) {
   const axes=useMemo(()=>{
     const clamp=v=>Math.max(4,Math.min(100,Math.round(v)));
     if(!sessions||!sessions.length) return null;
-    let maxW=0,totalKg=0,totalSets=0,rpeSum=0,rpeCnt=0;
-    sessions.forEach(s=>{totalKg+=s.totalKg||0;totalSets+=s.totalSets||0;(s.exercises||[]).forEach(e=>{if((e.weight||0)>maxW)maxW=e.weight;});const fb=s.feedback;if(fb&&fb.global){rpeSum+=fb.global;rpeCnt++;}});
-    const force=clamp(maxW/1.5);
+    // Les seances arrivent par date DECROISSANTE. L'ancien calcul de progression comparait
+    // la moitie recente a la moitie ancienne dans cet ordre, donc a l'envers : progresser
+    // affichait une baisse. On travaille ici sur une copie triee du plus ancien au plus recent.
+    const ord=sessions.slice().sort((a,b)=>String(a.date).localeCompare(String(b.date)));
+    const bw=Number(profile&&profile.weight_kg)||75;
+
+    let maxRatio=0,totalKg=0,totalSets=0,rpeSum=0,rpeCnt=0,denseSets=0,powerSets=0,allSets=0;
+    const patterns={};
+    ord.forEach(s=>{
+      totalKg+=s.totalKg||0; totalSets+=s.totalSets||0;
+      const metcon=(s.mode==="amrap"||s.mode==="emom");
+      (s.exercises||[]).forEach(e=>{
+        if(!e) return;
+        const cs=Number(e.completedSets)||0;
+        allSets+=cs;
+        if(metcon||e.groupType) denseSets+=cs;
+        const meta=metaOf(e);
+        if(meta.pattern) patterns[meta.pattern]=(patterns[meta.pattern]||0)+cs;
+        if(meta.pattern==="hinge"||meta.pattern==="squat") powerSets+=cs;
+        const w=Number(e.weight)||0;
+        if(w>0&&meta.tier!=="isolation"){ const r=w/bw; if(r>maxRatio) maxRatio=r; }
+        // Le RPE est desormais reellement collecte : il vaut mieux que le ressenti global.
+        if(e.rpe!=null){ rpeSum+=Number(e.rpe); rpeCnt++; }
+      });
+      if(!rpeCnt){ const fb=s.feedback; if(fb&&fb.global){ rpeSum+=Number(fb.global)*2; rpeCnt++; } }
+    });
+
+    // Force : charge relative au poids de corps, pas une charge absolue divisee par 1,5.
+    const force=clamp(maxRatio/1.5*100);
     const volume=clamp(totalKg/30000*100);
-    const endurance=clamp(totalSets/300*100);
-    const seances=clamp(sessions.length/30*100);
-    const regularite=clamp(sessions.slice(-20).length/15*100);
-    const intensite=clamp(rpeCnt?rpeSum/rpeCnt/5*100:0);
+    // Endurance : part du travail fait en densite (metcon, superset), et non un total de series.
+    const endurance=clamp(allSets?denseSets/allSets*130:0);
+    // Regularite : plus longue serie de semaines consecutives - meme mesure que les badges,
+    // et non plus un simple comptage de seances qui doublonnait avec l'assiduite.
+    const regularite=clamp(longestWeekStreak(ord)/12*100);
+    const intensite=clamp(rpeCnt?(rpeSum/rpeCnt)/10*100:0);
+    // Equilibre : couverture des patrons de mouvement. Rendu possible par la classification
+    // du catalogue, et impossible a mesurer auparavant.
+    const covered=Object.keys(patterns).filter(k=>patterns[k]>0).length;
+    const equilibre=clamp(covered/8*100);
+    const explosivite=clamp(allSets?powerSets/allSets*200:0);
     let prog=50;
-    if(sessions.length>=4){const h=Math.floor(sessions.length/2);const a=sessions.slice(0,h),b=sessions.slice(h);const avgA=(a.reduce((x,s)=>x+(s.totalKg||0),0)/a.length)||1;const avgB=b.reduce((x,s)=>x+(s.totalKg||0),0)/b.length;prog=clamp(50+(avgB-avgA)/avgA*100);}
-    const puissance=clamp((force+intensite)/2);
-    return [["Force",force],["Volume",volume],["Endurance",endurance],["Régularité",regularite],["Intensité",intensite],["Progression",prog],["Séances",seances],["Puissance",puissance]];
-  },[sessions]);
+    if(ord.length>=4){
+      const h=Math.floor(ord.length/2);
+      const oldH=ord.slice(0,h),newH=ord.slice(h);
+      const avgOld=(oldH.reduce((x,s)=>x+(s.totalKg||0),0)/oldH.length)||1;
+      const avgNew=newH.reduce((x,s)=>x+(s.totalKg||0),0)/newH.length;
+      prog=clamp(50+(avgNew-avgOld)/avgOld*100);
+    }
+    return [["Force",force],["Volume",volume],["Endurance",endurance],["Régularité",regularite],
+            ["Intensité",intensite],["Progression",prog],["Équilibre",equilibre],["Explosivité",explosivite]];
+  },[sessions,profile]);
   if(!axes) return null;
   const cx=150,cy=150,R=92;
   const pt=(i,r)=>{const a=(-90+i*45)*Math.PI/180;return [cx+Math.cos(a)*r,cy+Math.sin(a)*r];};
@@ -2535,7 +2600,7 @@ function SkillsOctagon({sessions}) {
   );
 }
 
-function StatsTab({sessions,weights,accent,onOpenPhotos,pinnedPBs,onManagePBs,activeSkills,onManageSkills,onOpenRewards,trainingDaysPerWeek}) {
+function StatsTab({sessions,weights,accent,onOpenPhotos,pinnedPBs,onManagePBs,activeSkills,onManageSkills,onOpenRewards,trainingDaysPerWeek,profile}) {
   const total=sessions.length,totalKg=sessions.reduce((a,s)=>a+(s.totalKg||0),0);
   const avgScore=total?Math.round(sessions.reduce((a,s)=>a+computeScore(s.totalKg,s.totalSets,s.feedback,targetOf(s)),0)/total):0;
   const pbs=useMemo(()=>computePBs(sessions),[sessions]);
@@ -2550,7 +2615,7 @@ function StatsTab({sessions,weights,accent,onOpenPhotos,pinnedPBs,onManagePBs,ac
     <div style={{padding:"20px 20px 16px",maxWidth:600,margin:"0 auto",fontFamily:F}}>
       
       <WeekSummary sessions={sessions} accent={accent} trainingDaysPerWeek={trainingDaysPerWeek}/>
-      <SkillsOctagon sessions={sessions}/>
+      <SkillsOctagon sessions={sessions} profile={profile}/>
       {/* Hero card: volume total, mise en avant */}
       <div style={{background:C.blueDim,border:`1px solid ${C.blue}`,borderRadius:18,padding:"20px",marginBottom:10,display:"flex",alignItems:"center",gap:16}}>
         <div style={{width:44,height:44,borderRadius:12,background:C.bg,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
@@ -3150,7 +3215,7 @@ function SettingsTab({user,excluded,onToggleExclude,onSignOut,onReset,onOpenLibr
           <span style={{fontSize:17,color:C.red}}>›</span>
         </Tap>
       </div>
-      <div style={{fontSize:12,color:C.ink4,textAlign:"center",marginTop:28}}>SŌMA · {"S"+weekNumber()} · {DB.length} exercices · build 23.71a</div>
+      <div style={{fontSize:12,color:C.ink4,textAlign:"center",marginTop:28}}>SŌMA · {"S"+weekNumber()} · {DB.length} exercices · build 23.72a</div>
     </div>
   );
 }
@@ -4101,7 +4166,15 @@ export default function SomaApp() {
   // s'affichait "Classique" tout court, y compris une fois terminee. L'agencement reel est
   // desormais lisible, et il survit a la cloture puisqu'il est sauvegarde avec les exercices.
   const groupKind=(exos||[]).reduce((g,e)=>g||((e&&e.groupType)||null),null);
-  const modeLabel=(sessionMode==="amrap"?"AMRAP":sessionMode==="emom"?"EMOM":"Classique")+(groupKind?(groupKind==="circuit"?" + Circuit":" + Superset"):"");
+  // Le badge annoncait "Classique + Superset" meme quand TOUS les exercices etaient
+  // groupes : il n'y avait alors plus rien de classique dans la seance.
+  const modeLabel=(()=>{
+    const base=sessionMode==="amrap"?"AMRAP":sessionMode==="emom"?"EMOM":"Classique";
+    if(sessionMode!=="classique"||!groupKind) return base;
+    const nGrouped=(exos||[]).filter(e=>e&&e.groupType).length;
+    const label=groupKind==="circuit"?"Circuit":"Superset";
+    return (nGrouped>0&&nGrouped===exos.length)?label:`${base} + ${label}`;
+  })();
   const absExos=aiOverride?.abs||day?.abs||[];
   const NAV_ICONS={
   home:(<><path d="M3 11l9-8 9 8"/><path d="M5 10v10a1 1 0 0 0 1 1h3v-6h6v6h3a1 1 0 0 0 1-1V10"/></>),
@@ -4301,11 +4374,11 @@ const NAV=[{id:"home",l:"Accueil"},{id:"seance",l:"Séances"},{id:"stats",l:"Sta
                           <span style={{fontSize:11,fontWeight:700,color:C.ink3,textTransform:"uppercase",letterSpacing:".1em"}}>{blk.muscle}</span>
                           <span style={{fontSize:11,fontWeight:600,color:C.ink4}}>{blk.items.length} exo{blk.items.length>1?"s":""}</span>{blk.groupType&&<span style={{fontSize:10,fontWeight:700,color:"#000",background:C.blue,padding:"1px 7px",borderRadius:6,textTransform:"uppercase",letterSpacing:".08em"}}>{blk.groupType==="circuit"?"Circuit":blk.groupType==="amrap"?"AMRAP":blk.groupType==="emom"?"EMOM":"Superset"}</span>}
                         </div>
-                        {blk.groupType&&blk.groupType!=="amrap"&&blk.groupType!=="emom"&&!locked&&<Tap onTap={()=>setSupBlock({label:blk.muscle,kind:blk.groupType==="circuit"?"circuit":"superset",exercises:blk.items.map(x=>x.ex),restSec:90,tours:(blk.items[0]&&blk.items[0].ex&&blk.items[0].ex.sets)||4})} style={{display:"flex",alignItems:"center",justifyContent:"center",gap:8,padding:"12px",borderRadius:12,background:C.blueDim,border:`1px solid ${C.blue}`,marginBottom:10}}><span style={{fontSize:14,fontWeight:700,color:C.blue}}>Démarrer le {blk.groupType==="circuit"?"circuit":"superset"}</span></Tap>}
+                        {blk.groupType&&blk.groupType!=="amrap"&&blk.groupType!=="emom"&&!locked&&<Tap onTap={()=>setSupBlock({label:blk.muscle,kind:blk.groupType==="circuit"?"circuit":"superset",exercises:blk.items.map(x=>x.ex),restSec:(blk.items[0]&&blk.items[0].ex&&blk.items[0].ex.groupRest)||90,tours:(blk.items[0]&&blk.items[0].ex&&blk.items[0].ex.sets)||4})} style={{display:"flex",alignItems:"center",justifyContent:"center",gap:8,padding:"12px",borderRadius:12,background:C.blueDim,border:`1px solid ${C.blue}`,marginBottom:10}}><span style={{fontSize:14,fontWeight:700,color:C.blue}}>Démarrer le {blk.groupType==="circuit"?"circuit":"superset"}</span></Tap>}
                         <div style={{paddingLeft:12,borderLeft:`2px solid ${C.s3}`}}>
                           {blk.items.map(({ex,idx})=>(
                             <ExerciseRowCollapsed key={ex.id} ex={ex} idx={idx} dayIdx={dayIdx} sDate={sDate} log={log} doneSession={doneSession}
-                              onOpen={()=>{if(locked)return;if(sessionMode!=="classique"){setShowCircuit(true);return;}const _e=exos[idx];if(_e&&_e.circuitId){const _g=exos.filter(e=>e.circuitId===_e.circuitId);setSupBlock({label:_e.m||"Superset",kind:_g.length>=3?"circuit":"superset",exercises:_g,restSec:90,tours:(_g[0]&&(_g[0].groupTours||_g[0].sets))||4});}else{setFocusIdx(idx);}}} onReplace={e=>setShowPicker(e)} onOriginY={setFocusOrigin}/>
+                              onOpen={()=>{if(locked)return;if(sessionMode!=="classique"){setShowCircuit(true);return;}const _e=exos[idx];if(_e&&_e.circuitId){const _g=exos.filter(e=>e.circuitId===_e.circuitId);setSupBlock({label:_e.m||"Superset",kind:_g.length>=3?"circuit":"superset",exercises:_g,restSec:(_g[0]&&_g[0].groupRest)||90,tours:(_g[0]&&(_g[0].groupTours||_g[0].sets))||4});}else{setFocusIdx(idx);}}} onReplace={e=>setShowPicker(e)} onOriginY={setFocusOrigin}/>
                           ))}
                         </div>
                       </div>
@@ -4331,7 +4404,7 @@ const NAV=[{id:"home",l:"Accueil"},{id:"seance",l:"Séances"},{id:"stats",l:"Sta
               )}
             </div>
           )}
-          {tab==="stats"&&<><div style={{padding:"20px 20px 0",maxWidth:600,margin:"0 auto"}}><WeightChart weighIns={weighIns} accent={accent}/></div><StatsTab sessions={sessions} weights={weights} accent={accent} trainingDaysPerWeek={trainingDaysPerWeek} pinnedPBs={profile?.pinned_pbs} onManagePBs={()=>setShowPBManager(true)} activeSkills={profile?.active_skills} onManageSkills={()=>setShowSkillManager(true)} onOpenRewards={()=>setShowRewardsManager(true)}/><HistoryTab sessions={sessions} onSelect={setShowReport} accent={accent} onOpenPhotos={()=>setShowPhotos(true)} photos={photos} urls={photoUrls}/></>}
+          {tab==="stats"&&<><div style={{padding:"20px 20px 0",maxWidth:600,margin:"0 auto"}}><WeightChart weighIns={weighIns} accent={accent}/></div><StatsTab sessions={sessions} weights={weights} accent={accent} trainingDaysPerWeek={trainingDaysPerWeek} profile={profile} pinnedPBs={profile?.pinned_pbs} onManagePBs={()=>setShowPBManager(true)} activeSkills={profile?.active_skills} onManageSkills={()=>setShowSkillManager(true)} onOpenRewards={()=>setShowRewardsManager(true)}/><HistoryTab sessions={sessions} onSelect={setShowReport} accent={accent} onOpenPhotos={()=>setShowPhotos(true)} photos={photos} urls={photoUrls}/></>}
           {tab==="settings"&&<SettingsTab user={user} excluded={excluded} onToggleExclude={toggleExclude} onOpenLibrary={()=>setShowLibrary(true)} profile={profile} schedule={schedule} avatarUrl={avatarUrl} onUpdateConfig={updateConfig} onOpenScheduleEditor={()=>setShowSched(true)} onRedoOnboarding={()=>setShowOnboardingRedo(true)}
             onSignOut={async()=>{await supabase.auth.signOut();setUser(null);setLog({});setWeights({});setSessions([]);setExcluded([]);setStreak(0);}}
             onReset={async()=>{
@@ -4367,7 +4440,7 @@ const NAV=[{id:"home",l:"Accueil"},{id:"seance",l:"Séances"},{id:"stats",l:"Sta
             if(_n&&_n.circuitId){
               const _g=exos.filter(e=>e.circuitId===_n.circuitId);
               setFocusIdx(null);
-              setSupBlock({label:_n.m||"Superset",kind:_g.length>=3?"circuit":"superset",exercises:_g,restSec:90,tours:(_g[0]&&_g[0].sets)||4});
+              setSupBlock({label:_n.m||"Superset",kind:_g.length>=3?"circuit":"superset",exercises:_g,restSec:(_g[0]&&_g[0].groupRest)||90,tours:(_g[0]&&(_g[0].groupTours||_g[0].sets))||4});
             }else{
               setFocusIdx(focusIdx+1);
             }
