@@ -1616,13 +1616,25 @@ function ExerciseFocus({ex,dayIdx,sDate,log,onLogSet,onClose,onNext,hasNext,idx,
   // de la seance reste dans la liste, en arriere. La liste de toutes les series
   // empilees demandait de chercher sa ligne entre deux efforts et offrait des
   // cibles etroites; ici il n'y a qu'un geste possible a chaque instant.
+  // Cinq pastilles rondes disaient seulement combien de series restaient. Elles deviennent
+  // la montee en charge complete : chaque serie affiche SA charge, l'etat fait / en cours /
+  // a venir se lit d'un coup d'oeil, et on sait ou l'on va avant de commencer.
   const dots=(
-    <div style={{display:"flex",gap:6,justifyContent:"center"}}>
-      {plan.map((_,i)=>(
-        <div key={i} style={{width:done[i]?9:7,height:done[i]?9:7,borderRadius:"50%",
-          background:done[i]?C.green:(i===cur?C.ink4:C.s4),transition:`all 200ms ${EO}`,
-          animation:done[i]?`popIn 260ms ${EO} both`:"none"}}/>
-      ))}
+    <div style={{display:"flex",gap:6}}>
+      {plan.map((_,i)=>{
+        const isCur=i===cur&&resting===0;
+        const on=done[i]||isCur;
+        return (
+          <div key={i} style={{flex:"1 1 0",minWidth:0,padding:"8px 3px",borderRadius:14,textAlign:"center",
+            background:done[i]?C.green:(isCur?C.blue:C.bg),
+            border:`1px solid ${done[i]?C.green:(isCur?C.blue:C.s3)}`,
+            transition:`all 240ms ${EO}`,animation:done[i]?`popIn 260ms ${EO} both`:"none"}}>
+            <div style={{fontSize:9.5,fontWeight:600,letterSpacing:".06em",color:on?"#1B1B1B":C.ink4}}>S{i+1}</div>
+            <div style={{fontSize:12.5,fontWeight:600,marginTop:1,fontVariantNumeric:"tabular-nums",
+              color:on?"#1B1B1B":C.ink3}}>{loads[i]>0?loads[i]:"PdC"}</div>
+          </div>
+        );
+      })}
     </div>
   );
   const step=(lbl,act)=>(
@@ -2359,7 +2371,7 @@ function StatsTab({sessions,weights,accent,onOpenPhotos,pinnedPBs,onManagePBs,ac
   const avgScore=total?Math.round(sessions.reduce((a,s)=>a+computeScore(s.totalKg,s.totalSets,s.feedback,targetOf(s)),0)/total):0;
   const pbs=useMemo(()=>computePBs(sessions),[sessions]);
   const pinnedSet=new Set(pinnedPBs||[]);
-  const displayedPBs=(pinnedPBs&&pinnedPBs.length)?pbs.filter(pb=>pinnedSet.has(pb.id)):pbs.slice(0,5);
+  const displayedPBs=(pinnedPBs&&pinnedPBs.length)?pbs.filter(pb=>pinnedSet.has(pb.id)):pbs.slice(0,4);
   const volumeByWeek=useMemo(()=>{
     const weeks={};sessions.forEach(s=>{const w=s.date.slice(0,7);weeks[w]=(weeks[w]||0)+(s.totalKg||0);});
     return Object.entries(weeks).slice(-8).map(([w,v])=>({date:w.slice(5),v:Math.round(v/1000)}));
@@ -2368,8 +2380,7 @@ function StatsTab({sessions,weights,accent,onOpenPhotos,pinnedPBs,onManagePBs,ac
   return(
     <div style={{padding:"20px 18px 16px",maxWidth:600,margin:"0 auto",fontFamily:F}}>
       
-      <WeekSummary sessions={sessions} accent={accent} trainingDaysPerWeek={trainingDaysPerWeek}/>
-      <SkillsOctagon sessions={sessions} profile={profile}/>
+
       {/* Carte maitresse : meme grammaire que l'accueil - libelle, grand nombre, pastilles. */}
       <div style={{background:C.bg,border:`1px solid ${C.s2}`,borderRadius:24,padding:"17px 18px",
                    boxShadow:`0 3px 16px ${C.ink5}`,marginBottom:11}}>
@@ -2409,6 +2420,11 @@ function StatsTab({sessions,weights,accent,onOpenPhotos,pinnedPBs,onManagePBs,ac
           <ProgressLine data={volumeByWeek} color={accent||C.blue}/>
         </div>
       )}
+      {/* Bilan de la semaine et profil de competences, apres les mesures : la page
+          commencait par eux, ce qui repoussait les chiffres essentiels sous la ligne de
+          flottaison et donnait l'impression d'une colonne sans fin. */}
+      <WeekSummary sessions={sessions} accent={accent} trainingDaysPerWeek={trainingDaysPerWeek}/>
+      <SkillsOctagon sessions={sessions} profile={profile}/>
       {/* Apprentissage */}
       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
         <span style={{fontSize:12,fontWeight:600,color:C.ink4,textTransform:"uppercase",letterSpacing:".1em"}}>Apprentissage</span>
@@ -2440,15 +2456,15 @@ function StatsTab({sessions,weights,accent,onOpenPhotos,pinnedPBs,onManagePBs,ac
         {pbs.length>0&&onManagePBs&&<Tap onTap={onManagePBs} style={{padding:"6px 12px",borderRadius:999,background:C.s2}}><span style={{fontSize:12,fontWeight:600,color:C.ink3}}>Gérer ({(pinnedPBs||[]).length}/5) ›</span></Tap>}
       </div>
       {pbs.length===0?<div style={{textAlign:"center",padding:"32px 0",fontSize:15,color:C.ink4}}>Réalise des séances avec charges pour débloquer tes PB.</div>:
-        displayedPBs.map((pb,i)=>(
-          <div key={pb.id||i} style={{background:C.s1,borderRadius:18,padding:"14px 18px",marginBottom:8,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-            <div style={{display:"flex",alignItems:"center",gap:10}}>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={C.ink4} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">{PBCAT_ICON[PBCAT[Array.isArray(pb.eq)?pb.eq[0]:pb.eq]]||PBCAT_ICON.Autre}</svg>
-              <div><div style={{fontSize:15,fontWeight:600,color:C.ink}}>{pb.n}</div><div style={{fontSize:13,color:C.ink3}}>{pb.m}</div></div>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:11,marginBottom:8}}>{displayedPBs.map((pb,i)=>(
+          <div key={pb.id||i} style={{background:C.bg,border:`1px solid ${C.s2}`,boxShadow:`0 3px 16px ${C.ink5}`,borderRadius:22,padding:"14px 15px",display:"flex",flexDirection:"column",gap:8}}>
+            <div style={{display:"flex",alignItems:"flex-start",gap:9,minWidth:0}}>
+              <svg width="15" height="15" style={{flexShrink:0,marginTop:2}} viewBox="0 0 24 24" fill="none" stroke={C.ink4} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">{PBCAT_ICON[PBCAT[Array.isArray(pb.eq)?pb.eq[0]:pb.eq]]||PBCAT_ICON.Autre}</svg>
+              <div style={{minWidth:0}}><div style={{fontSize:13.5,fontWeight:500,color:C.ink,lineHeight:1.25}}>{pb.n}</div><div style={{fontSize:11,color:C.ink4,marginTop:1,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{pb.m}</div></div>
             </div>
-            <div style={{fontSize:20,fontWeight:600,color:C.ink}}>{pb.pbKg===0?"BW":pb.pbKg+"kg"}</div>
+            <div style={{fontSize:21,fontWeight:500,color:C.ink,letterSpacing:"-.02em",fontVariantNumeric:"tabular-nums"}}>{pb.pbKg===0?"PdC":pb.pbKg+" kg"}</div>
           </div>
-        ))}
+        ))}</div>}
       {(()=>{const B=computeBadges(sessions);const earned=B.filter(b=>b.ok).length;
       const cats=[...new Set(B.map(b=>b.cat))];
       return(
@@ -2994,7 +3010,7 @@ function SettingsTab({user,excluded,onToggleExclude,onSignOut,onReset,onOpenLibr
           <span style={{fontSize:17,color:C.red}}>›</span>
         </Tap>
       </div>
-      <div style={{fontSize:12,color:C.ink4,textAlign:"center",marginTop:28}}>SŌMA · {"S"+weekNumber()} · {DB.length} exercices · build 23.85a</div>
+      <div style={{fontSize:12,color:C.ink4,textAlign:"center",marginTop:28}}>SŌMA · {"S"+weekNumber()} · {DB.length} exercices · build 23.86a</div>
     </div>
   );
 }
@@ -4066,9 +4082,7 @@ const NAV=[{id:"home",l:"Accueil"},{id:"seance",l:"Séances"},{id:"stats",l:"Sta
         @keyframes riseIn{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
         @keyframes dropIn{from{opacity:0;transform:translateY(-14px)}to{opacity:1;transform:none}}
         @keyframes popIn{0%{transform:scale(.7);opacity:.4}60%{transform:scale(1.14)}100%{transform:scale(1);opacity:1}}
-        @keyframes shimmer{from{background-position:-360px 0}to{background-position:360px 0}}
         @keyframes cardIn{from{opacity:0;transform:translateY(18px) scale(.985)}to{opacity:1;transform:none}}
-        @keyframes swap{0%{opacity:1}45%{opacity:0;transform:translateY(6px)}100%{opacity:1;transform:none}}
         /* Entree en cascade des cartes a chaque changement d'onglet : les elements arrivent
            l'un apres l'autre au lieu d'apparaitre d'un bloc. */
         .tabin>*{animation:cardIn 460ms cubic-bezier(.23,1,.32,1) both}
@@ -4142,10 +4156,11 @@ const NAV=[{id:"home",l:"Accueil"},{id:"seance",l:"Séances"},{id:"stats",l:"Sta
                 {dayFullyDone?(
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={accent||C.green} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" style={{margin:"0 auto",display:"block"}}><path d="M20 6L9 17l-5-5"/></svg>
                 ):isMissed?(
-                  // Un anneau creux plutot qu'un caractere : le glyphe de report se lisait
-                  // comme un tilde et salissait la bande.
-                  <span title="Séance manquée" style={{display:"block",width:10,height:10,borderRadius:"50%",
-                    border:`1.5px solid ${C.ink4}`,margin:"1px auto",boxSizing:"border-box"}}/>
+                  // La fleche de rattrapage, redessinee dans le jeu unifie : elle disait
+                  // que la seance n'est pas perdue mais reportee, ce qu'un anneau creux
+                  // ne dit pas. Le caractere brut, lui, se lisait comme un tilde.
+                  <span title="Séance manquée — reportée" style={{display:"flex",justifyContent:"center"}}>
+                    <Icon name="swap" size={13} stroke={C.ink4} sw={1.8}/></span>
                 ):(d.salle&&pct>0&&<div style={{width:"70%",height:2,background:C.s4,borderRadius:1,margin:"0 auto"}}>
                   <div style={{width:`${pct*100}%`,height:2,background:accent,borderRadius:1,transition:`width 400ms ${EO}`}}/>
                 </div>)}
@@ -4469,6 +4484,7 @@ const NAV=[{id:"home",l:"Accueil"},{id:"seance",l:"Séances"},{id:"stats",l:"Sta
     </div>
   );
 }
+
 
 
 
