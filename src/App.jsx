@@ -190,6 +190,13 @@ const SESSIONS_PER_BLOCK=PROGRAM_SESSIONS/PROG_WEEKS; // 5
 const progWeekRaw=(start)=>{ if(!start) return null; const ms=Date.now()-new Date(start+"T00:00:00").getTime(); return Math.floor(ms/604800000)+1; };
 const progWeekOf=(start)=>{ const raw=progWeekRaw(start); if(raw==null) return programWeek(); return Math.min(PROG_WEEKS,Math.max(1,raw)); };
 const progEndDate=(start)=>{ if(!start) return null; const d=new Date(start+"T00:00:00"); d.setDate(d.getDate()+PROG_WEEKS*7-1); return d; };
+// Numero de semaine ISO d'une date quelconque : weekNumber() ne savait traiter
+// qu'aujourd'hui, ce qui interdisait d'etiqueter un historique.
+const isoWeekOf=(ds)=>{ const dt=(typeof ds==="string")?new Date(ds+"T00:00:00"):new Date(ds);
+  const d=new Date(Date.UTC(dt.getFullYear(),dt.getMonth(),dt.getDate())); const dn=(d.getUTCDay()+6)%7;
+  d.setUTCDate(d.getUTCDate()-dn+3); const ft=new Date(Date.UTC(d.getUTCFullYear(),0,4));
+  const fn=(ft.getUTCDay()+6)%7; ft.setUTCDate(ft.getUTCDate()-fn+3);
+  return 1+Math.round((d-ft)/604800000); };
 const fmtDateShort=(d)=>{ if(!d) return ""; const dd=(typeof d==="string")?new Date(d+"T00:00:00"):d; try{return dd.toLocaleDateString("fr-FR",{day:"2-digit",month:"short"});}catch(_e){return "";} };
 // ─── SURCHARGE PROGRESSIVE ──────────────────────────────────────────────────
 // La charge proposee derivait d'un bareme generique (poids de corps x niveau x phase) et
@@ -1798,32 +1805,6 @@ function ExerciseFocus({ex,dayIdx,sDate,log,onLogSet,onClose,onNext,hasNext,idx,
   );
 }
 
-function ProgressLine({data,color=C.blue,height=48}) {
-  if(!data||data.length<2) return <div style={{height,display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{fontSize:13,color:C.ink4}}>Données insuffisantes</span></div>;
-  const vals=data.map(d=>d.v),min=Math.min(...vals),max=Math.max(...vals),range=max-min||1;
-  const W=320,H=height;
-  const pts=data.map((d,i)=>[(i/(data.length-1))*(W-24)+12,H-6-((d.v-min)/range)*(H-18)]);
-  const path=pts.map((p,i)=>`${i===0?"M":"L"} ${p[0]} ${p[1]}`).join(" ");
-  const area=`${path} L ${pts[pts.length-1][0]} ${H} L ${pts[0][0]} ${H} Z`;
-  return(
-    <div>
-      {/* preserveAspectRatio="none" etirait le trace : les points devenaient des ovales et
-          le libelle de valeur, ecrase, se lisait comme un chiffre isole flottant. */}
-      <svg viewBox={`0 0 ${W} ${H}`} style={{width:"100%",height}} preserveAspectRatio="xMidYMid meet">
-        <defs><linearGradient id={`g${color.replace("#","")}`} x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={color} stopOpacity=".12"/><stop offset="100%" stopColor={color} stopOpacity="0"/></linearGradient></defs>
-        <path d={area} fill={`url(#g${color.replace("#","")})`}/>
-        <path d={path} stroke={color} strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round"/>
-        {pts.map(([x,y],i)=><circle key={i} cx={x} cy={y} r="3" fill={color} stroke={C.bg} strokeWidth="2"/>)}
-        <text x={pts[pts.length-1][0]} y={pts[pts.length-1][1]-9} textAnchor="end" fontSize="11" fill={C.ink} fontFamily={F} fontWeight="600">{String(data[data.length-1].v).replace(".",",")} t</text>
-      </svg>
-      <div style={{display:"flex",justifyContent:"space-between",marginTop:4}}>
-        <span style={{fontSize:10,color:C.ink4,fontFamily:F}}>{data[0].date}</span>
-        <span style={{fontSize:10,color:C.ink4,fontFamily:F}}>{data[data.length-1].date}</span>
-      </div>
-    </div>
-  );
-}
-
 // ─── AI SHEET ─────────────────────────────────────────────────────────────────
 function AISheet({onClose,onResult,excluded}) {
   const[type,setType]=useState(null);const[custom,setCustom]=useState("");const[loading,setLoading]=useState(false);
@@ -2097,84 +2078,163 @@ function SessionReport({session,sessions,trainingDaysPerWeek,photoUrl,onClose,on
 // Lundi de la semaine d'une date : sert de cle de semaine pour la pesee.
 const mondayOf=(d)=>{const t=(typeof d==="string")?new Date(d+"T00:00:00"):new Date(d);const dow=(t.getDay()+6)%7;t.setDate(t.getDate()-dow);return localDateKey(t);};
 
-// Pesee de debut de semaine. Proposee tant qu'aucune pesee n'existe pour la semaine en
-// cours : on ne rate pas le suivi parce qu'on a ouvert l'app un mardi.
-function WeighInCard({weighIns,onSave}) {
-  const wk=mondayOf(new Date());
-  const done=(weighIns||[]).find(w=>mondayOf(w.date)===wk);
-  const last=(weighIns||[]).slice().sort((a,b)=>String(a.date).localeCompare(String(b.date))).pop();
-  const [val,setVal]=useState(()=>done?String(done.weight_kg):(last?String(last.weight_kg):""));
-  // La condition etait "done && !saved" : apres enregistrement, saved passait a true et la
-  // confirmation etait donc SAUTEE, le formulaire se reaffichait comme si rien ne s'etait
-  // passe. Une pesee enregistree s'affiche desormais comme telle, point.
-  const prev=(weighIns||[]).slice().sort((a,b)=>String(a.date).localeCompare(String(b.date))).filter(w=>mondayOf(w.date)!==wk).pop();
-  if(done) {
-    const delta=prev?Math.round((Number(done.weight_kg)-Number(prev.weight_kg))*10)/10:null;
-    return (
-      <div style={{background:C.s1,borderRadius:22,padding:"14px 16px",marginBottom:12,display:"flex",justifyContent:"space-between",alignItems:"center",gap:10}}>
-        <div>
-          <div style={{fontSize:12,fontWeight:600,color:C.ink4,textTransform:"uppercase",letterSpacing:".1em"}}>Poids de la semaine</div>
-          <div style={{fontSize:13,color:C.ink3,marginTop:3}}>
-            Enregistrée le {fmtDateShort(done.date)}
-            {delta!==null&&delta!==0&&<span style={{color:C.ink4}}> · {delta>0?"+":""}{delta} kg vs semaine précédente</span>}
+// Pesee libre. Elle etait bornee a une par semaine, indexee sur le lundi : une pesee
+// du mercredi ecrasait celle du lundi et la courbe restait pauvre. La table weigh_ins
+// est deja unique par (user_id, date), donc une pesee par JOUR : c'est cette granularite
+// qu'on expose. Plus de points, une courbe plus juste.
+function WeighInCard({weighIns,onSave,compact}) {
+  const list=(weighIns||[]).slice().sort((a,b)=>String(a.date).localeCompare(String(b.date)));
+  const today=todayKey();
+  const done=list.find(w=>w.date===today);
+  const prev=list.filter(w=>w.date!==today).pop();
+  const [val,setVal]=useState(()=>done?String(done.weight_kg):(prev?String(prev.weight_kg):""));
+  const [edit,setEdit]=useState(false);
+  const delta=(done&&prev)?Math.round((Number(done.weight_kg)-Number(prev.weight_kg))*10)/10:null;
+
+  // Pesee du jour deja faite : on l'affiche, mais on laisse la corriger. Avant, une pesee
+  // enregistree fermait le sujet jusqu'au lundi suivant.
+  if(done&&!edit) return (
+    <div style={{background:C.bg,border:`1px solid ${C.s2}`,boxShadow:`0 3px 16px ${C.ink5}`,
+      borderRadius:22,padding:"15px 16px",marginBottom:11}}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:10}}>
+        <div style={{minWidth:0}}>
+          <div style={{fontSize:14,fontWeight:600,color:C.ink}}>Pesée du jour</div>
+          <div style={{fontSize:11.5,color:C.ink4,marginTop:2}}>
+            {list.length} pesée{list.length>1?"s":""} enregistrée{list.length>1?"s":""}
+            {delta!==null&&delta!==0&&` · ${delta>0?"+":""}${String(delta).replace(".",",")} kg`}
           </div>
         </div>
-        <span style={{fontSize:22,fontWeight:600,color:C.ink,fontVariantNumeric:"tabular-nums"}}>{Number(done.weight_kg)} kg</span>
+        <div style={{display:"flex",alignItems:"center",gap:9,flexShrink:0}}>
+          <span style={{fontSize:22,fontWeight:500,color:C.ink,letterSpacing:"-.03em",fontVariantNumeric:"tabular-nums"}}>
+            {String(done.weight_kg).replace(".",",")} kg</span>
+          <Tap label="Corriger la pesée" onTap={()=>{setVal(String(done.weight_kg));setEdit(true);}}
+            style={{padding:"7px 12px",borderRadius:999,background:C.s2}}>
+            <span style={{fontSize:11.5,fontWeight:600,color:C.ink3}}>Corriger</span></Tap>
+        </div>
       </div>
-    );
-  }
+    </div>
+  );
+
+  const save=()=>{const n=parseFloat(String(val).replace(",","."));if(!(n>20&&n<300))return;
+    onSave(n);setEdit(false);play("cloche");buzz(40);};
   return (
-    <div style={{background:C.s1,borderRadius:22,padding:"16px",marginBottom:12,animation:`riseIn 320ms ${EO} both`}}>
-      <div style={{fontSize:12,fontWeight:600,color:C.ink4,textTransform:"uppercase",letterSpacing:".1em",marginBottom:4}}>Pesée de la semaine</div>
-      <div style={{fontSize:13,color:C.ink3,marginBottom:12}}>Une fois par semaine suffit — de préférence le lundi, à jeun.</div>
-      <div style={{display:"flex",gap:10,alignItems:"center"}}>
-        <input type="number" inputMode="decimal" step="0.1" value={val} onChange={e=>setVal(e.target.value)} placeholder="kg"
-          style={{flex:1,height:48,borderRadius:12,border:`1px solid ${C.s4}`,background:C.bg,color:C.ink,fontSize:17,fontWeight:600,fontFamily:F,padding:"0 14px",outline:"none",boxSizing:"border-box"}}/>
-        <Tap onTap={()=>{const n=parseFloat(String(val).replace(",","."));if(!(n>20&&n<300))return;onSave(n);play("cloche");buzz(40);}}
-          style={{padding:"0 22px",height:48,borderRadius:12,background:C.blue,display:"flex",alignItems:"center"}}>
-          <span style={{fontSize:16,fontWeight:600,color:"#000"}}>Enregistrer</span>
-        </Tap>
+    <div style={{background:C.bg,border:`1px solid ${C.s2}`,boxShadow:`0 3px 16px ${C.ink5}`,
+      borderRadius:22,padding:"15px 16px",marginBottom:11,animation:`riseIn 320ms ${EO} both`}}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:10}}>
+        <span style={{fontSize:14,fontWeight:600,color:C.ink}}>Pesée du jour</span>
+        <span style={{fontSize:10.5,fontWeight:600,padding:"4px 11px",borderRadius:999,background:C.s2,color:C.ink3}}>
+          {list.length?`${list.length} au total`:"Première"}</span>
+      </div>
+      {!compact&&<div style={{fontSize:11.5,color:C.ink4,marginTop:4,lineHeight:1.5}}>
+        N'importe quel jour, autant de fois que tu veux — chaque pesée est un point de plus sur la courbe.</div>}
+      <div style={{display:"flex",gap:9,alignItems:"center",marginTop:12}}>
+        <input type="number" inputMode="decimal" step="0.1" value={val} onChange={e=>setVal(e.target.value)}
+          placeholder={prev?String(prev.weight_kg):"kg"} aria-label="Poids en kilogrammes"
+          style={{flex:1,minWidth:0,height:48,borderRadius:18,border:`1px solid ${C.s3}`,background:C.bg,color:C.ink,
+            fontSize:18,fontWeight:500,fontFamily:F,padding:"0 15px",outline:"none",boxSizing:"border-box",
+            fontVariantNumeric:"tabular-nums"}}/>
+        <Tap label="Enregistrer la pesée" onTap={save}
+          style={{padding:"0 22px",height:48,borderRadius:18,background:C.blue,display:"flex",alignItems:"center"}}>
+          <span style={{fontSize:15,fontWeight:600,color:"#1B1B1B"}}>Enregistrer</span></Tap>
       </div>
     </div>
   );
 }
 
-// Courbe de poids : trace simple, sans bibliotheque, avec la tendance chiffree.
-function WeightChart({weighIns,accent}) {
+// Courbe de poids. Les points etaient espaces par leur RANG : deux pesees a un jour
+// d'ecart occupaient la meme largeur que deux pesees a trois semaines d'ecart. Maintenant
+// que la pesee est libre, l'axe doit etre le temps reel, sinon la courbe ment.
+function WeightChart({weighIns,accent,compact}) {
   const pts=(weighIns||[]).slice().sort((a,b)=>String(a.date).localeCompare(String(b.date)))
-    .map(w=>({d:w.date,v:Number(w.weight_kg)})).filter(x=>x.v>0);
+    .map(w=>({d:w.date,v:Number(w.weight_kg),t:new Date(w.date+"T00:00:00").getTime()})).filter(x=>x.v>0);
   if(pts.length<2) return (
-    <div style={{background:C.s1,borderRadius:22,padding:"18px",marginBottom:16}}>
-      <div style={{fontSize:14,fontWeight:600,color:C.ink,marginBottom:4}}>Progression du poids</div>
-      <div style={{fontSize:13,color:C.ink4}}>Une deuxième pesée et la courbe apparaît.</div>
+    <div style={{background:C.bg,border:`1px solid ${C.s2}`,boxShadow:`0 3px 16px ${C.ink5}`,
+      borderRadius:22,padding:"16px 17px",marginBottom:11}}>
+      <div style={{fontSize:14,fontWeight:600,color:C.ink,marginBottom:3}}>Poids de corps</div>
+      <div style={{fontSize:11.5,color:C.ink4}}>Une deuxième pesée et la courbe apparaît.</div>
     </div>
   );
-  const W=600,H=140,PAD=8;
-  const vs=pts.map(p=>p.v);
-  const min=Math.min(...vs),max=Math.max(...vs);
-  const span=(max-min)||1;
-  const x=(i)=>PAD+(i/(pts.length-1))*(W-PAD*2);
-  const y=(v)=>PAD+(1-(v-min)/span)*(H-PAD*2);
-  const line=pts.map((p,i)=>`${i?"L":"M"}${x(i).toFixed(1)},${y(p.v).toFixed(1)}`).join(" ");
-  const area=`${line} L${x(pts.length-1).toFixed(1)},${H} L${x(0).toFixed(1)},${H} Z`;
+  const W=340,H=compact?74:104,PADX=10,PADY=12;
+  const vs=pts.map(p=>p.v), min=Math.min(...vs), max=Math.max(...vs), span=(max-min)||1;
+  const t0=pts[0].t, tSpan=(pts[pts.length-1].t-t0)||1;
+  const x=(p)=>PADX+((p.t-t0)/tSpan)*(W-PADX*2);
+  const y=(v)=>PADY+(1-(v-min)/span)*(H-PADY*2);
+  const line=pts.map((p,i)=>`${i?"L":"M"}${x(p).toFixed(1)},${y(p.v).toFixed(1)}`).join(" ");
+  const area=`${line} L${x(pts[pts.length-1]).toFixed(1)},${H} L${x(pts[0]).toFixed(1)},${H} Z`;
   const first=pts[0].v,lastV=pts[pts.length-1].v,delta=Math.round((lastV-first)*10)/10;
+  const days=Math.max(1,Math.round(tSpan/86400000));
   return (
-    <div style={{background:C.s1,borderRadius:22,padding:"18px",marginBottom:16}}>
-      <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",marginBottom:2}}>
-        <span style={{fontSize:14,fontWeight:600,color:C.ink}}>Progression du poids</span>
-        <span style={{fontSize:20,fontWeight:600,color:C.ink,fontVariantNumeric:"tabular-nums"}}>{lastV} kg</span>
+    <div style={{background:C.bg,border:`1px solid ${C.s2}`,boxShadow:`0 3px 16px ${C.ink5}`,
+      borderRadius:22,padding:"16px 17px",marginBottom:11}}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:10}}>
+        <span style={{fontSize:14,fontWeight:600,color:C.ink}}>Poids de corps</span>
+        <span style={{fontSize:10.5,fontWeight:600,padding:"4px 11px",borderRadius:999,background:C.s2,color:C.ink3}}>
+          {pts.length} pesées · {days} j</span>
       </div>
-      <div style={{fontSize:12,color:C.ink4,marginBottom:12}}>
-        {pts.length} pesées · {delta===0?"stable":`${delta>0?"+":""}${delta} kg`} depuis {fmtDateShort(pts[0].d)}
-      </div>
-      <svg viewBox={`0 0 ${W} ${H}`} width="100%" height={H} preserveAspectRatio="none" style={{display:"block",overflow:"visible"}}>
-        <path d={area} fill={C.greenDim}/>
-        <path d={line} fill="none" stroke={accent||C.green} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
-        <circle cx={x(pts.length-1)} cy={y(lastV)} r="4.5" fill={accent||C.green}/>
+      <div style={{fontSize:32,fontWeight:500,color:C.ink,letterSpacing:"-.035em",lineHeight:1,marginTop:9,
+        fontVariantNumeric:"tabular-nums"}}>{String(lastV).replace(".",",")}<span style={{fontSize:13,fontWeight:400,color:C.ink4}}> kg</span></div>
+      <div style={{fontSize:11.5,color:C.ink4,marginTop:3}}>
+        {delta===0?"stable":`${delta>0?"+":""}${String(delta).replace(".",",")} kg`} depuis le {fmtDateShort(pts[0].d)}</div>
+      {/* preserveAspectRatio par defaut : le trace n'est plus etire, les points restent ronds. */}
+      <svg viewBox={`0 0 ${W} ${H}`} style={{width:"100%",height:"auto",display:"block",marginTop:11,overflow:"visible"}}>
+        <g stroke={C.s2} strokeWidth="1">
+          <line x1="0" y1={PADY} x2={W} y2={PADY}/><line x1="0" y1={H/2} x2={W} y2={H/2}/>
+          <line x1="0" y1={H-PADY} x2={W} y2={H-PADY}/></g>
+        <path d={area} fill={C.blueDim}/>
+        <path d={line} fill="none" stroke={accent||C.blue} strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"/>
+        {pts.slice(0,-1).map((p,i)=>(<circle key={i} cx={x(p)} cy={y(p.v)} r="3.2" fill={C.bg} stroke={accent||C.blue} strokeWidth="2"/>))}
+        <circle cx={x(pts[pts.length-1])} cy={y(lastV)} r="4.4" fill={accent||C.blue}/>
       </svg>
-      <div style={{display:"flex",justifyContent:"space-between",fontSize:11,color:C.ink4,marginTop:8,fontVariantNumeric:"tabular-nums"}}>
-        <span>{fmtDateShort(pts[0].d)} · {first} kg</span>
+      <div style={{display:"flex",justifyContent:"space-between",fontSize:10.5,color:C.ink4,marginTop:7,
+        fontVariantNumeric:"tabular-nums"}}>
+        <span>{fmtDateShort(pts[0].d)} · {String(first).replace(".",",")} kg</span>
         <span>{fmtDateShort(pts[pts.length-1].d)}</span>
+      </div>
+    </div>
+  );
+}
+
+// Volume par semaine, en barres. La courbe precedente lisait s.date.slice(0,7) - le MOIS,
+// pas la semaine - dans l'ordre d'arrivee des seances (les plus recentes d'abord), et
+// arrondissait a la tonne entiere. Deux points, a l'envers, faux.
+function VolumeBars({sessions,accent}) {
+  const data=useMemo(()=>{
+    const weeks={};
+    (sessions||[]).forEach(s=>{ if(!s||!s.date) return; const k=mondayOf(s.date);
+      weeks[k]=(weeks[k]||0)+(s.totalKg||0); });
+    return Object.keys(weeks).sort().slice(-6)
+      .map(k=>({k,w:isoWeekOf(k),v:Math.round(weeks[k]/100)/10}));
+  },[sessions]);
+  if(data.length<2) return null;
+  const max=Math.max(...data.map(d=>d.v))||1;
+  const best=data.reduce((a,b)=>b.v>a.v?b:a,data[0]);
+  const cur=data[data.length-1],pre=data.length>1?data[data.length-2]:null;
+  const trend=(pre&&pre.v>0)?Math.round((cur.v/pre.v-1)*100):null;
+  return (
+    <div style={{background:C.bg,border:`1px solid ${C.s2}`,boxShadow:`0 3px 16px ${C.ink5}`,
+      borderRadius:22,padding:"16px 17px",marginBottom:11}}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:10,marginBottom:2}}>
+        <span style={{fontSize:14,fontWeight:600,color:C.ink}}>Tendance hebdomadaire</span>
+        <span style={{fontSize:10.5,fontWeight:600,padding:"4px 11px",borderRadius:999,
+          background:C.s2,color:C.ink3}}>{data.length} semaines</span>
+      </div>
+      <div style={{fontSize:11.5,color:C.ink4,marginBottom:13}}>
+        {trend!==null?`${trend>0?"+":""}${trend} % vs S${pre.w}`:"Tonnes soulevées par semaine"}
+        {best.v>0&&` · record S${best.w} à ${String(best.v).replace(".",",")} t`}
+      </div>
+      <div style={{display:"flex",alignItems:"flex-end",gap:7,height:78}}>
+        {data.map((d,i)=>(
+          <div key={d.k} style={{flex:1,minWidth:0,height:"100%",display:"flex",flexDirection:"column",justifyContent:"flex-end"}}>
+            <div style={{fontSize:9.5,color:C.ink4,textAlign:"center",marginBottom:4,
+              fontVariantNumeric:"tabular-nums",opacity:d.v>0?1:0}}>{String(d.v).replace(".",",")}</div>
+            <div style={{height:`${Math.max(4,(d.v/max)*78)}%`,borderRadius:"7px 7px 3px 3px",
+              background:i===data.length-1?(accent||C.blue):C.s2,transition:`height 420ms ${EO}`}}/>
+          </div>
+        ))}
+      </div>
+      <div style={{display:"flex",gap:7,marginTop:6}}>
+        {data.map(d=>(<span key={d.k} style={{flex:1,textAlign:"center",fontSize:9.5,color:C.ink4,
+          fontVariantNumeric:"tabular-nums"}}>S{d.w}</span>))}
       </div>
     </div>
   );
@@ -2374,127 +2434,189 @@ function SkillsOctagon({sessions,profile}) {
   );
 }
 
-function StatsTab({sessions,weights,accent,onOpenPhotos,pinnedPBs,onManagePBs,activeSkills,onManageSkills,onOpenRewards,trainingDaysPerWeek,profile}) {
+// Stats en trois vues plutot qu'en une colonne sans fin. La page empilait onze blocs
+// pleine largeur de hauteurs toutes differentes : on scrollait quatre ecrans pour trois
+// questions distinctes. Une question par vue, une vue par ecran.
+//   Resume — ou j'en suis      Corps — comment j'evolue      Force — ce que je vaux
+function StatsTab({sessions,weights,accent,onOpenPhotos,pinnedPBs,onManagePBs,activeSkills,onManageSkills,onOpenRewards,trainingDaysPerWeek,profile,weighIns,onSaveWeighIn,children}) {
+  const [view,setView]=useState("resume");
   const total=sessions.length,totalKg=sessions.reduce((a,s)=>a+(s.totalKg||0),0);
   const avgScore=total?Math.round(sessions.reduce((a,s)=>a+computeScore(s.totalKg,s.totalSets,s.feedback,targetOf(s)),0)/total):0;
   const pbs=useMemo(()=>computePBs(sessions),[sessions]);
   const pinnedSet=new Set(pinnedPBs||[]);
   const displayedPBs=(pinnedPBs&&pinnedPBs.length)?pbs.filter(pb=>pinnedSet.has(pb.id)):pbs.slice(0,4);
-  const volumeByWeek=useMemo(()=>{
-    const weeks={};sessions.forEach(s=>{const w=s.date.slice(0,7);weeks[w]=(weeks[w]||0)+(s.totalKg||0);});
-    return Object.entries(weeks).slice(-8).map(([w,v])=>({date:w.slice(5),v:Math.round(v/1000)}));
+  const totalMin=Math.round(sessions.reduce((a,s)=>a+(Number(s.duration)||0),0)/60);
+  const totalTime=totalMin>=60?`${Math.floor(totalMin/60)}h${String(totalMin%60).padStart(2,"0")}`:`${totalMin}min`;
+  const badges=useMemo(()=>computeBadges(sessions),[sessions]);
+  const earned=badges.filter(b=>b.ok).length;
+  // Variation du volume d'une semaine a l'autre, en semaines reelles.
+  const trend=useMemo(()=>{
+    const w={};sessions.forEach(x=>{if(x&&x.date)w[mondayOf(x.date)]=(w[mondayOf(x.date)]||0)+(x.totalKg||0);});
+    const ks=Object.keys(w).sort();if(ks.length<2)return null;
+    const a=w[ks[ks.length-2]],b=w[ks[ks.length-1]];
+    return a>0?Math.round((b/a-1)*100):null;
   },[sessions]);
 
-  return(
-    <div style={{padding:"20px 18px 16px",maxWidth:600,margin:"0 auto",fontFamily:F}}>
-      
+  const CARD={background:C.bg,border:`1px solid ${C.s2}`,boxShadow:`0 3px 16px ${C.ink5}`,borderRadius:22};
+  const LBL={fontSize:10,fontWeight:600,letterSpacing:".11em",textTransform:"uppercase",color:C.ink4};
+  // Une seule fabrique de tuile : les hauteurs cessent d'etre subies bloc par bloc.
+  const Tile=({label,value,unit,sub,onTap:tap,icon})=>{
+    const inner=(
+      <div style={{height:86,display:"flex",flexDirection:"column",justifyContent:"space-between"}}>
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8}}>
+          <span style={LBL}>{label}</span>
+          {icon&&<Icon name={icon} size={15} stroke={C.ink4}/>}
+        </div>
+        <div>
+          <div style={{fontSize:21,fontWeight:500,color:C.ink,letterSpacing:"-.03em",lineHeight:1,
+            fontVariantNumeric:"tabular-nums"}}>{value}{unit&&<span style={{fontSize:12,fontWeight:400,color:C.ink4}}> {unit}</span>}</div>
+          {sub&&<div style={{fontSize:10.5,color:C.ink4,marginTop:3,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{sub}</div>}
+        </div>
+      </div>
+    );
+    const st={...CARD,padding:"13px 14px"};
+    return tap?<Tap label={label} onTap={tap} style={st}>{inner}</Tap>:<div style={st}>{inner}</div>;
+  };
 
-      {/* Carte maitresse : meme grammaire que l'accueil - libelle, grand nombre, pastilles. */}
-      <div style={{background:C.bg,border:`1px solid ${C.s2}`,borderRadius:24,padding:"17px 18px",
-                   boxShadow:`0 3px 16px ${C.ink5}`,marginBottom:11}}>
-        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:10}}>
-          <span style={{fontSize:14.5,fontWeight:600,color:C.ink}}>Volume total soulevé</span>
-          <span style={{fontSize:10.5,fontWeight:600,padding:"4px 11px",borderRadius:999,background:C.s2,color:C.ink3}}>Depuis le début</span>
-        </div>
-        <div style={{fontSize:38,fontWeight:500,color:C.ink,letterSpacing:"-.035em",lineHeight:1,marginTop:10,fontVariantNumeric:"tabular-nums"}}>
-          {totalKg>0?String(Math.round(totalKg/100)/10).replace(".",","):"—"}
-          <span style={{fontSize:13,fontWeight:400,color:C.ink4}}> tonnes</span>
-        </div>
-        <div style={{display:"flex",gap:5,marginTop:11,flexWrap:"wrap"}}>
-          <span style={{fontSize:10.5,fontWeight:600,padding:"4px 11px",borderRadius:999,background:C.ink,color:C.bg}}>{total} séances</span>
-          <span style={{fontSize:10.5,fontWeight:600,padding:"4px 11px",borderRadius:999,background:C.ink,color:C.bg}}>score moyen {avgScore||"—"}</span>
+  const VIEWS=[["resume","Résumé"],["corps","Corps"],["force","Force"]];
+  return(
+    <div style={{padding:"14px 18px 16px",maxWidth:600,margin:"0 auto",fontFamily:F}}>
+
+      {/* Selecteur de vue. Colle en haut : on change de vue sans remonter. */}
+      <div style={{position:"sticky",top:0,zIndex:Z.sticky,background:C.bg,paddingBottom:11,marginBottom:0}}>
+        <div style={{display:"flex",gap:4,background:C.s1,borderRadius:999,padding:4}} role="tablist">
+          {VIEWS.map(([k,l])=>{
+            const on=view===k;
+            return(
+              <Tap key={k} label={l} onTap={()=>{setView(k);play("tick");}}
+                style={{flex:1,padding:"9px 0",borderRadius:999,background:on?C.bg:"transparent",
+                  boxShadow:on?`0 2px 9px ${C.ink5}`:"none",display:"flex",alignItems:"center",
+                  justifyContent:"center",transition:`all 220ms ${EO}`}}>
+                <span style={{fontSize:13,fontWeight:on?600:500,color:on?C.ink:C.ink4}}>{l}</span>
+              </Tap>
+            );
+          })}
         </div>
       </div>
-      {/* Trois mesures cote a cote */}
-      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:11,marginBottom:16}}>
-        {[
-          {l:"Séances",v:total,ic:"check"},
-          {l:"Score moyen",v:avgScore||"—",ic:"target"},
-          {l:"Cette semaine",v:sessions.filter(s=>{const d=new Date();const dow=d.getDay()===0?6:d.getDay()-1;const wd=new Date(d);wd.setDate(d.getDate()-dow);return s.date>=localDateKey(wd);}).length,ic:"flame"},
-        ].map(({l,v,ic})=>(
-          <div key={l} style={{background:C.bg,border:`1px solid ${C.s2}`,borderRadius:22,padding:"14px 12px",
-                               boxShadow:`0 3px 16px ${C.ink5}`}}>
-            <Icon name={ic} size={17} stroke={C.ink4}/>
-            <div style={{fontSize:21,fontWeight:500,color:C.ink,letterSpacing:"-.03em",marginTop:9,fontVariantNumeric:"tabular-nums"}}>{v}</div>
-            <div style={{fontSize:10.5,fontWeight:500,color:C.ink4,marginTop:2}}>{l}</div>
+
+      {view==="resume"&&(
+      <div key="resume" style={{animation:`riseIn 300ms ${EO} both`}}>
+        {/* Chiffre-titre : le seul bloc pleine largeur de la vue. */}
+        <div style={{background:C.blue,border:`1px solid ${C.blue}`,borderRadius:24,padding:"17px 18px",marginBottom:11}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:10}}>
+            <span style={{fontSize:12,fontWeight:600,color:"rgba(27,27,27,.62)"}}>Volume total soulevé</span>
+            {trend!==null&&<span style={{fontSize:10.5,fontWeight:600,padding:"4px 11px",borderRadius:999,
+              background:"rgba(255,255,255,.5)",color:"#1B1B1B"}}>{trend>0?"+":""}{trend} % cette semaine</span>}
           </div>
-        ))}
-      </div>
-      {/* Bilan de la semaine et profil de competences, apres les mesures : la page
-          commencait par eux, ce qui repoussait les chiffres essentiels sous la ligne de
-          flottaison et donnait l'impression d'une colonne sans fin. */}
-      <WeekSummary sessions={sessions} accent={accent} trainingDaysPerWeek={trainingDaysPerWeek}/>
-      {/* Volume chart */}
-      {volumeByWeek.length>1&&(
-        <div style={{background:C.bg,border:`1px solid ${C.s2}`,boxShadow:`0 3px 16px ${C.ink5}`,borderRadius:22,padding:"16px 17px",marginBottom:11}}>
-          <div style={{fontSize:14,fontWeight:600,color:C.ink,marginBottom:4}}>Volume hebdomadaire</div>
-          <div style={{fontSize:12,color:C.ink4,marginBottom:16}}>Tonnes soulevées par semaine</div>
-          <ProgressLine data={volumeByWeek} color={accent||C.blue}/>
-        </div>
-      )}
-      <SkillsOctagon sessions={sessions} profile={profile}/>
-      {/* Personal Bests - vue compacte + gestion */}
-      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
-        <span style={{fontSize:12,fontWeight:600,color:C.ink4,textTransform:"uppercase",letterSpacing:".1em"}}>Personal Bests</span>
-        {pbs.length>0&&onManagePBs&&<Tap onTap={onManagePBs} style={{padding:"6px 12px",borderRadius:999,background:C.s2}}><span style={{fontSize:12,fontWeight:600,color:C.ink3}}>Gérer ({(pinnedPBs||[]).length}/5) ›</span></Tap>}
-      </div>
-      {pbs.length===0?<div style={{textAlign:"center",padding:"32px 0",fontSize:15,color:C.ink4}}>Réalise des séances avec charges pour débloquer tes PB.</div>:
-        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:11,marginBottom:8}}>{displayedPBs.map((pb,i)=>(
-          <div key={pb.id||i} style={{background:C.bg,border:`1px solid ${C.s2}`,boxShadow:`0 3px 16px ${C.ink5}`,borderRadius:22,padding:"14px 15px",display:"flex",flexDirection:"column",gap:8}}>
-            <div style={{display:"flex",alignItems:"flex-start",gap:9,minWidth:0}}>
-              <svg width="15" height="15" style={{flexShrink:0,marginTop:2}} viewBox="0 0 24 24" fill="none" stroke={C.ink4} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">{PBCAT_ICON[PBCAT[Array.isArray(pb.eq)?pb.eq[0]:pb.eq]]||PBCAT_ICON.Autre}</svg>
-              <div style={{minWidth:0}}><div style={{fontSize:13.5,fontWeight:500,color:C.ink,lineHeight:1.25}}>{pb.n}</div><div style={{fontSize:11,color:C.ink4,marginTop:1,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{pb.m}</div></div>
-            </div>
-            <div style={{fontSize:21,fontWeight:500,color:C.ink,letterSpacing:"-.02em",fontVariantNumeric:"tabular-nums"}}>{pb.pbKg===0?"PdC":pb.pbKg+" kg"}</div>
+          <div style={{fontSize:39,fontWeight:500,color:"#1B1B1B",letterSpacing:"-.035em",lineHeight:1,marginTop:9,
+            fontVariantNumeric:"tabular-nums"}}>
+            {totalKg>0?String(Math.round(totalKg/100)/10).replace(".",","):"—"}
+            <span style={{fontSize:13,fontWeight:400,color:"rgba(27,27,27,.55)"}}> tonnes</span>
           </div>
-        ))}</div>}
-      {/* Apprentissage */}
-      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
-        <span style={{fontSize:12,fontWeight:600,color:C.ink4,textTransform:"uppercase",letterSpacing:".1em"}}>Apprentissage</span>
-        {onManageSkills&&<Tap onTap={onManageSkills} style={{padding:"6px 12px",borderRadius:999,background:C.s2}}><span style={{fontSize:12,fontWeight:600,color:C.ink3}}>Gérer ({(activeSkills||[]).length}/2) ›</span></Tap>}
-      </div>
-      {(!activeSkills||activeSkills.length===0)?(
-        <div style={{textAlign:"center",padding:"24px 0",fontSize:14,color:C.ink4,marginBottom:16}}>Ajoute un mouvement à apprendre (muscle-up, pistol squat...).</div>
-      ):(activeSkills.map(as=>{
-        const sk=SKILLS_CATALOG.find(s=>s.id===as.skillId);
-        if(!sk) return null;
-        const step=sk.steps[as.stepIndex]||sk.steps[sk.steps.length-1];
-        const pct=Math.round(((as.stepIndex)/sk.steps.length)*100);
-        return(
-          <div key={as.skillId} style={{background:C.bg,border:`1px solid ${C.s2}`,boxShadow:`0 3px 16px ${C.ink5}`,borderRadius:22,padding:"16px 17px",marginBottom:11}}>
-            <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:8}}>
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={C.ink3} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">{sk.icon}</svg>
-              <div style={{flex:1}}>
-                <div style={{fontSize:15,fontWeight:600,color:C.ink}}>{sk.name}</div>
-                <div style={{fontSize:12,color:C.ink3}}>Étape {as.stepIndex+1}/{sk.steps.length} · {step.label}</div>
-              </div>
-            </div>
-            <div style={{height:4,borderRadius:2,background:C.s2,overflow:"hidden"}}><div style={{height:"100%",width:`${pct}%`,background:C.blue,borderRadius:2}}/></div>
+          <div style={{fontSize:11.5,color:"rgba(27,27,27,.62)",marginTop:6}}>
+            sur {total} séance{total>1?"s":""}{profile&&profile.total_sessions?` · programme ${Math.min(total,profile.total_sessions)} / ${profile.total_sessions}`:""}
           </div>
-        );
-      }))}
-      {(()=>{const B=computeBadges(sessions);const earned=B.filter(b=>b.ok).length;
-      const cats=[...new Set(B.map(b=>b.cat))];
-      return(
-      <div style={{marginTop:0,background:C.bg,border:`1px solid ${C.s2}`,boxShadow:`0 3px 16px ${C.ink5}`,borderRadius:22,padding:"16px 17px",marginBottom:11}}>
-        <div style={{display:"flex",alignItems:"baseline",justifyContent:"space-between",marginBottom:12}}>
-          <span style={{fontSize:11,fontWeight:600,color:C.ink3,textTransform:"uppercase",letterSpacing:".15em"}}>Récompenses</span>
-          {onOpenRewards&&<Tap onTap={onOpenRewards} style={{padding:"6px 12px",borderRadius:999,background:C.s2}}><span style={{fontSize:12,fontWeight:600,color:C.ink3}}>Voir tout ({earned}/{B.length}) ›</span></Tap>}
         </div>
-        {cats.map(cat=>{
-          const list=B.filter(b=>b.cat===cat);
-          const earnedList=list.filter(b=>b.ok);
-          const current=earnedList[earnedList.length-1];
-          const next=list.find(b=>!b.ok);
+
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:9,marginBottom:11}}>
+          <Tile label="Séances" value={total} icon="check"/>
+          <Tile label="Temps" value={totalTime} icon="clock"/>
+          <Tile label="Score" value={avgScore||"—"} icon="target"/>
+        </div>
+
+        <WeekSummary sessions={sessions} accent={accent} trainingDaysPerWeek={trainingDaysPerWeek}/>
+        <VolumeBars sessions={sessions} accent={accent}/>
+
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:9,marginBottom:11}}>
+          <Tile label="Records" value={pbs.length} sub="Voir la vue Force ›" icon="flame" onTap={()=>setView("force")}/>
+          <Tile label="Récompenses" value={earned} unit={`/ ${badges.length}`} sub="Voir tout ›" icon="bell" onTap={onOpenRewards}/>
+        </div>
+
+        {children}
+      </div>)}
+
+      {view==="corps"&&(
+      <div key="corps" style={{animation:`riseIn 300ms ${EO} both`}}>
+        <WeightChart weighIns={weighIns} accent={accent}/>
+        {onSaveWeighIn&&<WeighInCard weighIns={weighIns} onSave={onSaveWeighIn}/>}
+        {(()=>{
+          const vs=(weighIns||[]).map(w=>Number(w.weight_kg)).filter(v=>v>0);
+          const lo=vs.length?Math.min(...vs):null,hi=vs.length?Math.max(...vs):null;
           return(
-            <div key={cat} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"9px 0",borderTop:`1px solid ${C.s2}`}}>
-              <span style={{fontSize:13,color:C.ink3}}>{cat}</span>
-              <span style={{fontSize:13,fontWeight:600,color:current?C.ink:C.ink4}}>{current?current.t:(next?`prochain : ${next.t}`:"—")}</span>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:9,marginBottom:11}}>
+              <Tile label="Photos" value="Progression" sub="Comparer deux clichés ›" icon="camera" onTap={onOpenPhotos}/>
+              <Tile label="Amplitude" value={lo!==null?String(Math.round((hi-lo)*10)/10).replace(".",","):"—"} unit="kg"
+                sub={lo!==null?`${String(lo).replace(".",",")} → ${String(hi).replace(".",",")} kg`:"Pas encore de pesée"} icon="weight"/>
             </div>
           );
-        })}
-      </div>
-    );})()}
+        })()}
+      </div>)}
+
+      {view==="force"&&(
+      <div key="force" style={{animation:`riseIn 300ms ${EO} both`}}>
+        <SkillsOctagon sessions={sessions} profile={profile}/>
+
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,marginBottom:9,padding:"0 2px"}}>
+          <span style={LBL}>Records</span>
+          {pbs.length>0&&onManagePBs&&<Tap label="Gérer les records" onTap={onManagePBs}
+            style={{padding:"6px 12px",borderRadius:999,background:C.s2}}>
+            <span style={{fontSize:11.5,fontWeight:600,color:C.ink3}}>Gérer ({(pinnedPBs||[]).length}/5) ›</span></Tap>}
+        </div>
+        {pbs.length===0
+          ?<div style={{...CARD,padding:"24px 17px",textAlign:"center",fontSize:13.5,color:C.ink4,marginBottom:11}}>
+             Réalise des séances avec charges pour débloquer tes records.</div>
+          :<div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:9,marginBottom:11}}>
+            {displayedPBs.map((pb,i)=>(
+              <div key={pb.id||i} style={{...CARD,padding:"13px 14px",height:86,display:"flex",
+                flexDirection:"column",justifyContent:"space-between"}}>
+                <div style={{display:"flex",alignItems:"flex-start",gap:8,minWidth:0}}>
+                  <svg width="14" height="14" style={{flexShrink:0,marginTop:2}} viewBox="0 0 24 24" fill="none"
+                    stroke={C.ink4} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    {PBCAT_ICON[PBCAT[Array.isArray(pb.eq)?pb.eq[0]:pb.eq]]||PBCAT_ICON.Autre}</svg>
+                  <div style={{minWidth:0}}>
+                    <div style={{fontSize:12.5,fontWeight:500,color:C.ink,lineHeight:1.22}}>{pb.n}</div>
+                    <div style={{fontSize:10.5,color:C.ink4,marginTop:1,whiteSpace:"nowrap",overflow:"hidden",
+                      textOverflow:"ellipsis"}}>{pb.m}</div>
+                  </div>
+                </div>
+                <div style={{fontSize:21,fontWeight:500,color:C.ink,letterSpacing:"-.03em",lineHeight:1,
+                  fontVariantNumeric:"tabular-nums"}}>{pb.pbKg===0?"PdC":String(pb.pbKg).replace(".",",")+" kg"}</div>
+              </div>
+            ))}
+          </div>}
+
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,marginBottom:9,padding:"0 2px"}}>
+          <span style={LBL}>Apprentissage</span>
+          {onManageSkills&&<Tap label="Gérer les apprentissages" onTap={onManageSkills}
+            style={{padding:"6px 12px",borderRadius:999,background:C.s2}}>
+            <span style={{fontSize:11.5,fontWeight:600,color:C.ink3}}>Gérer ({(activeSkills||[]).length}/2) ›</span></Tap>}
+        </div>
+        {(!activeSkills||activeSkills.length===0)
+          ?<div style={{...CARD,padding:"24px 17px",textAlign:"center",fontSize:13.5,color:C.ink4}}>
+             Ajoute un mouvement à apprendre — muscle-up, pistol squat…</div>
+          :activeSkills.map(as=>{
+            const sk=SKILLS_CATALOG.find(x=>x.id===as.skillId);
+            if(!sk) return null;
+            const step=sk.steps[as.stepIndex]||sk.steps[sk.steps.length-1];
+            const pct=Math.round((as.stepIndex/sk.steps.length)*100);
+            return(
+              <div key={as.skillId} style={{...CARD,padding:"14px 16px",marginBottom:9}}>
+                <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:9}}>
+                  <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke={C.ink3} strokeWidth="1.8"
+                    strokeLinecap="round" strokeLinejoin="round">{sk.icon}</svg>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{fontSize:14,fontWeight:600,color:C.ink}}>{sk.name}</div>
+                    <div style={{fontSize:11.5,color:C.ink4}}>Étape {as.stepIndex+1}/{sk.steps.length} · {step.label}</div>
+                  </div>
+                  <span style={{fontSize:11.5,fontWeight:600,color:C.ink3,fontVariantNumeric:"tabular-nums"}}>{pct} %</span>
+                </div>
+                <div style={{height:5,borderRadius:3,background:C.s2,overflow:"hidden"}}>
+                  <div style={{height:"100%",width:`${pct}%`,background:accent||C.blue,borderRadius:3,
+                    transition:`width 420ms ${EO}`}}/></div>
+              </div>
+            );
+          })}
+      </div>)}
     </div>
   );
 }
@@ -3018,7 +3140,7 @@ function SettingsTab({user,excluded,onToggleExclude,onSignOut,onReset,onOpenLibr
           <span style={{fontSize:17,color:C.red}}>›</span>
         </Tap>
       </div>
-      <div style={{fontSize:12,color:C.ink4,textAlign:"center",marginTop:28}}>SŌMA · {"S"+weekNumber()} · {DB.length} exercices · build 23.87a</div>
+      <div style={{fontSize:12,color:C.ink4,textAlign:"center",marginTop:28}}>SŌMA · {"S"+weekNumber()} · {DB.length} exercices · build 23.88a</div>
     </div>
   );
 }
@@ -4391,7 +4513,7 @@ const NAV=[{id:"home",l:"Accueil"},{id:"seance",l:"Séances"},{id:"stats",l:"Sta
               )}
             </div>
           )}
-          {tab==="stats"&&<><div style={{padding:"20px 18px 0",maxWidth:600,margin:"0 auto"}}><WeightChart weighIns={weighIns} accent={accent}/></div><StatsTab sessions={sessions} weights={weights} accent={accent} trainingDaysPerWeek={trainingDaysPerWeek} profile={profile} pinnedPBs={profile?.pinned_pbs} onManagePBs={()=>setShowPBManager(true)} activeSkills={profile?.active_skills} onManageSkills={()=>setShowSkillManager(true)} onOpenRewards={()=>setShowRewardsManager(true)}/><HistoryTab sessions={sessions} onSelect={setShowReport} accent={accent} onOpenPhotos={()=>setShowPhotos(true)} photos={photos} urls={photoUrls}/></>}
+          {tab==="stats"&&<StatsTab sessions={sessions} weights={weights} accent={accent} trainingDaysPerWeek={trainingDaysPerWeek} profile={profile} weighIns={weighIns} onSaveWeighIn={saveWeighIn} onOpenPhotos={()=>setShowPhotos(true)} pinnedPBs={profile?.pinned_pbs} onManagePBs={()=>setShowPBManager(true)} activeSkills={profile?.active_skills} onManageSkills={()=>setShowSkillManager(true)} onOpenRewards={()=>setShowRewardsManager(true)}><HistoryTab sessions={sessions} onSelect={setShowReport} accent={accent} onOpenPhotos={()=>setShowPhotos(true)} photos={photos} urls={photoUrls}/></StatsTab>}
           {tab==="settings"&&<SettingsTab user={user} excluded={excluded} onToggleExclude={toggleExclude} onOpenLibrary={()=>setShowLibrary(true)} profile={profile} schedule={schedule} avatarUrl={avatarUrl} onUpdateConfig={updateConfig} onOpenScheduleEditor={()=>setShowSched(true)} onRedoOnboarding={()=>setShowOnboardingRedo(true)}
             onSignOut={async()=>{await supabase.auth.signOut();setUser(null);setLog({});setWeights({});setSessions([]);setExcluded([]);setStreak(0);}}
             onReset={async()=>{
@@ -4492,6 +4614,8 @@ const NAV=[{id:"home",l:"Accueil"},{id:"seance",l:"Séances"},{id:"stats",l:"Sta
     </div>
   );
 }
+
+
 
 
 
