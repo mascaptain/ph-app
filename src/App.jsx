@@ -156,7 +156,7 @@ const REST_TPL = {label:"Repos",salle:null,muscle:"Recuperation active",exercise
 const SESSION_TEMPLATES = [...PROGRAM.filter(d=>d.salle).map(d=>({label:d.label,salle:d.salle,muscle:d.muscle,exercises:d.exercises,abs:d.abs,ids:d.ids})), REST_TPL];
 
 // Rotation hebdo - mesocycle hybride (Volume -> Intensite -> Puissance -> Deload)
-const VERSION="1.38.0";
+const VERSION="1.38.1";
 const weekNumber = () => { const dt=new Date(); const d=new Date(Date.UTC(dt.getFullYear(),dt.getMonth(),dt.getDate())); const dn=(d.getUTCDay()+6)%7; d.setUTCDate(d.getUTCDate()-dn+3); const ft=new Date(Date.UTC(d.getUTCFullYear(),0,4)); const fn=(ft.getUTCDay()+6)%7; ft.setUTCDate(ft.getUTCDate()-fn+3); return 1+Math.round((d-ft)/604800000); };
 const PHASES12=[{n:"Accumulation",f:"Volume, base"},{n:"Accumulation",f:"Volume"},{n:"Accumulation",f:"Volume +"},{n:"Intensification",f:"Charges +"},{n:"Intensification",f:"Charges ++"},{n:"Intensification",f:"Lourd"},{n:"Réalisation",f:"Explosif"},{n:"Réalisation",f:"Puissance"},{n:"Réalisation",f:"Pic de force"},{n:"Deload",f:"Récupération"},{n:"Test / PR",f:"Validation"},{n:"Test / PR",f:"Nouveaux maxs"}];
 const programWeek=()=>((weekNumber()-1)%12)+1;
@@ -1062,8 +1062,10 @@ const kbStep=(kg,dir)=>{ const i=KB_RACK.indexOf(snapKb(kg));
 const isFixedLoad=(ex)=>{const e=ex&&ex.eq;const k=Array.isArray(e)?e[0]:e;return !!FIXED_LOAD_EQ[k];};
 // Echauffement : chaque mouvement porte sa duree, et la somme fait exactement 5 min.
 const WARMUP={
-  haut:[["Rotations épaules","60s"],["Wall slide","60s"],["Push-up to downdog","90s"],["Mobilité thoracique","90s"]],
-  bas :[["Corde à sauter","90s"],["Hip circle","60s"],["Leg swing","60s"],["KB Swing léger","90s"]],
+  haut:[["Rotations épaules","60s"],["Wall slide","60s"],["Push-up to downdog","60s"],
+        ["Mobilité thoracique","60s"],["Band pull-apart","60s"]],
+  bas :[["Corde à sauter","60s"],["Hip circle","60s"],["Leg swing","60s"],
+        ["Squat à vide","60s"],["KB Swing léger","60s"]],
 };
 const warmupExos=(salle)=>(WARMUP[salle==="haut"?"haut":"bas"]).map(([n,d],i)=>(
   {id:`warm_${salle==="haut"?"h":"b"}${i}`,n,m:"Échauffement",eq:"bw",kg:0,sets:1,reps:d,rest:0,aux:"warmup"}));
@@ -4652,10 +4654,14 @@ const NAV=[{id:"home",l:"Accueil"},{id:"seance",l:"Séances"},{id:"stats",l:"Sta
       {showSkillManager&&<SkillManagerSheet activeSkills={profile?.active_skills} onSave={(sel)=>updateConfig({active_skills:sel})} onClose={()=>setShowSkillManager(false)}/>}
       {showRewardsManager&&<RewardsManagerSheet sessions={sessions} onClose={()=>setShowRewardsManager(false)}/>}
       {/* Overlays plein ecran sortis du wrapper anime (position:fixed casse sous un ancetre avec transform) */}
-      {focusIdx!=null&&focusList[focusIdx]&&(
-        <ExerciseFocus key={focusList[focusIdx].id} ex={focusList[focusIdx]} idx={focusIdx} count={focusList.length} dayIdx={dayIdx} sDate={sDate}
+      {focusIdx!=null&&focusList[focusIdx]&&(()=>{
+        const seg=(focusIdx<WARM_OFF)?[0,WARM_OFF]
+          :(focusIdx<ABS_OFF)?[WARM_OFF,ABS_OFF]
+          :(focusIdx<SKILL_OFF)?[ABS_OFF,SKILL_OFF]:[SKILL_OFF,focusList.length];
+        return (
+        <ExerciseFocus key={focusList[focusIdx].id} ex={focusList[focusIdx]} idx={focusIdx-seg[0]} count={seg[1]-seg[0]} dayIdx={dayIdx} sDate={sDate}
           log={log} onLogSet={saveLog} onDetail={e=>setDetailEx(e)} lastPerf={perf[focusList[focusIdx].id]} originY={focusOrigin}
-          onClose={()=>setFocusIdx(null)} hasNext={focusIdx<focusList.length-1} onNext={()=>{
+          onClose={()=>setFocusIdx(null)} hasNext={focusIdx<seg[1]-1} onNext={()=>{
             const _n=focusList[focusIdx+1];
             if(_n&&_n.circuitId){
               const _g=exos.filter(e=>e.circuitId===_n.circuitId);
@@ -4664,8 +4670,8 @@ const NAV=[{id:"home",l:"Accueil"},{id:"seance",l:"Séances"},{id:"stats",l:"Sta
             }else{
               setFocusIdx(focusIdx+1);
             }
-          }}/>
-      )}
+          }}/>);
+      })()}
       {supBlock&&<CircuitPlayer mode={supBlock.kind} exos={supBlock.exercises} blocks={[supBlock]} onClose={()=>setSupBlock(null)} onAllDone={()=>{}} log={log} onLogSet={saveLog} sDate={sDate}/>}
       {showCircuit&&sessionMode!=="classique"&&exos.length>0&&(
         <CircuitPlayer mode={sessionMode} exos={exos} blocks={day.blocks} defMin={sessionMode==="amrap"?(day.timeCapMin||12):(day.emomMinutes||Math.max(exos.length,8))} onClose={()=>setShowCircuit(false)} onAllDone={()=>{clock.stop();setShowFeedback(true);}} startBlock={circuitStart} log={log} onLogSet={saveLog} sDate={sDate}/>
@@ -4725,6 +4731,7 @@ const NAV=[{id:"home",l:"Accueil"},{id:"seance",l:"Séances"},{id:"stats",l:"Sta
     </div>
   );
 }
+
 
 
 
