@@ -3238,7 +3238,7 @@ function SettingsTab({user,excluded,onToggleExclude,onSignOut,onReset,onOpenLibr
           <span style={{fontSize:17,color:C.red}}>›</span>
         </Tap>
       </div>
-      <div style={{fontSize:12,color:C.ink4,textAlign:"center",marginTop:28}}>SŌMA · {"S"+weekNumber()} · {DB.length} exercices · build 23.73a</div>
+      <div style={{fontSize:12,color:C.ink4,textAlign:"center",marginTop:28}}>SŌMA · {"S"+weekNumber()} · {DB.length} exercices · build 23.74a</div>
     </div>
   );
 }
@@ -3914,12 +3914,39 @@ export default function SomaApp() {
   const saveWeight=useCallback((id,val)=>{setWeights(prev=>{const next={...prev,[id]:val};persist(user?.id,{weights:next});return next;});},[persist]);
   const toggleExclude=useCallback(id=>{setExcluded(prev=>{const next=prev.includes(id)?prev.filter(x=>x!==id):[...prev,id];persist(user?.id,{excluded:next});return next;});},[persist]);
 
+  // Supprimer une seance laissait la base incoherente sur trois points : la sequence du
+  // programme ne reculait pas d'un cran, les records nes de cette seance survivaient a leur
+  // source, et l'ecriture locale persist({sessions}) etait devenue un appel mort depuis le S6.
   const deleteSession=useCallback(async(s)=>{
     const uid=user?.id;
-    setSessions(prev=>{const next=prev.filter(x=>x.date!==s.date);computeStreak(next);persist(uid,{sessions:next});return next;});
+    const next=(sessions||[]).filter(x=>x.date!==s.date);
+    setSessions(next); computeStreak(next);
     setShowReport(null);
-    if(uid){try{await supabase.from("sessions").delete().eq("user_id",uid).eq("date",s.date);}catch(e){console.error("del session",e);}}
-  },[user,persist]);
+    if(!uid) return;
+    enqueue(`del:${s.date}`,"suppression",()=>supabase.from("sessions").delete().eq("user_id",uid).eq("date",s.date));
+    // La sequence recule : sans cela le programme sautait un cran definitivement.
+    const idx=Math.max(0,(Number(profile&&profile.session_index)||0)-1);
+    if(updateConfigRef.current) updateConfigRef.current({session_index:idx});
+    // Les records sont recalcules depuis ce qui RESTE. Un record ne peut pas survivre a la
+    // seance qui l'a produit.
+    const best={};
+    next.forEach(x=>(x.exercises||[]).forEach(e=>{
+      if(!e||!e.id) return;
+      const w=Number(e.weight)||0;
+      if(!(w>0)||!(Number(e.completedSets)>0)) return;
+      if(!best[e.id]||w>best[e.id].weight_kg) best[e.id]={
+        user_id:uid,exercise_id:e.id,exercise_name:e.n||e.name||"",
+        weight_kg:w,reps:Number(e.reps)||8,one_rm:orm(w,String(e.reps||8)),achieved_at:x.date,
+      };
+    }));
+    const rows=Object.values(best);
+    setWeights(()=>{const m={};rows.forEach(r=>{m[r.exercise_id]=r.weight_kg;});return m;});
+    enqueue("pb:rebuild","records",async()=>{
+      const del=await supabase.from("personal_bests").delete().eq("user_id",uid);
+      if(del.error) return del;
+      return rows.length?await supabase.from("personal_bests").insert(rows):{error:null};
+    });
+  },[user,sessions,profile]);
 
   const toggleFav=useCallback(id=>{setFavorites(prev=>{const next=prev.includes(id)?prev.filter(x=>x!==id):[...prev,id];persist(user?.id,{favorites:next});return next;});},[persist]);
   const updateConfig=useCallback((updates)=>{
