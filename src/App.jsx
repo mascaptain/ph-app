@@ -1016,103 +1016,180 @@ const repsNum=(r)=>{const m=String(r||"").match(/\d+/);return m?parseInt(m[0]):0
 function HomeTab({profile,streak,sessions,weights,todaySession,onStartToday,accent,trainingDaysPerWeek,weighIns,onSaveWeighIn}) {
   const now=new Date();
   const wk=(()=>{const d=new Date(now);const day=(d.getDay()+6)%7;d.setDate(d.getDate()-day);d.setHours(0,0,0,0);return d;})();
-  // Meme fenetre que le bilan des statistiques : liste explicite des sept dates de la semaine.
-  // La comparaison new Date(s.date) >= lundi melangeait une date lue en UTC et un lundi local,
-  // et n'avait aucune borne haute - deux facons de ne pas tomber sur le meme total.
   const weekKeys=Array.from({length:7},(_,i)=>{const d=new Date(wk);d.setDate(wk.getDate()+i);return localDateKey(d);});
   const weekSessions=sessions.filter(s=>weekKeys.indexOf(s.date)>=0);
   const weekVol=weekSessions.reduce((a,s)=>a+(s.totalKg||0),0);
+  const weekSets=weekSessions.reduce((a,s)=>a+(Number(s.totalSets)||0),0);
   const totalSessions=sessions.length;
   const lwStart=new Date(wk);lwStart.setDate(lwStart.getDate()-7);
-  const lastWeekSessions=sessions.filter(s=>{const sd=new Date(s.date);return sd>=lwStart&&sd<wk;});
+  const lwKeys=Array.from({length:7},(_,i)=>{const d=new Date(lwStart);d.setDate(lwStart.getDate()+i);return localDateKey(d);});
+  const lastWeekSessions=sessions.filter(s=>lwKeys.indexOf(s.date)>=0);
   const lastWeekVol=lastWeekSessions.reduce((a,s)=>a+(s.totalKg||0),0);
   const volDeltaPct=lastWeekVol>0?Math.round((weekVol-lastWeekVol)/lastWeekVol*100):null;
-  // Temps d'entrainement cumule de la semaine : le tonnage seul ne dit rien de la charge
-  // de travail d'une semaine faite de seances courtes et denses.
   const fmtMin=(m)=>m>=60?`${Math.floor(m/60)}h${String(m%60).padStart(2,"0")}`:`${m} min`;
   const weekMin=Math.round(weekSessions.reduce((a,s)=>a+(Number(s.duration)||0),0)/60);
   const lastWeekMin=Math.round(lastWeekSessions.reduce((a,s)=>a+(Number(s.duration)||0),0)/60);
   const minDelta=weekMin-lastWeekMin;
   const sessDelta=weekSessions.length-lastWeekSessions.length;
   const showBilan=lastWeekSessions.length>0||weekSessions.length>0;
-  const bw=weights&&weights.length?weights[weights.length-1].kg:(profile&&profile.weight_kg);
   const hour=now.getHours();
   const hello=hour<12?"Bonjour":hour<18?"Bon après-midi":"Bonsoir";
   const name=(profile&&profile.name)?profile.name:"";
   const isRest=!todaySession||!todaySession.salle;
-  const progIndex=Math.min(profile?.session_index||0,profile?.total_sessions||0);
-  const progTotal=profile?.total_sessions||null;
+  const progIndex=Math.min(profile?.session_index||0,profile?.total_sessions||PROGRAM_SESSIONS);
+  const progTotal=profile?.total_sessions||PROGRAM_SESSIONS;
   const goalLabel=(GOALS.find(g=>g[0]===profile?.goal)||[])[1]||null;
-  const Stat=({v,l,sub})=>(<div style={{flex:1,background:C.s1,borderRadius:16,padding:"16px 14px"}}><div style={{fontSize:26,fontWeight:800,color:C.ink,lineHeight:1}}>{v}</div><div style={{fontSize:12,color:C.ink3,marginTop:6,fontWeight:600}}>{l}</div>{sub&&<div style={{fontSize:11,color:C.ink4,marginTop:2}}>{sub}</div>}</div>);
-  return (<div style={{padding:"20px 20px 0",maxWidth:600,margin:"0 auto"}}>
-    <div style={{fontSize:26,fontWeight:800,color:C.ink,letterSpacing:"-.02em",marginBottom:goalLabel?10:20}}>{hello}{name?(", "+name):""}</div>
-    {goalLabel&&<div style={{marginBottom:20}}>
-      <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",marginBottom:6}}>
-        <span style={{fontSize:13,fontWeight:700,color:C.ink2}}>Programme {goalLabel}</span>
-        {progTotal>0&&<span style={{fontSize:12,fontWeight:600,color:C.ink4}}>Séance {progIndex}/{progTotal}</span>}
+  const todayKeyStr=todayKey();
+
+  // Minutes par jour de la semaine : ce sont elles qui donnent la hauteur des barres.
+  const dayMin=weekKeys.map(k=>{
+    const found=sessions.filter(x=>x.date===k);
+    return Math.round(found.reduce((a,x)=>a+(Number(x.duration)||0),0)/60);
+  });
+  const maxMin=Math.max(1,...dayMin);
+  const DAYS=["L","M","M","J","V","S","D"];
+
+  // Courbe de poids : les huit dernieres pesees, ou le poids du profil a defaut.
+  const wpts=(weighIns||[]).slice().sort((a,b)=>String(a.date).localeCompare(String(b.date))).slice(-8)
+    .map(w=>Number(w.weight_kg)).filter(v=>v>0);
+  const lastW=wpts.length?wpts[wpts.length-1]:(Number(profile&&profile.weight_kg)||0);
+  const wDelta=wpts.length>1?Math.round((wpts[wpts.length-1]-wpts[0])*10)/10:null;
+
+  // ── briques visuelles du tableau de bord ──
+  const Card=({children,bg,pad,style})=>(
+    <div style={{background:bg||C.bg,borderRadius:24,padding:pad||"16px 17px",
+      boxShadow:`0 3px 16px ${C.ink5}`,border:`1px solid ${C.s2}`,...style}}>{children}</div>
+  );
+  const Pill=({children,bg,fg,style})=>(
+    <span style={{fontSize:10.5,fontWeight:600,padding:"4px 11px",borderRadius:999,whiteSpace:"nowrap",
+      background:bg||C.blueDim,color:fg||C.ink2,...style}}>{children}</span>
+  );
+  const K=({children})=>(<span style={{fontSize:11.5,fontWeight:500,color:C.ink4}}>{children}</span>);
+  const Row=({children,style})=>(<div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:10,...style}}>{children}</div>);
+  const Curve=({vals,h,stroke})=>{
+    const n=(vals||[]).length;
+    if(n<2) return <div style={{height:h||40}}/>;
+    const mn=Math.min(...vals),mx=Math.max(...vals),sp=(mx-mn)||1;
+    const W=120,H=h||40,P=5;
+    const pt=(v,i)=>[P+(i/(n-1))*(W-P*2),P+(1-(v-mn)/sp)*(H-P*2)];
+    const d=vals.map((v,i)=>`${i?"L":"M"}${pt(v,i)[0].toFixed(1)},${pt(v,i)[1].toFixed(1)}`).join(" ");
+    const last=pt(vals[n-1],n-1);
+    return (<svg viewBox={`0 0 ${W} ${H}`} width="100%" height={H} preserveAspectRatio="none" style={{display:"block",overflow:"visible"}}>
+      <path d={d} fill="none" stroke={stroke||C.blue} strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"/>
+      <circle cx={last[0]} cy={last[1]} r="3.4" fill={C.ink}/></svg>);
+  };
+
+  return (<div style={{padding:"18px 18px 0",maxWidth:600,margin:"0 auto",display:"flex",flexDirection:"column",gap:12}}>
+
+    {/* En-tete */}
+    <Row style={{marginBottom:2}}>
+      <div>
+        <K>{hello}</K>
+        <div style={{fontSize:21,fontWeight:600,color:C.ink,letterSpacing:"-.02em",lineHeight:1.15}}>{name||"Athlète"}</div>
       </div>
-      {progTotal>0&&<div style={{height:4,borderRadius:2,background:C.s2,overflow:"hidden"}}><div style={{height:"100%",width:`${Math.min(100,progIndex/progTotal*100)}%`,background:accent||C.blue,borderRadius:2,transition:`width 400ms ${EO}`}}/></div>}
-      {progTotal>0&&progIndex>=progTotal&&<div style={{marginTop:10,fontSize:12,fontWeight:600,color:C.green}}>Programme terminé — choisis un nouveau programme dans Réglages</div>}
-    </div>}
-    <div style={{background:isRest?C.s1:C.ink,borderRadius:20,padding:"20px",marginBottom:16}}>
-      <div style={{fontSize:12,fontWeight:700,letterSpacing:".1em",textTransform:"uppercase",color:isRest?C.ink4:"rgba(255,255,255,.55)",marginBottom:8}}>Aujourd'hui</div>
-      <div style={{fontSize:22,fontWeight:800,color:isRest?C.ink:"#fff",marginBottom:4}}>{todaySession?todaySession.label:"Repos"}</div>
-      <div style={{fontSize:13,color:isRest?C.ink3:"rgba(255,255,255,.7)",marginBottom:isRest?0:16}}>{todaySession?todaySession.muscle:"Récupération"}</div>
-      {!isRest&&<Tap onTap={onStartToday} style={{height:50,borderRadius:14,background:C.blue,display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{fontSize:15,fontWeight:800,color:"#000"}}>Démarrer la séance</span></Tap>}
-    </div>
-    <div style={{display:"flex",gap:10,marginBottom:12}}>
-      <Stat v={streak} l="Série" sub={streak>1?"jours d'affilée":"jour"}/>
-      <Stat v={weekSessions.length} l="Cette semaine" sub="séances"/>
-    </div>
-    <div style={{display:"flex",gap:10,marginBottom:12}}>
-      <Stat v={Math.round(weekVol).toLocaleString("fr-FR")} l="Volume semaine" sub="kg soulevés"/>
-      <Stat v={fmtMin(weekMin)} l="Temps semaine" sub="d'entraînement"/>
-      <Stat v={totalSessions} l="Total" sub="séances faites"/>
-    </div>
-    {onSaveWeighIn&&<WeighInCard weighIns={weighIns} onSave={onSaveWeighIn}/>}
-    {showBilan&&<div style={{background:C.s1,borderRadius:16,padding:"16px",marginBottom:12}}>
-      <div style={{fontSize:11,fontWeight:700,color:C.ink4,textTransform:"uppercase",letterSpacing:".1em",marginBottom:10}}>Bilan vs semaine dernière</div>
-      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
-        <span style={{fontSize:13,color:C.ink3}}>Séances</span>
-        <span style={{fontSize:14,fontWeight:700,color:C.ink}}>{weekSessions.length} <span style={{color:C.ink4,fontWeight:600}}>vs {lastWeekSessions.length}</span> {sessDelta!==0&&<span style={{color:sessDelta>0?C.green:C.red}}>{sessDelta>0?"▲":"▼"}{Math.abs(sessDelta)}</span>}</span>
-      </div>
-      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-        <span style={{fontSize:13,color:C.ink3}}>Temps</span>
-        <span style={{fontSize:14,fontWeight:700,color:C.ink}}>{fmtMin(weekMin)} <span style={{color:C.ink4,fontWeight:600}}>vs {fmtMin(lastWeekMin)}</span> {minDelta!==0&&<span style={{color:minDelta>0?C.green:C.red}}>{minDelta>0?"▲+":"▼"}{Math.abs(minDelta)} min</span>}</span>
-      </div>
-      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-        <span style={{fontSize:13,color:C.ink3}}>Volume</span>
-        <span style={{fontSize:14,fontWeight:700,color:C.ink}}>{Math.round(weekVol).toLocaleString("fr-FR")} kg {volDeltaPct!==null&&<span style={{color:volDeltaPct>=0?C.green:C.red}}>{volDeltaPct>=0?"▲+":"▼"}{Math.abs(volDeltaPct)}%</span>}</span>
-      </div>
-    </div>}
-    {progTotal>0&&(()=>{
-      const tdpw=trainingDaysPerWeek||5;
-      const paliers=phaseBlocksList().map(b=>({label:b.name,threshold:Math.min(progTotal,b.endWeek*tdpw)}));
-      return(
-        <div style={{background:C.s1,borderRadius:16,padding:"16px",marginBottom:12}}>
-          <div style={{fontSize:11,fontWeight:700,color:C.ink4,textTransform:"uppercase",letterSpacing:".1em",marginBottom:14}}>Paliers du programme</div>
-          <div style={{display:"flex",alignItems:"flex-start"}}>
-            {paliers.map((p,i)=>{
-              const reached=progIndex>=p.threshold;
-              const isCurrent=!reached&&(i===0||progIndex>=paliers[i-1].threshold);
-              return(
-                <div key={i} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",position:"relative"}}>
-                  {i>0&&<div style={{position:"absolute",top:14,right:"50%",width:"100%",height:2,background:reached||isCurrent?C.blue:C.s3,zIndex:0}}/>}
-                  <div style={{width:28,height:28,borderRadius:"50%",background:reached?C.blue:(isCurrent?C.bg:C.s2),border:`2px solid ${reached||isCurrent?C.blue:C.s3}`,display:"flex",alignItems:"center",justifyContent:"center",zIndex:1,flexShrink:0}}>
-                    <span style={{fontSize:12,fontWeight:700,color:reached?"#000":(isCurrent?C.blue:C.ink4)}}>{reached?"✓":i+1}</span>
-                  </div>
-                  <span style={{fontSize:10,fontWeight:600,color:reached||isCurrent?C.ink3:C.ink4,marginTop:6,textAlign:"center"}}>{p.label}</span>
-                  <span style={{fontSize:9,color:C.ink4,marginTop:1}}>{p.threshold}</span>
-                </div>
-              );
-            })}
+      <Pill bg={C.blue} fg="#1B1B1B" style={{fontSize:11,padding:"7px 14px"}}>Séance {progIndex} / {progTotal}</Pill>
+    </Row>
+
+    {/* Carte maitresse : volume de la semaine + barres hachurees, jour en cours plein */}
+    <Card>
+      <Row><span style={{fontSize:14.5,fontWeight:600,color:C.ink}}>Volume d'entraînement</span>
+        <Pill bg={C.s2} fg={C.ink3}>Semaine</Pill></Row>
+      <div style={{display:"flex",gap:14,alignItems:"flex-end",marginTop:12}}>
+        <div style={{flex:"0 0 auto",minWidth:104}}>
+          {volDeltaPct!==null&&<Pill>{volDeltaPct>=0?"+":""}{volDeltaPct} % vs S-1</Pill>}
+          <div style={{fontSize:36,fontWeight:500,color:C.ink,letterSpacing:"-.035em",lineHeight:1,marginTop:8,fontVariantNumeric:"tabular-nums"}}>
+            {String(Math.round(weekVol/100)/10).replace(".",",")}<span style={{fontSize:13,fontWeight:400,color:C.ink4}}> t</span>
+          </div>
+          <div style={{display:"flex",gap:5,marginTop:9,flexWrap:"wrap"}}>
+            <Pill bg={C.ink} fg={C.bg}>{fmtMin(weekMin)}</Pill>
+            <Pill bg={C.ink} fg={C.bg}>{weekSets} séries</Pill>
           </div>
         </div>
-      );
-    })()}
-    {bw>0&&<div style={{background:C.s1,borderRadius:16,padding:"14px 16px",display:"flex",alignItems:"center",justifyContent:"space-between"}}><span style={{fontSize:13,color:C.ink3,fontWeight:600}}>Poids de corps</span><span style={{fontSize:17,fontWeight:800,color:C.ink}}>{bw} kg</span></div>}
+        <div style={{flex:1,display:"flex",alignItems:"flex-end",gap:6,height:112}}>
+          {dayMin.map((m,i)=>{
+            const isToday=weekKeys[i]===todayKeyStr;
+            const h=Math.max(9,Math.round(m/maxMin*100));
+            return (<div key={i} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:5,height:"100%",justifyContent:"flex-end"}}>
+              <div title={`${m} min`} style={{width:"100%",height:`${h}%`,borderRadius:999,
+                background:isToday?C.ink:"transparent",
+                backgroundImage:isToday?"none":`repeating-linear-gradient(115deg, ${C.bg} 0 4px, ${C.s2} 4px 9px)`,
+                border:isToday?"none":`1px solid ${C.s2}`,transition:`height 480ms ${EO}`}}/>
+              <span style={{fontSize:9.5,fontWeight:500,color:isToday?C.ink:C.ink4}}>{DAYS[i]}</span>
+            </div>);
+          })}
+        </div>
+      </div>
+    </Card>
+
+    {/* Seance du jour + serie en cours */}
+    <Row style={{marginTop:2}}><span style={{fontSize:14.5,fontWeight:600,color:C.ink}}>Séance du jour</span>
+      {goalLabel&&<K>Programme {goalLabel}</K>}</Row>
+    <div style={{display:"flex",gap:11}}>
+      <Card bg={isRest?C.s1:C.blue} style={{flex:1.25,minWidth:0}}>
+        <K>{isRest?"Aujourd'hui":"À faire"}</K>
+        <div style={{fontSize:17,fontWeight:600,color:isRest?C.ink:"#1B1B1B",letterSpacing:"-.02em",lineHeight:1.15,marginTop:3}}>
+          {todaySession?todaySession.label:"Repos"}</div>
+        <div style={{fontSize:11.5,color:isRest?C.ink4:"rgba(27,27,27,.6)",marginTop:2,
+          overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+          {todaySession?todaySession.muscle:"Récupération active"}</div>
+        {!isRest&&<Tap label="Démarrer la séance" onTap={onStartToday}
+          style={{marginTop:12,height:44,borderRadius:14,background:"#1B1B1B",display:"flex",alignItems:"center",justifyContent:"center"}}>
+          <span style={{fontSize:14,fontWeight:600,color:"#FFF"}}>Démarrer</span></Tap>}
+      </Card>
+      <Card bg={C.s1} style={{flex:1,minWidth:0,display:"flex",flexDirection:"column"}}>
+        <K>Série en cours</K>
+        <div style={{fontSize:30,fontWeight:500,color:C.ink,letterSpacing:"-.03em",lineHeight:1,marginTop:4,fontVariantNumeric:"tabular-nums"}}>
+          {streak}<span style={{fontSize:12,fontWeight:400,color:C.ink4}}> {streak>1?"jours":"jour"}</span></div>
+        <div style={{marginTop:"auto",paddingTop:10}}>
+          <Curve vals={dayMin.some(v=>v>0)?dayMin:[0,1,0,2,1,0,1]} h={30} stroke={C.ink3}/>
+        </div>
+      </Card>
+    </div>
+
+    {/* Poids + avancement du programme */}
+    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:11}}>
+      <Card>
+        <Row><K>Poids de corps</K>{wDelta!==null&&wDelta!==0&&<Pill bg={C.s2} fg={C.ink3}>{wDelta>0?"+":""}{wDelta}</Pill>}</Row>
+        <div style={{marginTop:6}}><Curve vals={wpts.length>1?wpts:[lastW,lastW]} h={38}/></div>
+        <div style={{fontSize:24,fontWeight:500,color:C.ink,letterSpacing:"-.03em",marginTop:4,fontVariantNumeric:"tabular-nums"}}>
+          {lastW?String(lastW).replace(".",","):"—"}<span style={{fontSize:12,fontWeight:400,color:C.ink4}}> kg</span></div>
+      </Card>
+      <Card>
+        <Row><K>Programme</K><Pill bg={C.s2} fg={C.ink3}>{Math.round(progIndex/progTotal*100)} %</Pill></Row>
+        <div style={{fontSize:24,fontWeight:500,color:C.ink,letterSpacing:"-.03em",marginTop:6,fontVariantNumeric:"tabular-nums"}}>
+          {progIndex}<span style={{fontSize:12,fontWeight:400,color:C.ink4}}> / {progTotal}</span></div>
+        <div style={{display:"flex",gap:2.5,marginTop:11,height:26,alignItems:"flex-end"}}>
+          {Array.from({length:20},(_,i)=>(
+            <span key={i} style={{flex:1,height:"100%",borderRadius:999,
+              background:i<Math.round(progIndex/progTotal*20)?C.blue:C.s2,transition:`background 400ms ${EO}`}}/>
+          ))}
+        </div>
+        <div style={{fontSize:11,color:C.ink4,marginTop:7}}>{totalSessions} séances enregistrées</div>
+      </Card>
+    </div>
+
+    {onSaveWeighIn&&<WeighInCard weighIns={weighIns} onSave={onSaveWeighIn}/>}
+
+    {showBilan&&<Card bg={C.s1}>
+      <div style={{fontSize:11,fontWeight:600,color:C.ink4,textTransform:"uppercase",letterSpacing:".1em",marginBottom:10}}>Bilan vs semaine dernière</div>
+      {[["Séances",`${weekSessions.length} vs ${lastWeekSessions.length}`,sessDelta,""],
+        ["Temps",`${fmtMin(weekMin)} vs ${fmtMin(lastWeekMin)}`,minDelta," min"],
+        ["Volume",`${Math.round(weekVol).toLocaleString("fr-FR")} kg`,volDeltaPct," %"]].map(([l,v,d,u],i)=>(
+        <Row key={l} style={{padding:"6px 0",borderTop:i?`1px solid ${C.s2}`:"none"}}>
+          <span style={{fontSize:13,color:C.ink3}}>{l}</span>
+          <span style={{fontSize:13.5,fontWeight:500,color:C.ink}}>{v}
+            {d!==null&&d!==0&&<span style={{color:C.ink3,fontWeight:400}}> · {d>0?"+":""}{d}{u}</span>}</span>
+        </Row>
+      ))}
+    </Card>}
+
+    {progTotal>0&&progIndex>=progTotal&&<Card bg={C.blueDim}>
+      <span style={{fontSize:13,fontWeight:600,color:C.ink}}>Programme terminé — choisis un nouveau programme dans Réglages</span></Card>}
+
+    <div style={{height:6}}/>
   </div>);
 }
+
 function SessionSettingsSheet({day,curMode,onClose,onApply}) {
   const[mode,setMode]=useState(curMode||"classique");
   const[injury,setInjury]=useState([]);
@@ -2855,7 +2932,7 @@ function SettingsTab({user,excluded,onToggleExclude,onSignOut,onReset,onOpenLibr
           <span style={{fontSize:17,color:C.red}}>›</span>
         </Tap>
       </div>
-      <div style={{fontSize:12,color:C.ink4,textAlign:"center",marginTop:28}}>SŌMA · {"S"+weekNumber()} · {DB.length} exercices · build 23.78a</div>
+      <div style={{fontSize:12,color:C.ink4,textAlign:"center",marginTop:28}}>SŌMA · {"S"+weekNumber()} · {DB.length} exercices · build 23.79a</div>
     </div>
   );
 }
@@ -4260,3 +4337,4 @@ const NAV=[{id:"home",l:"Accueil"},{id:"seance",l:"Séances"},{id:"stats",l:"Sta
     </div>
   );
 }
+
