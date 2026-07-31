@@ -936,7 +936,7 @@ function AuthScreen({onAuth}) {
         {success&&<div style={{padding:"12px 16px",borderRadius:12,background:C.greenDim,marginBottom:16}}><span style={{fontSize:14,color:C.green}}>{success}</span></div>}
 
         {/* CTA */}
-        <Tap onTap={loading?null:handleSubmit} disabled={loading} style={{padding:"17px",borderRadius:16,background:loading?C.s3:C.blue,display:"flex",alignItems:"center",justifyContent:"center",transition:`background ${DUR.dropdown} ${EO}`}}>
+        <Tap onTap={loading?null:handleSubmit} disabled={loading} style={{padding:"17px",borderRadius:18,background:loading?C.s3:C.blue,display:"flex",alignItems:"center",justifyContent:"center",transition:`background ${DUR.dropdown} ${EO}`}}>
           <span style={{fontSize:17,fontWeight:600,color:loading?C.ink5:"#000"}}>
             {loading?"...":{login:"Se connecter",signup:"Créer le compte",magic:"Envoyer le lien"}[mode]}
           </span>
@@ -974,13 +974,13 @@ function RestFullScreen({timer,label,onSkip,onClose}) {
       </div>
       {/* Actions */}
       <div style={{display:"flex",gap:12}}>
-        {timer.running&&<Tap onTap={onSkip} style={{padding:"14px 28px",borderRadius:980,border:`1.5px solid ${C.div}`,background:"transparent"}}>
+        {timer.running&&<Tap onTap={onSkip} style={{padding:"14px 28px",borderRadius:999,border:`1.5px solid ${C.div}`,background:"transparent"}}>
           <span style={{fontSize:15,fontWeight:600,color:C.ink3}}>Passer</span>
         </Tap>}
-        {timer.done&&<Tap onTap={onClose} style={{padding:"14px 36px",borderRadius:980,background:C.blue}}>
+        {timer.done&&<Tap onTap={onClose} style={{padding:"14px 36px",borderRadius:999,background:C.blue}}>
           <span style={{fontSize:17,fontWeight:600,color:"#000"}}>Reprendre</span>
         </Tap>}
-        {!timer.done&&<Tap onTap={onClose} style={{padding:"14px 28px",borderRadius:980,border:`1.5px solid ${C.div}`,background:"transparent"}}>
+        {!timer.done&&<Tap onTap={onClose} style={{padding:"14px 28px",borderRadius:999,border:`1.5px solid ${C.div}`,background:"transparent"}}>
           <span style={{fontSize:15,fontWeight:600,color:C.ink4}}>Fermer</span>
         </Tap>}
       </div>
@@ -995,7 +995,7 @@ function MiniRest({timer,label,onExpand}) {
   const R=16,circ=2*Math.PI*R;
   return(
     <div style={{position:"fixed",bottom:90,left:16,right:16,zIndex:Z.overlay,display:"flex",justifyContent:"center"}}>
-      <Tap onTap={onExpand} style={{background:"rgba(17,17,17,.96)",border:`1px solid ${C.s4}`,borderRadius:16,padding:"12px 16px",display:"flex",alignItems:"center",gap:12,maxWidth:380,width:"100%",backdropFilter:"blur(24px)"}}>
+      <Tap onTap={onExpand} style={{background:"rgba(17,17,17,.96)",border:`1px solid ${C.s4}`,borderRadius:18,padding:"12px 16px",display:"flex",alignItems:"center",gap:12,maxWidth:380,width:"100%",backdropFilter:"blur(24px)"}}>
         <svg width="40" height="40" style={{transform:"rotate(-90deg)",flexShrink:0}}>
           <circle cx="20" cy="20" r={R} fill="none" stroke={C.s4} strokeWidth="4"/>
           <circle cx="20" cy="20" r={R} fill="none" stroke={timer.done?C.green:C.blue} strokeWidth="4"
@@ -1234,7 +1234,7 @@ function SessionSettingsSheet({day,curMode,onClose,onApply}) {
   const ZONES=[["epaule","Épaule"],["genou","Genou"],["dos","Dos"],["poignet","Poignet"],["hanche","Hanche"]];
   const EQS=[["kb","Kettlebell"],["db","Haltères"],["bar","Barre"],["mc","Machine"],["cd","Cardio"],["bw","Poids du corps"]];
   const tog=(arr,set,v)=>set(arr.indexOf(v)>=0?arr.filter(x=>x!==v):[...arr,v]);
-  const Chip=({on,label,onTap})=>(<Tap onTap={onTap} style={{padding:"10px 14px",borderRadius:11,background:on?C.blue:C.s2,border:`1px solid ${on?C.blue:C.div}`}}><span style={{fontSize:14,fontWeight:600,color:on?"#000":C.ink2}}>{label}</span></Tap>);
+  const Chip=({on,label,onTap})=>(<Tap onTap={onTap} style={{padding:"10px 14px",borderRadius:12,background:on?C.blue:C.s2,border:`1px solid ${on?C.blue:C.div}`}}><span style={{fontSize:14,fontWeight:600,color:on?"#000":C.ink2}}>{label}</span></Tap>);
   const apply=()=>{ const cons={injury}; if(equipMode==="bw") cons.bw=true; else if(equipMode==="pick"&&equip.length) cons.equipment=equip; onApply({mode,cons}); };
   return (<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.4)",zIndex:Z.fullscreen,display:"flex",alignItems:"flex-end",justifyContent:"center",fontFamily:F}} onClick={onClose}>
     <div onClick={e=>e.stopPropagation()} style={{width:"100%",maxWidth:600,maxHeight:"88vh",overflowY:"auto",background:C.bg,borderTopLeftRadius:22,borderTopRightRadius:22,padding:"20px 20px calc(20px + env(safe-area-inset-bottom))"}}>
@@ -1404,7 +1404,7 @@ function CircuitPlayer({mode,exos,onClose,defMin,blocks,onAllDone,startBlock,log
     </div>
   ):null;
   const Btn=({label,act,bg,fg,flex})=>(
-    <Tap onTap={act} style={{flex:flex||1,padding:"18px",borderRadius:15,background:bg||C.blue,display:"flex",alignItems:"center",justifyContent:"center"}}>
+    <Tap onTap={act} style={{flex:flex||1,padding:"18px",borderRadius:14,background:bg||C.blue,display:"flex",alignItems:"center",justifyContent:"center"}}>
       <span style={{fontSize:17,fontWeight:600,color:fg||"#000"}}>{label}</span>
     </Tap>
   );
@@ -1626,8 +1626,10 @@ function ExerciseFocus({ex,dayIdx,sDate,log,onLogSet,onClose,onNext,hasNext,idx,
     </div>
   );
   const step=(lbl,act)=>(
-    <Tap onTap={act} style={{width:52,height:52,borderRadius:14,background:C.s2,display:"flex",alignItems:"center",justifyContent:"center"}}>
-      <span style={{fontSize:20,fontWeight:600,color:C.ink2}}>{lbl}</span>
+    <Tap label={lbl==="+"?"Augmenter":"Diminuer"} onTap={act}
+      style={{width:52,height:52,borderRadius:18,background:C.bg,border:`1px solid ${C.s3}`,
+        boxShadow:`0 2px 10px ${C.ink5}`,display:"flex",alignItems:"center",justifyContent:"center"}}>
+      <Icon name={lbl==="+"?"plus":"minus"} size={18} stroke={C.ink2}/>
     </Tap>
   );
   const curLoad=loads[cur>=0?cur:0]||0;
@@ -1684,7 +1686,8 @@ function ExerciseFocus({ex,dayIdx,sDate,log,onLogSet,onClose,onNext,hasNext,idx,
               <div style={{fontSize:24,fontWeight:600,color:C.ink,letterSpacing:"-.02em"}}>{ex.n}</div>
               <div style={{fontSize:14,color:C.ink4,marginTop:5}}>{n} séries terminées</div>
             </div>
-            <div style={{background:C.s1,borderRadius:22,padding:"14px 16px",display:"flex",flexDirection:"column",gap:7}}>
+            <div style={{background:C.bg,border:`1px solid ${C.s2}`,boxShadow:`0 3px 16px ${C.ink5}`,
+              borderRadius:24,padding:"15px 17px",display:"flex",flexDirection:"column",gap:7}}>
               {plan.map((_,i)=>(
                 <div key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
                   <span style={{fontSize:13,color:C.ink4}}>Série {i+1}</span>
@@ -1701,7 +1704,9 @@ function ExerciseFocus({ex,dayIdx,sDate,log,onLogSet,onClose,onNext,hasNext,idx,
                   const on=rpeVal===v;
                   return (
                     <Tap key={v} onTap={()=>{setRpeVal(v);onLogSet(`${lk}_rpe`,{rpe:v,date:todayKey()});play("clic");}}
-                      style={{flex:1,padding:"14px 0",borderRadius:13,background:on?C.blue:C.s1,border:`1px solid ${on?C.blue:C.s3}`,display:"flex",alignItems:"center",justifyContent:"center",transition:`all 160ms ${EO}`}}>
+                      style={{flex:1,padding:"14px 0",borderRadius:18,background:on?C.blue:C.bg,
+                        border:`1px solid ${on?C.blue:C.s3}`,boxShadow:on?"none":`0 2px 10px ${C.ink5}`,
+                        display:"flex",alignItems:"center",justifyContent:"center",transition:`all 160ms ${EO}`}}>
                       <span style={{fontSize:17,fontWeight:600,color:on?"#000":C.ink3}}>{v}</span>
                     </Tap>
                   );
@@ -1712,10 +1717,10 @@ function ExerciseFocus({ex,dayIdx,sDate,log,onLogSet,onClose,onNext,hasNext,idx,
               </div>
             </div>
             <div>
-              <Tap onTap={()=>leave()} style={{padding:"18px",borderRadius:16,background:C.green,display:"flex",alignItems:"center",justifyContent:"center"}}>
+              <Tap onTap={()=>leave()} style={{padding:"18px",borderRadius:22,background:C.green,display:"flex",alignItems:"center",justifyContent:"center"}}>
                 <span style={{fontSize:17,fontWeight:600,color:"#000"}}>Retour à la liste</span>
               </Tap>
-              {hasNext&&<Tap onTap={()=>leave(onNext)} style={{marginTop:10,padding:"15px",borderRadius:14,background:"transparent",border:`1px solid ${C.div}`,display:"flex",alignItems:"center",justifyContent:"center"}}>
+              {hasNext&&<Tap onTap={()=>leave(onNext)} style={{marginTop:10,padding:"15px",borderRadius:18,background:"transparent",border:`1px solid ${C.div}`,display:"flex",alignItems:"center",justifyContent:"center"}}>
                 <span style={{fontSize:15,fontWeight:600,color:C.ink3}}>Enchaîner sur le suivant →</span>
               </Tap>}
             </div>
@@ -1746,23 +1751,30 @@ function ExerciseFocus({ex,dayIdx,sDate,log,onLogSet,onClose,onNext,hasNext,idx,
               {step("+",()=>setReps(r=>r.map((v,i)=>i===cur?v+1:v)))}
             </div>
             {prevIdx<0&&lastPerf&&lastPerf.kg>0&&(
-              <div style={{background:C.s1,borderRadius:18,padding:"12px 15px",display:"flex",justifyContent:"space-between",alignItems:"center",gap:10}}>
+              <div style={{background:C.bg,border:`1px solid ${C.s2}`,boxShadow:`0 3px 16px ${C.ink5}`,
+                borderRadius:22,padding:"13px 16px",display:"flex",justifyContent:"space-between",alignItems:"center",gap:10}}>
                 <span style={{fontSize:13,color:C.ink4}}>La dernière fois</span>
                 <span style={{fontSize:15,fontWeight:600,color:C.ink,fontVariantNumeric:"tabular-nums"}}>
                   {lastPerf.kg} kg{lastPerf.rpe?` · RPE ${lastPerf.rpe}`:""}
-                  {curLoad>lastPerf.kg?<span style={{color:C.green}}> → +{Math.round((curLoad-lastPerf.kg)*10)/10} kg</span>:null}
+                  {/* On compare la charge la plus lourde PREVUE aujourd'hui a la plus lourde
+                      faite la derniere fois. Comparer la premiere serie de montee - souvent
+                      70% du haut de seance - a la meilleure charge precedente n'avait aucun
+                      sens et n'affichait donc jamais d'ecart. */}
+                  {(()=>{const top=Math.max(...loads);return top>lastPerf.kg
+                    ?<span style={{color:C.green}}> → +{Math.round((top-lastPerf.kg)*10)/10} kg</span>:null;})()}
                 </span>
               </div>
             )}
             {prevIdx>=0&&(
-              <div style={{background:C.s1,borderRadius:18,padding:"12px 15px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+              <div style={{background:C.bg,border:`1px solid ${C.s2}`,boxShadow:`0 3px 16px ${C.ink5}`,
+                borderRadius:22,padding:"13px 16px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
                 <span style={{fontSize:13,color:C.ink4}}>Série précédente</span>
                 <span style={{fontSize:15,fontWeight:600,color:C.ink,fontVariantNumeric:"tabular-nums"}}>{loads[prevIdx]>0?`${loads[prevIdx]} kg`:"PdC"} × {reps[prevIdx]}</span>
               </div>
             )}
             <div style={{marginTop:"auto",display:"flex",flexDirection:"column",gap:16}}>
               {dots}
-              <Tap onTap={validate} style={{padding:"20px",borderRadius:16,background:C.blue,display:"flex",alignItems:"center",justifyContent:"center"}}>
+              <Tap onTap={validate} style={{padding:"20px",borderRadius:22,background:C.blue,display:"flex",alignItems:"center",justifyContent:"center"}}>
                 <span style={{fontSize:18,fontWeight:600,color:"#000"}}>Valider la série {cur+1}</span>
               </Tap>
             </div>
@@ -1828,7 +1840,7 @@ function AISheet({onClose,onResult,excluded}) {
         </div>
         <textarea value={custom} onChange={e=>setCustom(e.target.value)} placeholder="Ou décris ta séance..."
           style={{width:"100%",minHeight:52,padding:"12px 16px",borderRadius:14,border:`1px solid ${C.div}`,fontFamily:F,fontSize:15,color:C.ink,background:C.s2,resize:"none",outline:"none",marginBottom:16,boxSizing:"border-box"}}/>
-        <Tap onTap={generate} disabled={(!type&&!custom.trim())||loading} style={{padding:"16px",borderRadius:16,background:(!type&&!custom.trim())||loading?C.s3:C.blue,display:"flex",alignItems:"center",justifyContent:"center",transition:`background 200ms ${EO}`}}>
+        <Tap onTap={generate} disabled={(!type&&!custom.trim())||loading} style={{padding:"16px",borderRadius:18,background:(!type&&!custom.trim())||loading?C.s3:C.blue,display:"flex",alignItems:"center",justifyContent:"center",transition:`background 200ms ${EO}`}}>
           <span style={{fontSize:17,fontWeight:600,color:(!type&&!custom.trim())||loading?C.ink5:"#000"}}>{loading?"Génération…":"Générer avec IA"}</span>
         </Tap>
       </div>
@@ -1850,7 +1862,7 @@ function ExPicker({onSelect,onClose,currentId,excluded}) {
           <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Rechercher..." style={{width:"100%",padding:"12px 16px",borderRadius:12,border:`1px solid ${C.div}`,fontFamily:F,fontSize:15,color:C.ink,background:C.s2,outline:"none",boxSizing:"border-box",marginBottom:12}}/>
           <div style={{display:"flex",gap:6,overflowX:"auto",scrollbarWidth:"none"}}>
             {Object.entries(EQ_LABELS).map(([k,l])=>(
-              <Tap key={k} onTap={()=>setEq(eq===k?null:k)} style={{flexShrink:0,padding:"6px 14px",borderRadius:980,border:`1px solid ${eq===k?C.blue:C.div}`,background:eq===k?C.blueDim:"transparent",transition:`all 150ms ${EO}`}}>
+              <Tap key={k} onTap={()=>setEq(eq===k?null:k)} style={{flexShrink:0,padding:"6px 14px",borderRadius:999,border:`1px solid ${eq===k?C.blue:C.div}`,background:eq===k?C.blueDim:"transparent",transition:`all 150ms ${EO}`}}>
                 <span style={{fontSize:12,fontWeight:600,color:eq===k?C.blue:C.ink4}}>{l}</span>
               </Tap>
             ))}
@@ -1864,7 +1876,7 @@ function ExPicker({onSelect,onClose,currentId,excluded}) {
                 <div style={{fontSize:15,fontWeight:600,color:C.ink,marginBottom:4}}>{ex.n}</div>
                 <div style={{display:"flex",gap:8}}>
                   <span style={{fontSize:13,color:C.ink3}}>{ex.m}</span>
-                  <span style={{fontSize:11,fontWeight:600,padding:"1px 8px",borderRadius:980,background:C.s3,color:C.ink4}}>{EQ_LABELS[ex.eq]}</span>
+                  <span style={{fontSize:11,fontWeight:600,padding:"1px 8px",borderRadius:999,background:C.s3,color:C.ink4}}>{EQ_LABELS[ex.eq]}</span>
                 </div>
               </div>
               <span style={{fontSize:20,color:C.blue,fontWeight:300}}>+</span>
@@ -1965,13 +1977,13 @@ function SessionReport({session,sessions,trainingDaysPerWeek,photoUrl,onClose,on
           </Tap>
           <div style={{fontSize:12,fontWeight:600,color:C.ink4,textTransform:"uppercase",letterSpacing:".14em",marginBottom:10}}>{date}</div>
           <div style={{fontSize:36,fontWeight:600,color:C.ink,letterSpacing:"-.02em",lineHeight:1.1,marginBottom:20}}>{dayLabel}</div>
-          {score>0&&<div style={{display:"inline-flex",alignItems:"center",gap:10,padding:"8px 18px",borderRadius:980,background:C.s2,border:`1px solid ${C.div}`}}>
+          {score>0&&<div style={{display:"inline-flex",alignItems:"center",gap:10,padding:"8px 18px",borderRadius:999,background:C.s2,border:`1px solid ${C.div}`}}>
             <span style={{fontSize:22,fontWeight:600,color:C.blue}}>{animScore}</span>
             <span style={{fontSize:12,fontWeight:600,color:C.ink4,letterSpacing:".1em"}}>SCORE</span>
           </div>}
         </div>
         {newPBs.length>0&&(
-          <div style={{margin:"0 24px 20px",padding:"16px 18px",borderRadius:16,background:C.blueDim,border:`1px solid ${C.blue}`,animation:`fadeUp 500ms ${EO} both`}}>
+          <div style={{margin:"0 24px 20px",padding:"16px 18px",borderRadius:18,background:C.blueDim,border:`1px solid ${C.blue}`,animation:`fadeUp 500ms ${EO} both`}}>
             <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={C.ink} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M8 21h8"/><path d="M12 17v4"/><path d="M7 4h10v5a5 5 0 0 1-10 0V4z"/><path d="M7 6H4a2 2 0 0 0 2 4"/><path d="M17 6h3a2 2 0 0 1-2 4"/></svg>
               <span style={{fontSize:14,fontWeight:600,color:C.ink}}>{newPBs.length>1?`${newPBs.length} nouveaux records`:"Nouveau record"} 🎉</span>
@@ -1980,7 +1992,7 @@ function SessionReport({session,sessions,trainingDaysPerWeek,photoUrl,onClose,on
           </div>
         )}
         {newBadges.length>0&&(
-          <div style={{margin:"0 24px 20px",padding:"16px 18px",borderRadius:16,background:C.s1,border:`1px solid ${C.s3}`,animation:`fadeUp 550ms ${EO} both`}}>
+          <div style={{margin:"0 24px 20px",padding:"16px 18px",borderRadius:18,background:C.s1,border:`1px solid ${C.s3}`,animation:`fadeUp 550ms ${EO} both`}}>
             <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={C.ink} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="8" r="5"/><path d="M8.5 13 7 21l5-3 5 3-1.5-8"/></svg>
               <span style={{fontSize:14,fontWeight:600,color:C.ink}}>{newBadges.length>1?`${newBadges.length} nouveaux badges`:"Nouveau badge"} 🎉</span>
@@ -1989,7 +2001,7 @@ function SessionReport({session,sessions,trainingDaysPerWeek,photoUrl,onClose,on
           </div>
         )}
         {milestoneReached&&(
-          <div style={{margin:"0 24px 20px",padding:"16px 18px",borderRadius:16,background:C.blueDim,border:`1px solid ${C.blue}`,animation:`fadeUp 600ms ${EO} both`}}>
+          <div style={{margin:"0 24px 20px",padding:"16px 18px",borderRadius:18,background:C.blueDim,border:`1px solid ${C.blue}`,animation:`fadeUp 600ms ${EO} both`}}>
             <div style={{display:"flex",alignItems:"center",gap:8}}>
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={C.ink} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 21V4"/><path d="M5 4h13l-3 4 3 4H5"/></svg>
               <span style={{fontSize:14,fontWeight:600,color:C.ink}}>Nouveau palier : {milestoneReached} 🎉</span>
@@ -2055,10 +2067,10 @@ function SessionReport({session,sessions,trainingDaysPerWeek,photoUrl,onClose,on
           </div>
         )}
         <div style={{padding:"0 24px 60px",display:"flex",flexDirection:"column",gap:10}}>
-          <Tap onTap={onClose} style={{padding:"16px",borderRadius:15,background:C.s2,display:"flex",alignItems:"center",justifyContent:"center"}}>
+          <Tap onTap={onClose} style={{padding:"16px",borderRadius:14,background:C.s2,display:"flex",alignItems:"center",justifyContent:"center"}}>
             <span style={{fontSize:17,fontWeight:600,color:C.ink3}}>Fermer</span>
           </Tap>
-          {onDelete&&<Tap onTap={()=>{if(window.confirm("Supprimer cette séance ? Action définitive.")) onDelete(session);}} style={{padding:"14px",borderRadius:15,background:"transparent",border:`1px solid ${C.red}`,display:"flex",alignItems:"center",justifyContent:"center"}}>
+          {onDelete&&<Tap onTap={()=>{if(window.confirm("Supprimer cette séance ? Action définitive.")) onDelete(session);}} style={{padding:"14px",borderRadius:14,background:"transparent",border:`1px solid ${C.red}`,display:"flex",alignItems:"center",justifyContent:"center"}}>
             <span style={{fontSize:15,fontWeight:600,color:C.red}}>Supprimer la séance</span>
           </Tap>}
         </div>
@@ -2167,7 +2179,7 @@ function WeekSummary({sessions,accent,trainingDaysPerWeek}) {
   const weekTime=weekMin>=60?`${Math.floor(weekMin/60)}h${String(weekMin%60).padStart(2,"0")}`:`${weekMin}`;
   const target=trainingDaysPerWeek||5;
   return(
-    <div style={{background:C.s1,borderRadius:20,padding:"20px",marginBottom:16}}>
+    <div style={{background:C.s1,borderRadius:22,padding:"20px",marginBottom:16}}>
       <div style={{fontSize:11,fontWeight:600,color:C.ink4,textTransform:"uppercase",letterSpacing:".1em",marginBottom:16}}>Cette semaine</div>
       <div style={{display:"flex",gap:6,marginBottom:18}}>
         {days.map((d,i)=>{
@@ -2245,7 +2257,7 @@ function IntervalTimer({onClose}) {
           {mode==="emom"&&running&&<div style={{fontSize:14,fontWeight:600,color:C.blue,marginBottom:8}}>Minute {curMin}/{emomMin} · {emomReps} reps</div>}
           <div style={{fontSize:72,fontWeight:600,color:done?C.green:C.ink,letterSpacing:"-.03em",lineHeight:1}}>{done?"FINI":(mode==="emom"&&running?fmtMSS(secInMin):fmtMSS(remaining))}</div>
           {mode==="emom"&&running&&<div style={{fontSize:13,color:C.ink4,marginTop:8}}>Temps total : {fmtMSS(remaining)}</div>}
-          {mode==="amrap"&&<div style={{marginTop:24,display:"flex",flexDirection:"column",alignItems:"center",gap:8}}><div style={{fontSize:48,fontWeight:600,color:C.blue,lineHeight:1}}>{rounds}</div><div style={{fontSize:12,color:C.ink4,textTransform:"uppercase",letterSpacing:".1em"}}>tours</div><Tap onTap={()=>running&&setRounds(r=>r+1)} style={{marginTop:6,padding:"14px 34px",borderRadius:980,background:C.s2,border:`1px solid ${C.div}`,opacity:running?1:0.5}}><span style={{fontSize:16,fontWeight:600,color:C.ink2}}>+1 tour</span></Tap></div>}
+          {mode==="amrap"&&<div style={{marginTop:24,display:"flex",flexDirection:"column",alignItems:"center",gap:8}}><div style={{fontSize:48,fontWeight:600,color:C.blue,lineHeight:1}}>{rounds}</div><div style={{fontSize:12,color:C.ink4,textTransform:"uppercase",letterSpacing:".1em"}}>tours</div><Tap onTap={()=>running&&setRounds(r=>r+1)} style={{marginTop:6,padding:"14px 34px",borderRadius:999,background:C.s2,border:`1px solid ${C.div}`,opacity:running?1:0.5}}><span style={{fontSize:16,fontWeight:600,color:C.ink2}}>+1 tour</span></Tap></div>}
         </div>
       </div>
       <div style={{display:"flex",gap:10,padding:"12px 20px"}}>
@@ -2400,7 +2412,7 @@ function StatsTab({sessions,weights,accent,onOpenPhotos,pinnedPBs,onManagePBs,ac
       {/* Apprentissage */}
       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
         <span style={{fontSize:12,fontWeight:600,color:C.ink4,textTransform:"uppercase",letterSpacing:".1em"}}>Apprentissage</span>
-        {onManageSkills&&<Tap onTap={onManageSkills} style={{padding:"6px 12px",borderRadius:980,background:C.s2}}><span style={{fontSize:12,fontWeight:600,color:C.ink3}}>Gérer ({(activeSkills||[]).length}/2) ›</span></Tap>}
+        {onManageSkills&&<Tap onTap={onManageSkills} style={{padding:"6px 12px",borderRadius:999,background:C.s2}}><span style={{fontSize:12,fontWeight:600,color:C.ink3}}>Gérer ({(activeSkills||[]).length}/2) ›</span></Tap>}
       </div>
       {(!activeSkills||activeSkills.length===0)?(
         <div style={{textAlign:"center",padding:"24px 0",fontSize:14,color:C.ink4,marginBottom:16}}>Ajoute un mouvement à apprendre (muscle-up, pistol squat...).</div>
@@ -2425,7 +2437,7 @@ function StatsTab({sessions,weights,accent,onOpenPhotos,pinnedPBs,onManagePBs,ac
       {/* Personal Bests - vue compacte + gestion */}
       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
         <span style={{fontSize:12,fontWeight:600,color:C.ink4,textTransform:"uppercase",letterSpacing:".1em"}}>Personal Bests</span>
-        {pbs.length>0&&onManagePBs&&<Tap onTap={onManagePBs} style={{padding:"6px 12px",borderRadius:980,background:C.s2}}><span style={{fontSize:12,fontWeight:600,color:C.ink3}}>Gérer ({(pinnedPBs||[]).length}/5) ›</span></Tap>}
+        {pbs.length>0&&onManagePBs&&<Tap onTap={onManagePBs} style={{padding:"6px 12px",borderRadius:999,background:C.s2}}><span style={{fontSize:12,fontWeight:600,color:C.ink3}}>Gérer ({(pinnedPBs||[]).length}/5) ›</span></Tap>}
       </div>
       {pbs.length===0?<div style={{textAlign:"center",padding:"32px 0",fontSize:15,color:C.ink4}}>Réalise des séances avec charges pour débloquer tes PB.</div>:
         displayedPBs.map((pb,i)=>(
@@ -2443,7 +2455,7 @@ function StatsTab({sessions,weights,accent,onOpenPhotos,pinnedPBs,onManagePBs,ac
       <div style={{marginTop:24,background:C.s1,borderRadius:22,padding:"16px"}}>
         <div style={{display:"flex",alignItems:"baseline",justifyContent:"space-between",marginBottom:12}}>
           <span style={{fontSize:11,fontWeight:600,color:C.ink3,textTransform:"uppercase",letterSpacing:".15em"}}>Récompenses</span>
-          {onOpenRewards&&<Tap onTap={onOpenRewards} style={{padding:"6px 12px",borderRadius:980,background:C.s2}}><span style={{fontSize:12,fontWeight:600,color:C.ink3}}>Voir tout ({earned}/{B.length}) ›</span></Tap>}
+          {onOpenRewards&&<Tap onTap={onOpenRewards} style={{padding:"6px 12px",borderRadius:999,background:C.s2}}><span style={{fontSize:12,fontWeight:600,color:C.ink3}}>Voir tout ({earned}/{B.length}) ›</span></Tap>}
         </div>
         {cats.map(cat=>{
           const list=B.filter(b=>b.cat===cat);
@@ -2495,7 +2507,7 @@ function PBManagerSheet({sessions,pinnedPBs,onSave,onClose}) {
               return(
                 <Tap key={pb.id} onTap={()=>!disabled&&toggle(pb.id)} style={{display:"flex",justifyContent:"space-between",alignItems:"center",background:C.s1,borderRadius:18,padding:"14px 16px",marginBottom:8,opacity:disabled?0.4:1}}>
                   <div><div style={{fontSize:15,fontWeight:600,color:C.ink}}>{pb.n}</div><div style={{fontSize:13,color:C.ink3}}>{pb.pbKg===0?"BW":pb.pbKg+"kg"}</div></div>
-                  <div style={{width:44,height:26,borderRadius:980,background:on?C.blue:C.s3,position:"relative",transition:`background 150ms ${EO}`,flexShrink:0}}>
+                  <div style={{width:44,height:26,borderRadius:999,background:on?C.blue:C.s3,position:"relative",transition:`background 150ms ${EO}`,flexShrink:0}}>
                     <div style={{position:"absolute",top:2,left:on?20:2,width:22,height:22,borderRadius:"50%",background:"#fff",transition:`left 150ms ${EO}`}}/>
                   </div>
                 </Tap>
@@ -2503,7 +2515,7 @@ function PBManagerSheet({sessions,pinnedPBs,onSave,onClose}) {
             })}
           </div>
         ))}
-        <Tap onTap={()=>{onSave(sel);onClose();}} style={{marginTop:8,padding:"16px",borderRadius:15,background:C.blue,display:"flex",alignItems:"center",justifyContent:"center"}}>
+        <Tap onTap={()=>{onSave(sel);onClose();}} style={{marginTop:8,padding:"16px",borderRadius:14,background:C.blue,display:"flex",alignItems:"center",justifyContent:"center"}}>
           <span style={{fontSize:16,fontWeight:600,color:"#000"}}>Enregistrer</span>
         </Tap>
       </div>
@@ -2533,7 +2545,7 @@ function RewardsManagerSheet({sessions,onClose}) {
                 <span style={{fontSize:12,color:C.ink4}}>{catEarned}/{list.length}</span>
               </div>
               <div style={{display:"flex",flexWrap:"wrap",gap:8}}>
-                {list.map((b,i)=>(<span key={i} style={{padding:"7px 12px",borderRadius:980,background:b.ok?C.blue:C.s2,fontSize:12,fontWeight:600,color:b.ok?"#000":C.ink4}}>{b.t}</span>))}
+                {list.map((b,i)=>(<span key={i} style={{padding:"7px 12px",borderRadius:999,background:b.ok?C.blue:C.s2,fontSize:12,fontWeight:600,color:b.ok?"#000":C.ink4}}>{b.t}</span>))}
               </div>
             </div>
           );
@@ -2583,7 +2595,7 @@ function SkillManagerSheet({activeSkills,onSave,onClose}) {
             </Tap>
           );
         })}
-        <Tap onTap={save} style={{marginTop:8,padding:"16px",borderRadius:15,background:C.blue,display:"flex",alignItems:"center",justifyContent:"center"}}>
+        <Tap onTap={save} style={{marginTop:8,padding:"16px",borderRadius:14,background:C.blue,display:"flex",alignItems:"center",justifyContent:"center"}}>
           <span style={{fontSize:16,fontWeight:600,color:"#000"}}>Enregistrer</span>
         </Tap>
       </div>
@@ -2697,7 +2709,7 @@ function HistoryTab({sessions,onSelect,accent,onOpenPhotos,photos:photoMap,urls}
         const dates=Object.keys(photoMap||{}).sort().reverse();
         return (
           <Tap onTap={onOpenPhotos} style={{display:"block"}}>
-            <div style={{background:C.s1,borderRadius:20,padding:"20px",marginBottom:20}}>
+            <div style={{background:C.s1,borderRadius:22,padding:"20px",marginBottom:20}}>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:dates.length?14:0}}>
                 <div>
                   <div style={{fontSize:14,fontWeight:600,color:C.ink}}>Progression photo</div>
@@ -2717,7 +2729,7 @@ function HistoryTab({sessions,onSelect,accent,onOpenPhotos,photos:photoMap,urls}
           </Tap>
         );
       })()}
-      <div style={{background:C.s1,borderRadius:20,padding:"20px",marginBottom:20}}>
+      <div style={{background:C.s1,borderRadius:22,padding:"20px",marginBottom:20}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:18}}>
           <Tap onTap={()=>setView(new Date(y,m-1,1))} style={{width:36,height:36,borderRadius:8,background:C.s2,display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{fontSize:16,color:C.ink3}}>‹</span></Tap>
           <span style={{fontSize:17,fontWeight:600,color:C.ink}}>{MN[m]} {y}</span>
@@ -2786,7 +2798,7 @@ function ScheduleEditor({schedule,onChange,onReset,onClose,autoRotate,onToggleAu
       <div style={{flex:1,overflowY:"auto",padding:"16px 20px 24px"}}>
         <Tap onTap={onToggleAuto} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"14px 16px",borderRadius:14,background:C.s1,marginBottom:20}}>
           <div><div style={{fontSize:15,fontWeight:600,color:C.ink}}>Rotation automatique</div><div style={{fontSize:12,color:C.ink4,marginTop:2}}>Séances différentes chaque semaine</div></div>
-          <div style={{width:46,height:28,borderRadius:980,background:autoRotate?C.blue:C.s4,position:"relative",transition:`background 200ms ${EO}`,flexShrink:0}}><div style={{position:"absolute",top:3,left:autoRotate?21:3,width:22,height:22,borderRadius:"50%",background:"#fff",transition:`left 200ms ${EO}`}}/></div>
+          <div style={{width:46,height:28,borderRadius:999,background:autoRotate?C.blue:C.s4,position:"relative",transition:`background 200ms ${EO}`,flexShrink:0}}><div style={{position:"absolute",top:3,left:autoRotate?21:3,width:22,height:22,borderRadius:"50%",background:"#fff",transition:`left 200ms ${EO}`}}/></div>
         </Tap>
         {schedule.map((d,i)=>(
           <div key={i} style={{marginBottom:18}}>
@@ -2842,7 +2854,7 @@ function SettingsTab({user,excluded,onToggleExclude,onSignOut,onReset,onOpenLibr
   return(
     <div style={{padding:"20px 18px 100px",maxWidth:600,margin:"0 auto",fontFamily:F}}>
       {/* Profile card */}
-      <div style={{background:C.s1,borderRadius:20,padding:"24px",marginBottom:16,display:"flex",alignItems:"center",gap:18}}>
+      <div style={{background:C.s1,borderRadius:22,padding:"24px",marginBottom:16,display:"flex",alignItems:"center",gap:18}}>
         <div onClick={()=>avatarRef.current&&avatarRef.current.click()} style={{position:"relative",width:56,height:56,borderRadius:"50%",background:C.blue,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,overflow:"hidden",cursor:"pointer"}}>
           {avatar?<img src={avatar} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/>:<span style={{fontSize:22,fontWeight:600,color:"#000"}}>{(user?.user_metadata?.name||user?.email||"U")[0].toUpperCase()}</span>}
           <div style={{position:"absolute",left:0,right:0,bottom:0,background:"rgba(0,0,0,.45)",fontSize:9,color:"#fff",textAlign:"center",padding:"1px 0"}}>{avatar?"Modifier":"Ajouter"}</div>
@@ -2855,11 +2867,11 @@ function SettingsTab({user,excluded,onToggleExclude,onSignOut,onReset,onOpenLibr
       </div>
       {/* Mon programme */}
       {onUpdateConfig&&<div style={{background:C.s1,borderRadius:22,padding:"20px",marginBottom:12}}>
-        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:16,gap:8}}><span style={{fontSize:14,fontWeight:600,color:C.ink}}>Mon programme</span>{onOpenScheduleEditor&&<Tap onTap={onOpenScheduleEditor} style={{padding:"6px 12px",borderRadius:980,background:C.s2}}><span style={{fontSize:12,fontWeight:600,color:C.ink3}}>Modifier les séances ›</span></Tap>}</div>
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:16,gap:8}}><span style={{fontSize:14,fontWeight:600,color:C.ink}}>Mon programme</span>{onOpenScheduleEditor&&<Tap onTap={onOpenScheduleEditor} style={{padding:"6px 12px",borderRadius:999,background:C.s2}}><span style={{fontSize:12,fontWeight:600,color:C.ink3}}>Modifier les séances ›</span></Tap>}</div>
         <div style={{fontSize:12,fontWeight:600,color:C.ink4,textTransform:"uppercase",letterSpacing:".08em",marginBottom:8}}>Objectif actuel</div>
         <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",background:C.s1,border:`1px solid ${C.s3}`,borderRadius:14,padding:"14px 16px",marginBottom:18}}>
           <span style={{fontSize:15,fontWeight:600,color:C.ink}}>{(GOALS.find(g=>g[0]===profile?.goal)||[])[1]||"—"}</span>
-          {onRedoOnboarding&&<Tap onTap={onRedoOnboarding} style={{padding:"7px 14px",borderRadius:980,background:C.blueDim}}><span style={{fontSize:12,fontWeight:600,color:C.blue}}>Changer ‹</span></Tap>}
+          {onRedoOnboarding&&<Tap onTap={onRedoOnboarding} style={{padding:"7px 14px",borderRadius:999,background:C.blueDim}}><span style={{fontSize:12,fontWeight:600,color:C.blue}}>Changer ‹</span></Tap>}
         </div>
         <div style={{fontSize:12,fontWeight:600,color:C.ink4,textTransform:"uppercase",letterSpacing:".08em",marginBottom:8}}>Jours de séance</div>
         <div style={{display:"flex",gap:6,marginBottom:18}}>
@@ -2919,7 +2931,7 @@ function SettingsTab({user,excluded,onToggleExclude,onSignOut,onReset,onOpenLibr
           const on=((profile&&profile.theme)||"light")===v;
           return (
             <Tap key={v} label={t} onTap={()=>{onUpdateConfig&&onUpdateConfig({theme:v});play("clic");buzz(15);}}
-              style={{flex:1,padding:"14px 15px",borderRadius:16,background:on?C.blueDim:C.s1,
+              style={{flex:1,padding:"14px 15px",borderRadius:18,background:on?C.blueDim:C.s1,
                       border:`1px solid ${on?C.blue:C.s3}`,transition:`all 200ms ${EO}`}}>
               <div style={{display:"flex",gap:6,marginBottom:9}}>
                 <span style={{width:20,height:20,borderRadius:6,background:v==="dark"?"#1B1B1B":"#FFFFFF",border:`1px solid ${C.s4}`}}/>
@@ -2946,7 +2958,7 @@ function SettingsTab({user,excluded,onToggleExclude,onSignOut,onReset,onOpenLibr
               borderRadius:i===0?"14px 14px 0 0":i===arr.length-1?"0 0 14px 14px":0,
               borderTop:i?`1px solid ${C.s2}`:"none",marginBottom:i===arr.length-1?0:0}}>
             <div><div style={{fontSize:15,fontWeight:600,color:C.ink}}>{t}</div><div style={{fontSize:12,color:C.ink4,marginTop:2}}>{d}</div></div>
-            <div style={{width:46,height:28,borderRadius:980,background:on?C.blue:C.s4,position:"relative",transition:`background 200ms ${EO}`,flexShrink:0}}>
+            <div style={{width:46,height:28,borderRadius:999,background:on?C.blue:C.s4,position:"relative",transition:`background 200ms ${EO}`,flexShrink:0}}>
               <div style={{position:"absolute",top:3,left:on?21:3,width:22,height:22,borderRadius:"50%",background:"#fff",transition:`left 200ms ${EO}`}}/>
             </div>
           </Tap>
@@ -2968,7 +2980,7 @@ function SettingsTab({user,excluded,onToggleExclude,onSignOut,onReset,onOpenLibr
                 <div style={{fontSize:14,fontWeight:500,color:C.ink}}>{ex.n}</div>
                 <div style={{fontSize:12,color:C.ink4}}>{EQ_LABELS[ex.eq]}</div>
               </div>
-              <Tap onTap={()=>onToggleExclude(ex.id)} style={{padding:"5px 14px",borderRadius:980,border:`1px solid ${excluded.includes(ex.id)?C.green:C.div}`,background:excluded.includes(ex.id)?C.greenDim:"transparent",transition:`all 150ms ${EO}`}}>
+              <Tap onTap={()=>onToggleExclude(ex.id)} style={{padding:"5px 14px",borderRadius:999,border:`1px solid ${excluded.includes(ex.id)?C.green:C.div}`,background:excluded.includes(ex.id)?C.greenDim:"transparent",transition:`all 150ms ${EO}`}}>
                 <span style={{fontSize:12,fontWeight:600,color:excluded.includes(ex.id)?C.green:C.ink4}}>{excluded.includes(ex.id)?"Réactiver":"Exclure"}</span>
               </Tap>
             </div>
@@ -2982,7 +2994,7 @@ function SettingsTab({user,excluded,onToggleExclude,onSignOut,onReset,onOpenLibr
           <span style={{fontSize:17,color:C.red}}>›</span>
         </Tap>
       </div>
-      <div style={{fontSize:12,color:C.ink4,textAlign:"center",marginTop:28}}>SŌMA · {"S"+weekNumber()} · {DB.length} exercices · build 23.84a</div>
+      <div style={{fontSize:12,color:C.ink4,textAlign:"center",marginTop:28}}>SŌMA · {"S"+weekNumber()} · {DB.length} exercices · build 23.85a</div>
     </div>
   );
 }
@@ -3017,7 +3029,7 @@ function ExerciseSheet({ex,fav,onToggleFav,onClose,sessions}) {
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:12}}>
             <div style={{minWidth:0}}>
               <div style={{fontSize:24,fontWeight:600,color:C.ink,letterSpacing:"-.02em",lineHeight:1.1}}>{ex.n}</div>
-              <div style={{display:"flex",gap:8,alignItems:"center",marginTop:8}}><span style={{fontSize:14,color:C.ink3}}>{ex.m}</span><span style={{fontSize:11,fontWeight:600,padding:"2px 9px",borderRadius:980,background:C.s3,color:C.ink4}}>{EQ_LABELS[ex.eq]}</span></div>
+              <div style={{display:"flex",gap:8,alignItems:"center",marginTop:8}}><span style={{fontSize:14,color:C.ink3}}>{ex.m}</span><span style={{fontSize:11,fontWeight:600,padding:"2px 9px",borderRadius:999,background:C.s3,color:C.ink4}}>{EQ_LABELS[ex.eq]}</span></div>
             </div>
             <Tap onTap={()=>onToggleFav(ex.id)} style={{width:44,height:44,borderRadius:12,background:fav?C.blueDim:C.s2,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}><span style={{fontSize:20,color:fav?C.blue:C.ink4}}>{fav?"★":"☆"}</span></Tap>
           </div>
@@ -3028,9 +3040,9 @@ function ExerciseSheet({ex,fav,onToggleFav,onClose,sessions}) {
           </div>
           {hist.length>=2?(()=>{const W=320,H=120,pad=10;const xs=hist.map((_,i)=>pad+i*(W-2*pad)/(hist.length-1));const mn=Math.min(...hist.map(h=>h.kg)),mx=Math.max(...hist.map(h=>h.kg)),rng=(mx-mn)||1;const ys=hist.map(h=>H-pad-(h.kg-mn)/rng*(H-2*pad));const pts=xs.map((x,i)=>x+","+ys[i]).join(" ");return <div style={{marginBottom:20}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",marginBottom:10}}><div style={{fontSize:11,fontWeight:600,color:C.ink4,textTransform:"uppercase",letterSpacing:".08em"}}>Progression — charge</div><div style={{fontSize:13,fontWeight:600,color:C.blue}}>PR {mx}kg</div></div><svg viewBox={"0 0 "+W+" "+H} style={{width:"100%",height:"auto",display:"block"}}><polyline points={pts} fill="none" stroke={C.blue} strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round"/>{xs.map((x,i)=>(<circle key={i} cx={x} cy={ys[i]} r="3.5" fill={C.blue}/>))}</svg><div style={{display:"flex",justifyContent:"space-between",marginTop:6}}><span style={{fontSize:11,color:C.ink4}}>{hist[0].date.slice(5)}</span><span style={{fontSize:11,color:C.ink4}}>{hist[hist.length-1].date.slice(5)}</span></div></div>;})():(<div style={{background:C.s2,borderRadius:14,padding:"16px",marginBottom:20,fontSize:13,color:C.ink4,lineHeight:1.5}}>Fais cet exercice quelques fois pour voir ta courbe de progression.</div>)}
           {ex.cue&&<div style={{background:C.s2,borderRadius:14,padding:"16px",marginBottom:20}}><div style={{fontSize:11,fontWeight:600,color:C.ink4,textTransform:"uppercase",letterSpacing:".08em",marginBottom:6}}>Technique</div><div style={{fontSize:15,color:C.ink2,lineHeight:1.5}}>{ex.cue}</div></div>}
-          {variants.length>0&&<div><div style={{fontSize:11,fontWeight:600,color:C.ink4,textTransform:"uppercase",letterSpacing:".08em",marginBottom:10}}>Variantes</div>{variants.map(v=>(<div key={v.id} style={{padding:"12px 0",borderBottom:`1px solid ${C.s3}`,display:"flex",justifyContent:"space-between",alignItems:"center"}}><span style={{fontSize:15,color:C.ink}}>{v.n}</span><span style={{fontSize:11,fontWeight:600,padding:"1px 8px",borderRadius:980,background:C.s3,color:C.ink4}}>{EQ_LABELS[v.eq]}</span></div>))}</div>}
+          {variants.length>0&&<div><div style={{fontSize:11,fontWeight:600,color:C.ink4,textTransform:"uppercase",letterSpacing:".08em",marginBottom:10}}>Variantes</div>{variants.map(v=>(<div key={v.id} style={{padding:"12px 0",borderBottom:`1px solid ${C.s3}`,display:"flex",justifyContent:"space-between",alignItems:"center"}}><span style={{fontSize:15,color:C.ink}}>{v.n}</span><span style={{fontSize:11,fontWeight:600,padding:"1px 8px",borderRadius:999,background:C.s3,color:C.ink4}}>{EQ_LABELS[v.eq]}</span></div>))}</div>}
         </div>
-        <div style={{padding:"0 20px calc(24px + env(safe-area-inset-bottom))"}}><Tap onTap={onClose} style={{padding:"16px",borderRadius:15,background:C.s2,display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{fontSize:17,fontWeight:600,color:C.ink3}}>Fermer</span></Tap></div>
+        <div style={{padding:"0 20px calc(24px + env(safe-area-inset-bottom))"}}><Tap onTap={onClose} style={{padding:"16px",borderRadius:14,background:C.s2,display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{fontSize:17,fontWeight:600,color:C.ink3}}>Fermer</span></Tap></div>
       </div>
     </div>
   );
@@ -3046,7 +3058,7 @@ function LibraryTab({favorites,onToggleFav,onClose,sessions}) {
   const mgKeys=mg?((MG.find(x=>x[0]===mg)||[])[1]||[]):null;
   const sl=search.toLowerCase();
   const filtered=DB.filter(e=>(!sl||e.n.toLowerCase().includes(sl)||e.m.toLowerCase().includes(sl))&&(!eq||e.eq===eq)&&(!mgKeys||mgKeys.some(k=>e.m.toLowerCase().includes(k)))&&(!favOnly||favorites.includes(e.id)));
-  const chip=(active)=>({flexShrink:0,padding:"6px 14px",borderRadius:980,border:`1px solid ${active?C.blue:C.div}`,background:active?C.blueDim:"transparent"});
+  const chip=(active)=>({flexShrink:0,padding:"6px 14px",borderRadius:999,border:`1px solid ${active?C.blue:C.div}`,background:active?C.blueDim:"transparent"});
   return(
     <div style={{position:"fixed",inset:0,zIndex:Z.fullscreen,background:C.bg,fontFamily:F,overflowY:"auto"}}>
     <div style={{maxWidth:600,margin:"0 auto",padding:`calc(20px + env(safe-area-inset-top)) 20px calc(40px + env(safe-area-inset-bottom))`}}>
@@ -3065,7 +3077,7 @@ function LibraryTab({favorites,onToggleFav,onClose,sessions}) {
       {filtered.length===0&&<div style={{textAlign:"center",padding:"40px 0",fontSize:15,color:C.ink4}}>Aucun résultat.</div>}
       {filtered.map(ex=>(
         <Tap key={ex.id} onTap={()=>setSel(ex)} style={{padding:"14px 0",borderBottom:`1px solid ${C.s3}`,display:"flex",justifyContent:"space-between",alignItems:"center",gap:10}}>
-          <div style={{minWidth:0}}><div style={{fontSize:15,fontWeight:600,color:C.ink,marginBottom:4}}>{ex.n}</div><div style={{display:"flex",gap:8,alignItems:"center"}}><span style={{fontSize:13,color:C.ink3}}>{ex.m}</span><span style={{fontSize:11,fontWeight:600,padding:"1px 8px",borderRadius:980,background:C.s3,color:C.ink4}}>{EQ_LABELS[ex.eq]}</span></div></div>
+          <div style={{minWidth:0}}><div style={{fontSize:15,fontWeight:600,color:C.ink,marginBottom:4}}>{ex.n}</div><div style={{display:"flex",gap:8,alignItems:"center"}}><span style={{fontSize:13,color:C.ink3}}>{ex.m}</span><span style={{fontSize:11,fontWeight:600,padding:"1px 8px",borderRadius:999,background:C.s3,color:C.ink4}}>{EQ_LABELS[ex.eq]}</span></div></div>
           {favorites.includes(ex.id)&&<span style={{fontSize:16,color:C.blue,flexShrink:0}}>★</span>}
         </Tap>
       ))}
@@ -3329,7 +3341,7 @@ function OnboardingScreen({user,onDone,onClose}) {
   const toggleEq=(k)=>setEquip(pr=>pr.includes(k)?pr.filter(x=>x!==k):[...pr,k]);
   const canNext = step===0?!!goal : step===1?!!level : step===2?equip.length>0 : step===5?!!startDate : true;
   const last = step===5;
-  const card=(sel)=>({display:"flex",justifyContent:"space-between",alignItems:"center",padding:"18px 20px",borderRadius:16,background:sel?C.blue:C.s1,border:`1px solid ${sel?C.blue:C.s3}`,marginBottom:12,cursor:"pointer"});
+  const card=(sel)=>({display:"flex",justifyContent:"space-between",alignItems:"center",padding:"18px 20px",borderRadius:18,background:sel?C.blue:C.s1,border:`1px solid ${sel?C.blue:C.s3}`,marginBottom:12,cursor:"pointer"});
   const ttl=(sel)=>({fontSize:17,fontWeight:600,color:sel?"#000":C.ink});
   const dsc=(sel)=>({fontSize:13,color:sel?"rgba(0,0,0,.6)":C.ink4,marginTop:3});
   const chk=(sel)=> sel?<span style={{fontSize:18,fontWeight:600,color:"#000"}}>✓</span>:null;
@@ -3346,7 +3358,7 @@ function OnboardingScreen({user,onDone,onClose}) {
       <div style={{padding:`calc(22px + env(safe-area-inset-top)) 24px 8px`}}>
         {onClose&&<div style={{display:"flex",justifyContent:"flex-end",marginBottom:10}}><Tap onTap={onClose} style={{width:36,height:36,borderRadius:10,background:C.s2,display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{fontSize:14,color:C.ink3}}>✕</span></Tap></div>}
         <div style={{display:"flex",gap:6,marginBottom:28}}>
-          {[0,1,2,3,4,5].map(i=>(<div key={i} style={{flex:1,height:4,borderRadius:980,background:i<=step?C.blue:C.s3,transition:`background 250ms ${EO}`}}/>))}
+          {[0,1,2,3,4,5].map(i=>(<div key={i} style={{flex:1,height:4,borderRadius:999,background:i<=step?C.blue:C.s3,transition:`background 250ms ${EO}`}}/>))}
         </div>
         <div style={{fontSize:28,fontWeight:600,color:C.ink,letterSpacing:"-.03em",lineHeight:1.1}}>{titles[step]}</div>
         <div style={{fontSize:15,color:C.ink4,marginTop:6}}>{subs[step]}</div>
@@ -3366,8 +3378,8 @@ function OnboardingScreen({user,onDone,onClose}) {
         </div>)}
       </div>
       <div style={{padding:`14px 24px calc(20px + env(safe-area-inset-bottom))`,display:"flex",gap:10}}>
-        {step>0&&<Tap onTap={()=>setStep(step-1)} style={{padding:"17px 22px",borderRadius:15,background:C.s2,display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{fontSize:17,fontWeight:600,color:C.ink3}}>Retour</span></Tap>}
-        <Tap onTap={canNext&&!saving?next:undefined} style={{flex:1,padding:"17px",borderRadius:15,background:canNext?C.blue:C.s3,display:"flex",alignItems:"center",justifyContent:"center",opacity:saving?0.6:1}}><span style={{fontSize:17,fontWeight:600,color:canNext?"#000":C.ink4}}>{saving?"Creation...":last?"Creer mon programme":"Continuer"}</span></Tap>
+        {step>0&&<Tap onTap={()=>setStep(step-1)} style={{padding:"17px 22px",borderRadius:14,background:C.s2,display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{fontSize:17,fontWeight:600,color:C.ink3}}>Retour</span></Tap>}
+        <Tap onTap={canNext&&!saving?next:undefined} style={{flex:1,padding:"17px",borderRadius:14,background:canNext?C.blue:C.s3,display:"flex",alignItems:"center",justifyContent:"center",opacity:saving?0.6:1}}><span style={{fontSize:17,fontWeight:600,color:canNext?"#000":C.ink4}}>{saving?"Creation...":last?"Creer mon programme":"Continuer"}</span></Tap>
       </div>
     </div>
     </div>
@@ -4091,9 +4103,9 @@ const NAV=[{id:"home",l:"Accueil"},{id:"seance",l:"Séances"},{id:"stats",l:"Sta
             <div style={{fontSize:10,fontWeight:600,color:C.ink4,letterSpacing:".16em",textTransform:"uppercase"}}>{"S"+wk+" · "}{user?.user_metadata?.name||"Athlète"}</div>
           </div>
           <div style={{display:"flex",alignItems:"center",gap:12}}>
-            {pending>0&&<span title="Enregistrement en attente de réseau" style={{fontSize:12,fontWeight:600,color:C.ink3,background:C.s2,padding:"3px 10px",borderRadius:980,marginRight:8}}>⟳ {pending}</span>}
+            {pending>0&&<span title="Enregistrement en attente de réseau" style={{fontSize:12,fontWeight:600,color:C.ink3,background:C.s2,padding:"3px 10px",borderRadius:999,marginRight:8}}>⟳ {pending}</span>}
             {sessionActive&&(clock.running||clock.sec>0)&&<span style={{fontSize:15,fontWeight:600,color:C.red}}>{fmtDur(clock.sec)}</span>}
-            {streak>0&&<span style={{fontSize:13,fontWeight:600,color:C.ink,padding:"4px 12px",borderRadius:980,background:C.s2}}>{streak}j</span>}
+            {streak>0&&<span style={{fontSize:13,fontWeight:600,color:C.ink,padding:"4px 12px",borderRadius:999,background:C.s2}}>{streak}j</span>}
             {sbReady&&<div style={{width:6,height:6,borderRadius:"50%",background:C.green}}/>}
           </div>
         </div>
@@ -4123,7 +4135,7 @@ const NAV=[{id:"home",l:"Accueil"},{id:"seance",l:"Séances"},{id:"stats",l:"Sta
             const wasPlanned=!!(d&&d.salle);
             const isMissed=isPastDay&&wasPlanned&&!dayFullyDone&&(!profile?.program_start||dStrDate>=profile.program_start);
             return(
-              <Tap key={i} label={d.day} onTap={()=>{setDayIdx(i);setAiOverride(null);setDayCons(null);setModeOverride(null);setCircuitStart(0);setSupBlock(null);}} style={{flex:"1 1 0",minWidth:42,padding:"9px 4px",textAlign:"center",borderRadius:16,background:isSel?C.blueDim:"transparent",border:`1px solid ${isSel?C.blue:"transparent"}`,transition:`all 220ms ${EO}`}}>
+              <Tap key={i} label={d.day} onTap={()=>{setDayIdx(i);setAiOverride(null);setDayCons(null);setModeOverride(null);setCircuitStart(0);setSupBlock(null);}} style={{flex:"1 1 0",minWidth:42,padding:"9px 4px",textAlign:"center",borderRadius:18,background:isSel?C.blueDim:"transparent",border:`1px solid ${isSel?C.blue:"transparent"}`,transition:`all 220ms ${EO}`}}>
                 <div style={{fontSize:10,fontWeight:600,color:isSel?C.ink2:C.ink4,letterSpacing:".06em",marginBottom:4}}>{d.day}</div>
                 {isToday&&!dayFullyDone&&<div style={{width:6,height:6,borderRadius:"50%",background:C.lime,margin:"0 auto 4px"}}/>}
 
@@ -4154,7 +4166,7 @@ const NAV=[{id:"home",l:"Accueil"},{id:"seance",l:"Séances"},{id:"stats",l:"Sta
                 <div style={{textAlign:"center",padding:"80px 20px"}}>
                   <div style={{fontSize:36,fontWeight:600,color:C.ink4,letterSpacing:"-.02em",marginBottom:14}}>Récupération</div>
                   <div style={{fontSize:17,color:C.ink4,lineHeight:1.65,maxWidth:300,margin:"0 auto 28px"}}>{dayIdx===3?"Récupération active. Tes fibres consolident.":"Reset total. Synthèse protéique prioritaire."}</div>
-                  <Tap onTap={()=>setShowSettings(true)} style={{display:"inline-flex",padding:"13px 24px",borderRadius:980,border:`1px solid ${C.div}`,background:"transparent"}}>
+                  <Tap onTap={()=>setShowSettings(true)} style={{display:"inline-flex",padding:"13px 24px",borderRadius:999,border:`1px solid ${C.div}`,background:"transparent"}}>
                     <span style={{fontSize:15,fontWeight:600,color:C.ink3}}>Générer une séance légère</span>
                   </Tap>
                 </div>
@@ -4173,7 +4185,7 @@ const NAV=[{id:"home",l:"Accueil"},{id:"seance",l:"Séances"},{id:"stats",l:"Sta
                           <span style={{fontSize:12,fontWeight:600,color:C.blue,textTransform:"uppercase",letterSpacing:".06em"}}>Cycle 12 sem · S{pw}/12</span>
                           <span style={{fontSize:12,fontWeight:600,color:C.ink3}}>{ph12.n}</span>
                         </div>
-                        <div style={{height:6,borderRadius:980,background:C.s4,overflow:"hidden"}}><div style={{height:"100%",width:`${pw/12*100}%`,background:C.blue,borderRadius:980}}/></div>
+                        <div style={{height:6,borderRadius:999,background:C.s4,overflow:"hidden"}}><div style={{height:"100%",width:`${pw/12*100}%`,background:C.blue,borderRadius:999}}/></div>
                         {profile?.program_start&&<div style={{fontSize:11,color:C.ink4,marginTop:8}}>Programme : {fmtDateShort(profile.program_start)} → {fmtDateShort(pend)}</div>}
                         {autoRotate&&<div style={{fontSize:12,color:C.ink4,marginTop:6}}>{ph12.f} · phase {phaseOf(pw).k}</div>}
                       </div>);})()}
@@ -4181,38 +4193,53 @@ const NAV=[{id:"home",l:"Accueil"},{id:"seance",l:"Séances"},{id:"stats",l:"Sta
                   {!sessionActive?(
                     <div style={{display:"flex",gap:10,marginBottom:24}}>
                       {isDayDone?(
-                        <Tap onTap={()=>doneSession&&setShowReport(doneSession)} style={{flex:1,padding:"14px 16px",borderRadius:15,background:C.greenDim,border:`1px solid ${C.green}`,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:2}}>
+                        <Tap onTap={()=>doneSession&&setShowReport(doneSession)} style={{flex:1,padding:"14px 16px",borderRadius:14,background:C.greenDim,border:`1px solid ${C.green}`,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:2}}>
                           <span style={{fontSize:17,fontWeight:600,color:C.green}}>Séance terminée ✓</span>
                           <span style={{fontSize:12,fontWeight:600,color:C.green}}>Voir le rapport →</span>
                         </Tap>
                       ):isPastMissed?null:(
                         <Tap label="Démarrer la séance" onTap={()=>{setSessionActive(true);if(!clock.running&&clock.sec===0)clock.start();}}
-                          style={{flex:1,padding:"17px",borderRadius:20,background:C.ink,display:"flex",alignItems:"center",justifyContent:"center",gap:9}}>
+                          style={{flex:1,padding:"17px",borderRadius:22,background:C.ink,display:"flex",alignItems:"center",justifyContent:"center",gap:9}}>
                           <Icon name="play" size={16} stroke={C.bg} fill={C.bg}/>
                           <span style={{fontSize:16,fontWeight:600,color:C.bg}}>Démarrer la séance</span>
                         </Tap>
                       )}
-                      <Tap onTap={()=>setShowSettings(true)} style={{padding:"16px 20px",borderRadius:15,border:`1px solid ${C.div}`,display:"flex",alignItems:"center",justifyContent:"center"}}>
+                      <Tap onTap={()=>setShowSettings(true)} style={{padding:"16px 20px",borderRadius:14,border:`1px solid ${C.div}`,display:"flex",alignItems:"center",justifyContent:"center"}}>
                         <span style={{fontSize:14,fontWeight:600,color:C.ink3}}>Réglages</span>
                       </Tap>
                     </div>
                   ):(
                     <div style={{display:"flex",gap:10,marginBottom:24}}>
-                      <Tap onTap={()=>{if(clock.running){clock.stop();}else if(clock.sec>0){clock.resume();}else{clock.start();}}} style={{flex:1,padding:"15px",borderRadius:15,background:clock.running?C.redDim:C.s2,border:`1px solid ${clock.running?C.red:C.div}`,display:"flex",alignItems:"center",justifyContent:"center",gap:8}}>
+                      <Tap onTap={()=>{if(clock.running){clock.stop();}else if(clock.sec>0){clock.resume();}else{clock.start();}}} style={{flex:1,padding:"15px",borderRadius:14,background:clock.running?C.redDim:C.s2,border:`1px solid ${clock.running?C.red:C.div}`,display:"flex",alignItems:"center",justifyContent:"center",gap:8}}>
                         <span style={{fontSize:13}}>{clock.running?"⏸":"▶"}</span>
                         <span style={{fontSize:17,fontWeight:600,color:clock.running?C.red:C.ink2}}>{clock.sec>0||clock.running?fmtDur(clock.sec):"Chrono"}</span>
                       </Tap>
-                      <Tap onTap={()=>{clock.stop();setShowFeedback(true);}} style={{flex:2,padding:"15px",borderRadius:15,background:C.blue,border:"none",display:"flex",alignItems:"center",justifyContent:"center"}}>
+                      <Tap onTap={()=>{clock.stop();setShowFeedback(true);}} style={{flex:2,padding:"15px",borderRadius:14,background:C.blue,border:"none",display:"flex",alignItems:"center",justifyContent:"center"}}>
                         <span style={{fontSize:17,fontWeight:600,color:"#000"}}>Fin de séance</span>
                       </Tap>
-                      <Tap onTap={()=>setShowSettings(true)} style={{padding:"15px 16px",borderRadius:15,border:`1px solid ${C.div}`,display:"flex",alignItems:"center",justifyContent:"center"}}>
+                      <Tap onTap={()=>setShowSettings(true)} style={{padding:"15px 16px",borderRadius:14,border:`1px solid ${C.div}`,display:"flex",alignItems:"center",justifyContent:"center"}}>
                         <span style={{fontSize:13,fontWeight:600,color:C.ink3}}>Réglages</span>
                       </Tap>
                     </div>
                   )}
-                  <div style={{paddingLeft:16,borderLeft:`2px solid ${C.s3}`,marginBottom:24}}>
-                    <div style={{fontSize:11,fontWeight:600,color:C.ink4,textTransform:"uppercase",letterSpacing:".1em",marginBottom:6}}>Échauffement · 8 min</div>
-                    <div style={{fontSize:14,color:C.ink3,lineHeight:1.75}}>{day.salle==="haut"?"Rotations épaules · Wall slide · Push-up to downdog · Mobilité thoracique":"Corde 3min · Hip circle · Leg swing · KB Swing léger ×10"}</div>
+                  {/* L'echauffement etait un simple retrait derriere un trait vertical.
+                      C'est un bloc de la seance : il en prend la carte et la grammaire. */}
+                  <div style={{background:C.bg,border:`1px solid ${C.s2}`,borderRadius:24,padding:"14px 16px",
+                    marginBottom:11,boxShadow:`0 3px 16px ${C.ink5}`}}>
+                    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,marginBottom:4}}>
+                      <span style={{fontSize:11.5,fontWeight:500,color:C.ink4}}>Bloc échauffement</span>
+                      <span style={{fontSize:10.5,fontWeight:600,padding:"4px 11px",borderRadius:999,background:C.s2,color:C.ink3}}>8 min</span>
+                    </div>
+                    {(day.salle==="haut"
+                      ?["Rotations épaules","Wall slide","Push-up to downdog","Mobilité thoracique"]
+                      :["Corde 3 min","Hip circle","Leg swing","KB Swing léger ×10"]).map((w,k)=>(
+                      <div key={w} style={{display:"flex",alignItems:"center",gap:11,padding:"9px 0",
+                        borderTop:k?`1px solid ${C.s2}`:"none"}}>
+                        <span style={{width:4,height:26,borderRadius:2,flexShrink:0,background:C.s4}}/>
+                        <span style={{flex:1,minWidth:0,fontSize:14,fontWeight:500,color:C.ink,
+                          whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{w}</span>
+                      </div>
+                    ))}
                   </div>
                   {day.salle&&!locked&&(profile?.active_skills||[]).length>0&&sessionIndex%2===0&&(profile.active_skills.map(as=>{
                     const sk=SKILLS_CATALOG.find(s=>s.id===as.skillId);
@@ -4333,7 +4360,7 @@ const NAV=[{id:"home",l:"Accueil"},{id:"seance",l:"Séances"},{id:"stats",l:"Sta
                     </div>
                   )}
                   {!sessionActive&&!locked&&(
-                    <Tap onTap={()=>setShowFeedback(true)} style={{marginTop:28,marginBottom:16,padding:"16px",borderRadius:15,background:C.blue,display:"flex",alignItems:"center",justifyContent:"center"}}>
+                    <Tap onTap={()=>setShowFeedback(true)} style={{marginTop:28,marginBottom:16,padding:"16px",borderRadius:14,background:C.blue,display:"flex",alignItems:"center",justifyContent:"center"}}>
                       <span style={{fontSize:17,fontWeight:600,color:"#000"}}>Fin de séance</span>
                     </Tap>
                   )}
@@ -4394,7 +4421,7 @@ const NAV=[{id:"home",l:"Accueil"},{id:"seance",l:"Séances"},{id:"stats",l:"Sta
           cartes que le reste, avec l'onglet actif en carre sombre. */}
       <div style={{position:"fixed",left:0,right:0,bottom:0,zIndex:Z.sticky+10,display:"flex",justifyContent:"center",
                    padding:"0 18px calc(14px + env(safe-area-inset-bottom))",pointerEvents:"none"}}>
-        <div style={{pointerEvents:"auto",display:"flex",gap:4,padding:6,borderRadius:26,width:"100%",maxWidth:600,
+        <div style={{pointerEvents:"auto",display:"flex",gap:4,padding:6,borderRadius:24,width:"100%",maxWidth:600,
                      background:C.bg==="#FFFFFF"?"rgba(255,255,255,.86)":"rgba(28,28,43,.86)",
                      backdropFilter:"blur(22px)",WebkitBackdropFilter:"blur(22px)",
                      border:`1px solid ${C.s2}`,boxShadow:`0 10px 30px ${C.ink5}`}}>
@@ -4442,6 +4469,9 @@ const NAV=[{id:"home",l:"Accueil"},{id:"seance",l:"Séances"},{id:"stats",l:"Sta
     </div>
   );
 }
+
+
+
 
 
 
