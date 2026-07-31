@@ -188,7 +188,7 @@ const REST_TPL = {label:"Repos",salle:null,muscle:"Recuperation active",exercise
 const SESSION_TEMPLATES = [...PROGRAM.filter(d=>d.salle).map(d=>({label:d.label,salle:d.salle,muscle:d.muscle,exercises:d.exercises,abs:d.abs,ids:d.ids})), REST_TPL];
 
 // Rotation hebdo - mesocycle hybride (Volume -> Intensite -> Puissance -> Deload)
-const VERSION="1.41.2";
+const VERSION="1.42.0";
 const weekNumber = () => { const dt=new Date(); const d=new Date(Date.UTC(dt.getFullYear(),dt.getMonth(),dt.getDate())); const dn=(d.getUTCDay()+6)%7; d.setUTCDate(d.getUTCDate()-dn+3); const ft=new Date(Date.UTC(d.getUTCFullYear(),0,4)); const fn=(ft.getUTCDay()+6)%7; ft.setUTCDate(ft.getUTCDate()-fn+3); return 1+Math.round((d-ft)/604800000); };
 const PHASES12=[{n:"Accumulation",f:"Volume, base"},{n:"Accumulation",f:"Volume"},{n:"Accumulation",f:"Volume +"},{n:"Intensification",f:"Charges +"},{n:"Intensification",f:"Charges ++"},{n:"Intensification",f:"Lourd"},{n:"Réalisation",f:"Explosif"},{n:"Réalisation",f:"Puissance"},{n:"Réalisation",f:"Pic de force"},{n:"Deload",f:"Récupération"},{n:"Test / PR",f:"Validation"},{n:"Test / PR",f:"Nouveaux maxs"}];
 const programWeek=()=>((weekNumber()-1)%12)+1;
@@ -1131,7 +1131,7 @@ const setPlanFor=(ex)=>{
 };
 const repsNum=(r)=>{const m=String(r||"").match(/\d+/);return m?parseInt(m[0]):0;};
 
-function HomeTab({profile,streak,sessions,weights,todaySession,onStartToday,accent,trainingDaysPerWeek,weighIns,onSaveWeighIn}) {
+function HomeTab({profile,streak,sessions,weights,todaySession,onStartToday,accent,trainingDaysPerWeek,weighIns}) {
   const now=new Date();
   const wk=(()=>{const d=new Date(now);const day=(d.getDay()+6)%7;d.setDate(d.getDate()-day);d.setHours(0,0,0,0);return d;})();
   const weekKeys=Array.from({length:7},(_,i)=>{const d=new Date(wk);d.setDate(wk.getDate()+i);return localDateKey(d);});
@@ -1285,8 +1285,6 @@ function HomeTab({profile,streak,sessions,weights,todaySession,onStartToday,acce
         <div style={{fontSize:11.5,color:C.ink4,marginTop:7}}>{totalSessions} séances enregistrées</div>
       </Card>
     </div>
-
-    {onSaveWeighIn&&<WeighInCard weighIns={weighIns} onSave={onSaveWeighIn}/>}
 
     {showBilan&&<Card bg={C.s1}>
       <div style={{fontSize:11.5,fontWeight:600,color:C.ink4,textTransform:"uppercase",letterSpacing:".1em",marginBottom:10}}>Bilan vs semaine dernière</div>
@@ -2158,10 +2156,11 @@ const mondayOf=(d)=>{const t=(typeof d==="string")?new Date(d+"T00:00:00"):new D
 // du mercredi ecrasait celle du lundi et la courbe restait pauvre. La table weigh_ins
 // est deja unique par (user_id, date), donc une pesee par JOUR : c'est cette granularite
 // qu'on expose. Plus de points, une courbe plus juste.
-function WeighInCard({weighIns,onSave,compact}) {
+function WeighInCard({weighIns,onSave}) {
   const list=(weighIns||[]).slice().sort((a,b)=>String(a.date).localeCompare(String(b.date)));
   const today=todayKey();
   const [date,setDate]=useState(today);
+  const [openDate,setOpenDate]=useState(false);
   const done=list.find(w=>w.date===date);
   const prev=list.filter(w=>w.date<date).pop();
   const [val,setVal]=useState(()=>{const d=list.find(w=>w.date===today);
@@ -2176,63 +2175,52 @@ function WeighInCard({weighIns,onSave,compact}) {
   const num=parseFloat(String(val).replace(",","."));
   const valid=num>20&&num<300;
   const changed=valid&&(!done||Math.abs(num-Number(done.weight_kg))>=0.05);
-  const delta=(done&&prev)?Math.round((Number(done.weight_kg)-Number(prev.weight_kg))*10)/10:null;
-  const bump=(d)=>{ const base=valid?num:(prev?Number(prev.weight_kg):75);
-    setVal(String(Math.round((base+d)*10)/10)); };
-  const save=()=>{ if(!valid) return; onSave(num,date); setFlash(true);
-    setTimeout(()=>setFlash(false),1500); play("cloche"); buzz(40); };
-
-  const Step=({sign,d})=>(
-    <Tap label={sign==="+"?"Augmenter de 100 g":"Diminuer de 100 g"} onTap={()=>bump(d)}
-      style={{width:44,height:48,borderRadius:12,background:C.s1,display:"flex",
-        alignItems:"center",justifyContent:"center",flexShrink:0}}>
-      <Icon name={sign==="+"?"plus":"minus"} size={16} stroke={C.ink2}/></Tap>
-  );
+  const save=()=>{ if(!changed) return; onSave(num,date); setFlash(true);
+    setTimeout(()=>setFlash(false),1600); play("cloche"); buzz(40); };
+  const jour=(()=>{ const d=new Date(date+"T00:00:00");
+    const J=["dim.","lun.","mar.","mer.","jeu.","ven.","sam."];
+    return `${J[d.getDay()]} ${d.getDate()}`; })();
 
   return (
-    <div style={{background:C.card,border:`1px solid ${C.s2}`,boxShadow:`0 3px 16px ${C.ink5}`,
-      borderRadius:22,padding:"16px",marginBottom:10,animation:`riseIn 320ms ${EO} both`}}>
+    <div style={{background:C.s1,borderRadius:22,padding:"16px",marginBottom:10,
+      animation:`riseIn 320ms ${EO} both`}}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:10}}>
-        <span style={{fontSize:15,fontWeight:600,color:C.ink}}>
-          {date===today?"Pesée du jour":`Pesée du ${fmtDateShort(date)}`}</span>
+        <span style={{fontSize:15,fontWeight:600,color:C.ink}}>Pesée libre</span>
         <span style={{fontSize:10,fontWeight:600,padding:"4px 11px",borderRadius:999,
-          background:flash?C.accentSoft:C.s2,color:flash?C.ink2:C.ink3,whiteSpace:"nowrap",
-          transition:`background 240ms ${EO}`}}>
-          {flash?"Enregistrée":(done?`déjà pesé · ${String(done.weight_kg).replace(".",",")} kg`
-            :(list.length?`${list.length} au total`:"Première"))}</span>
+          background:flash?C.accent:C.s2,color:flash?C.onAccent:C.ink3,whiteSpace:"nowrap",
+          transition:`background 240ms ${EO}`}}>{flash?"Enregistrée":(done?"Déjà pesé":"Nouveau")}</span>
       </div>
-      {!compact&&<div style={{fontSize:11.5,color:C.ink4,marginTop:4,lineHeight:1.5}}>
-        {delta!==null&&delta!==0
-          ?`${delta>0?"+":""}${String(delta).replace(".",",")} kg depuis la pesée précédente.`
-          :"N'importe quel jour, autant de fois que tu veux — change la date pour rattraper une pesée oubliée."}</div>}
+      <div style={{fontSize:11.5,color:C.ink4,marginTop:5,lineHeight:1.5}}>
+        N'importe quel jour, autant de fois que tu veux. Chaque pesée est un point de plus sur la courbe.</div>
 
-      {/* Le champ reste toujours modifiable : la carte basculait en lecture seule
-          des qu'une pesee existait, et il fallait retrouver un bouton pour en
-          ressortir. */}
-      <div style={{display:"flex",gap:8,alignItems:"center",marginTop:12}}>
-        <Step sign="−" d={-0.1}/>
-        <input type="number" inputMode="decimal" step="0.1" value={val}
-          onChange={e=>setVal(e.target.value)} onFocus={e=>e.target.select()}
-          placeholder={prev?String(prev.weight_kg):"kg"} aria-label="Poids en kilogrammes"
-          style={{flex:1,minWidth:0,height:48,borderRadius:12,border:`1px solid ${valid?C.s3:C.s4}`,
-            background:C.bg,color:C.ink,fontSize:16,fontWeight:500,fontFamily:F,textAlign:"center",
-            outline:"none",boxSizing:"border-box",fontVariantNumeric:"tabular-nums",
-            userSelect:"text",WebkitUserSelect:"text"}}/>
-        <Step sign="+" d={0.1}/>
-      </div>
-
-      <div style={{display:"flex",gap:8,alignItems:"center",marginTop:8}}>
-        <input type="date" value={date} max={today} onChange={e=>pick(e.target.value||today)}
-          aria-label="Date de la pesée"
-          style={{flex:1,minWidth:0,height:44,borderRadius:12,border:`1px solid ${C.s3}`,
-            background:C.bg,color:C.ink3,fontSize:12.5,fontFamily:F,padding:"0 12px",outline:"none",
-            boxSizing:"border-box",fontVariantNumeric:"tabular-nums",
-            userSelect:"text",WebkitUserSelect:"text"}}/>
+      <div style={{display:"flex",gap:10,alignItems:"stretch",marginTop:13}}>
+        <div style={{flex:1,minWidth:0,background:C.bg,borderRadius:22,padding:"10px 12px",
+          display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center"}}>
+          <input type="number" inputMode="decimal" step="0.1" value={val}
+            onChange={e=>setVal(e.target.value)} onFocus={e=>e.target.select()}
+            placeholder={prev?String(prev.weight_kg):"—"} aria-label="Poids en kilogrammes"
+            style={{width:"100%",border:"none",background:"transparent",color:C.ink,textAlign:"center",
+              fontSize:21,fontWeight:500,fontFamily:F,letterSpacing:"-.03em",outline:"none",padding:0,
+              fontVariantNumeric:"tabular-nums",userSelect:"text",WebkitUserSelect:"text"}}/>
+          <span style={{fontSize:11.5,color:C.ink4,marginTop:2}}>kg</span>
+        </div>
         <Tap label="Enregistrer la pesée" onTap={changed?save:undefined}
-          style={{padding:"0 20px",height:44,borderRadius:12,flexShrink:0,
-            background:changed?C.accent:C.s2,display:"flex",alignItems:"center",
-            transition:`background 200ms ${EO}`}}>
-          <span style={{fontSize:14,fontWeight:600,color:changed?C.onAccent:C.ink4}}>Enregistrer</span></Tap>
+          style={{flex:1,minWidth:0,borderRadius:22,background:changed?C.fill:C.s2,
+            display:"flex",alignItems:"center",justifyContent:"center",transition:`background 200ms ${EO}`}}>
+          <span style={{fontSize:15,fontWeight:600,color:changed?C.onFill:C.ink4}}>Enregistrer</span></Tap>
+      </div>
+
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:10,marginTop:11}}>
+        <span style={{fontSize:11.5,color:C.ink4}}>
+          {date===today?`Aujourd'hui · ${jour}`:`Le ${fmtDateShort(date)}`}</span>
+        {openDate
+          ? <input type="date" value={date} max={today} onChange={e=>{pick(e.target.value||today);setOpenDate(false);}}
+              aria-label="Date de la pesée"
+              style={{border:`1px solid ${C.s3}`,borderRadius:12,background:C.bg,color:C.ink,fontSize:12.5,
+                fontFamily:F,padding:"7px 10px",outline:"none",fontVariantNumeric:"tabular-nums",
+                userSelect:"text",WebkitUserSelect:"text"}}/>
+          : <Tap label="Changer la date" onTap={()=>setOpenDate(true)}>
+              <span style={{fontSize:11.5,fontWeight:600,color:C.ink3}}>Changer la date ›</span></Tap>}
       </div>
     </div>
   );
@@ -2247,45 +2235,51 @@ function WeightChart({weighIns,accent,compact}) {
   if(pts.length<2) return (
     <div style={{background:C.card,border:`1px solid ${C.s2}`,boxShadow:`0 3px 16px ${C.ink5}`,
       borderRadius:22,padding:"16px",marginBottom:10}}>
-      <div style={{fontSize:14,fontWeight:600,color:C.ink,marginBottom:3}}>Poids de corps</div>
+      <div style={{fontSize:15,fontWeight:600,color:C.ink,marginBottom:3}}>Poids de corps</div>
       <div style={{fontSize:11.5,color:C.ink4}}>Une deuxième pesée et la courbe apparaît.</div>
     </div>
   );
-  const W=340,H=compact?74:104,PADX=10,PADY=12;
-  const vs=pts.map(p=>p.v), min=Math.min(...vs), max=Math.max(...vs), span=(max-min)||1;
-  const t0=pts[0].t, tSpan=(pts[pts.length-1].t-t0)||1;
-  const x=(p)=>PADX+((p.t-t0)/tSpan)*(W-PADX*2);
+  // Au-dela de huit points les dates se chevauchent : on garde les huit dernieres.
+  const shown=pts.slice(-8);
+  const W=340,H=compact?76:104,PADX=14,PADY=13;
+  const vs=shown.map(x=>x.v), min=Math.min(...vs), max=Math.max(...vs), span=(max-min)||1;
+  const t0=shown[0].t, tSpan=(shown[shown.length-1].t-t0)||1;
+  const x=(q)=>PADX+((q.t-t0)/tSpan)*(W-PADX*2);
   const y=(v)=>PADY+(1-(v-min)/span)*(H-PADY*2);
-  const line=pts.map((p,i)=>`${i?"L":"M"}${x(p).toFixed(1)},${y(p.v).toFixed(1)}`).join(" ");
-  const area=`${line} L${x(pts[pts.length-1]).toFixed(1)},${H} L${x(pts[0]).toFixed(1)},${H} Z`;
+  const line=shown.map((q,k)=>`${k?"L":"M"}${x(q).toFixed(1)},${y(q.v).toFixed(1)}`).join(" ");
   const first=pts[0].v,lastV=pts[pts.length-1].v,delta=Math.round((lastV-first)*10)/10;
-  const days=Math.max(1,Math.round(tSpan/86400000));
+  const days=Math.max(1,Math.round((pts[pts.length-1].t-pts[0].t)/86400000));
   return (
     <div style={{background:C.card,border:`1px solid ${C.s2}`,boxShadow:`0 3px 16px ${C.ink5}`,
       borderRadius:22,padding:"16px",marginBottom:10}}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:10}}>
-        <span style={{fontSize:14,fontWeight:600,color:C.ink}}>Poids de corps</span>
-        <span style={{fontSize:10,fontWeight:600,padding:"4px 11px",borderRadius:999,background:C.s2,color:C.ink3}}>
-          {pts.length} pesées · {days} j</span>
+        <span style={{fontSize:15,fontWeight:600,color:C.ink}}>Poids de corps</span>
+        <span style={{fontSize:10,fontWeight:600,padding:"4px 11px",borderRadius:999,background:C.s2,
+          color:C.ink3,whiteSpace:"nowrap"}}>{pts.length} pesées</span>
       </div>
-      <div style={{fontSize:34,fontWeight:500,color:C.ink,letterSpacing:"-.035em",lineHeight:1,marginTop:9,
-        fontVariantNumeric:"tabular-nums"}}>{String(lastV).replace(".",",")}<span style={{fontSize:12.5,fontWeight:400,color:C.ink4}}> kg</span></div>
-      <div style={{fontSize:11.5,color:C.ink4,marginTop:3}}>
-        {delta===0?"stable":`${delta>0?"+":""}${String(delta).replace(".",",")} kg`} depuis le {fmtDateShort(pts[0].d)}</div>
-      {/* preserveAspectRatio par defaut : le trace n'est plus etire, les points restent ronds. */}
-      <svg viewBox={`0 0 ${W} ${H}`} style={{width:"100%",height:"auto",display:"block",marginTop:11,overflow:"visible"}}>
+      <div style={{fontSize:34,fontWeight:500,color:C.ink,letterSpacing:"-.035em",lineHeight:1,marginTop:10,
+        fontVariantNumeric:"tabular-nums"}}>{String(lastV).replace(".",",")}
+        <span style={{fontSize:12.5,fontWeight:400,color:C.ink4}}> kg</span></div>
+      <div style={{fontSize:11.5,color:C.ink4,marginTop:5}}>
+        {delta===0?"stable":`${delta>0?"+":""}${String(delta).replace(".",",")} kg`} en {days} jours</div>
+      <svg viewBox={`0 0 ${W} ${H}`} style={{width:"100%",height:"auto",display:"block",marginTop:14,
+        overflow:"visible"}}>
         <g stroke={C.s2} strokeWidth="1">
-          <line x1="0" y1={PADY} x2={W} y2={PADY}/><line x1="0" y1={H/2} x2={W} y2={H/2}/>
+          <line x1="0" y1={PADY} x2={W} y2={PADY}/>
+          <line x1="0" y1={H/2} x2={W} y2={H/2}/>
           <line x1="0" y1={H-PADY} x2={W} y2={H-PADY}/></g>
-        <path d={area} fill={C.accentSoft}/>
-        <path d={line} fill="none" stroke={accent||C.accent} strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"/>
-        {pts.slice(0,-1).map((p,i)=>(<circle key={i} cx={x(p)} cy={y(p.v)} r="3.2" fill={C.bg} stroke={accent||C.accent} strokeWidth="2"/>))}
-        <circle cx={x(pts[pts.length-1])} cy={y(lastV)} r="4.4" fill={accent||C.accent}/>
+        <path d={line} fill="none" stroke={accent||C.accent} strokeWidth="2.2"
+          strokeLinecap="round" strokeLinejoin="round"/>
+        {shown.slice(0,-1).map((q,k)=>(
+          <circle key={k} cx={x(q)} cy={y(q.v)} r="3.6" fill={C.card}
+            stroke={accent||C.accent} strokeWidth="2"/>))}
+        <circle cx={x(shown[shown.length-1])} cy={y(lastV)} r="4.6" fill={accent||C.accent}/>
       </svg>
-      <div style={{display:"flex",justifyContent:"space-between",fontSize:10,color:C.ink4,marginTop:7,
-        fontVariantNumeric:"tabular-nums"}}>
-        <span>{fmtDateShort(pts[0].d)} · {String(first).replace(".",",")} kg</span>
-        <span>{fmtDateShort(pts[pts.length-1].d)}</span>
+      {/* Une date sous chaque point : sans elles, un creux ne dit pas quand. */}
+      <div style={{display:"flex",justifyContent:"space-between",marginTop:9}}>
+        {shown.map(q=>(
+          <span key={q.d} style={{fontSize:10,color:C.ink4,fontVariantNumeric:"tabular-nums"}}>
+            {q.d.slice(8,10)}/{q.d.slice(5,7)}</span>))}
       </div>
     </div>
   );
@@ -2506,10 +2500,11 @@ function SkillsOctagon({sessions,profile}) {
             ["Intensité",intensite],["Progression",prog],["Équilibre",equilibre],["Explosivité",explosivite]];
   },[sessions,profile]);
   if(!axes) return null;
-  const cx=150,cy=92,R=68;
+  const cx=150,cy=118,R=88;
   const pt=(i,r)=>{const a=(-90+i*45)*Math.PI/180;return [cx+Math.cos(a)*r,cy+Math.sin(a)*r];};
   const poly=axes.map((ax,i)=>pt(i,ax[1]/100*R).join(",")).join(" ");
-  const grid=[25,50,75,100].map(g=>axes.map((_,i)=>pt(i,g/100*R).join(",")).join(" "));
+  // Deux anneaux, comme la maquette : quatre transformaient le fond en cible.
+  const grid=[45,100].map(g=>axes.map((_,i)=>pt(i,g/100*R).join(",")).join(" "));
   return (
     <div style={{background:C.card,border:`1px solid ${C.s2}`,boxShadow:`0 3px 16px ${C.ink5}`,
       borderRadius:22,padding:"16px",marginBottom:10}}>
@@ -2518,16 +2513,15 @@ function SkillsOctagon({sessions,profile}) {
         <span style={{fontSize:10,fontWeight:600,padding:"4px 11px",borderRadius:999,background:C.s2,color:C.ink3}}>8 qualités</span>
       </div>
       <div style={{fontSize:11.5,color:C.ink4,marginBottom:2}}>Calculées sur ton historique.</div>
-      <svg viewBox="0 0 300 184" style={{width:"100%",height:"auto",display:"block"}}>
+      <svg viewBox="0 0 300 246" style={{width:"100%",height:"auto",display:"block",marginTop:6}}>
         {grid.map((g,i)=>(<polygon key={"g"+i} points={g} fill="none" stroke={C.s3} strokeWidth="1"/>))}
-        {axes.map((_,i)=>{const[x,y]=pt(i,R);return <line key={"l"+i} x1={cx} y1={cy} x2={x} y2={y} stroke={C.s3} strokeWidth="1"/>;})}
-        <polygon points={poly} fill={C.accent} fillOpacity="0.25" stroke={C.accent} strokeWidth="2"/>
-        {axes.map((ax,i)=>{const[x,y]=pt(i,ax[1]/100*R);return <circle key={"c"+i} cx={x} cy={y} r="3" fill={C.accent}/>;})}
+        <polygon points={poly} fill={C.accent} fillOpacity="0.22" stroke={C.accent}
+          strokeWidth="2.4" strokeLinejoin="round"/>
         {axes.map((ax,i)=>{
-          const[x,y]=pt(i,R+11);
+          const[x,y]=pt(i,R+15);
           const dx=x-cx;
           const anchor=dx>2?"start":(dx<-2?"end":"middle");
-          return <text key={"t"+i} x={x+(dx>2?3:(dx<-2?-3:0))} y={y} fill={C.ink3} fontSize="10"
+          return <text key={"t"+i} x={x+(dx>2?4:(dx<-2?-4:0))} y={y} fill={C.ink4} fontSize="11.5"
             fontWeight="500" textAnchor={anchor} dominantBaseline="middle" fontFamily={F}>{ax[0]}</text>;})}
       </svg>
     </div>
@@ -4600,7 +4594,7 @@ const NAV=[{id:"home",l:"Accueil"},{id:"seance",l:"Séances"},{id:"stats",l:"Sta
       {/* CONTENT */}
       <div style={{paddingBottom:104}}>
         <TabContent tab={tab} prevTab={prevTab}>
-          {tab==="home"&&<HomeTab profile={profile} streak={streak} sessions={sessions} weights={weights} todaySession={todaySessionForHome} accent={accent} trainingDaysPerWeek={trainingDaysPerWeek} weighIns={weighIns} onSaveWeighIn={saveWeighIn} onStartToday={()=>{setDayIdx(todayIdx());switchTab("seance");}}/>}
+          {tab==="home"&&<HomeTab profile={profile} streak={streak} sessions={sessions} weights={weights} todaySession={todaySessionForHome} accent={accent} trainingDaysPerWeek={trainingDaysPerWeek} weighIns={weighIns} onStartToday={()=>{setDayIdx(todayIdx());switchTab("seance");}}/>}
           {tab==="seance"&&(
             <div style={{padding:"14px 18px 0",maxWidth:600,margin:"0 auto"}}>
               {isRest?(
@@ -4937,6 +4931,7 @@ const NAV=[{id:"home",l:"Accueil"},{id:"seance",l:"Séances"},{id:"stats",l:"Sta
     </div>
   );
 }
+
 
 
 
