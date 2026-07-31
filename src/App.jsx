@@ -195,6 +195,7 @@ const BW_FRACTION={pull_v:1.0,push_h:0.72,push_v:0.65,squat:0.85,hinge:0.6,arm_p
 const bodyLoadKg=(ex,bw)=>{
   if(!ex||ex.eq!=="bw"||!(bw>0)) return 0;
   const n=noAccent(ex.n);
+  if(/dips banc|bench dip/.test(n)) return Math.round(bw*0.35); // appui arriere, bien plus facile
   if(/dips|muscle-?up/.test(n)) return Math.round(bw*0.95);
   const f=BW_FRACTION[metaOf(ex).pattern];
   return f?Math.round(bw*f):0;
@@ -2789,7 +2790,7 @@ function SettingsTab({user,excluded,onToggleExclude,onSignOut,onReset,onOpenLibr
           <span style={{fontSize:17,color:C.red}}>›</span>
         </Tap>
       </div>
-      <div style={{fontSize:12,color:C.ink4,textAlign:"center",marginTop:28}}>SŌMA · {"S"+weekNumber()} · {DB.length} exercices · build 23.75a</div>
+      <div style={{fontSize:12,color:C.ink4,textAlign:"center",marginTop:28}}>SŌMA · {"S"+weekNumber()} · {DB.length} exercices · build 23.76a</div>
     </div>
   );
 }
@@ -3731,6 +3732,30 @@ export default function SomaApp() {
   const isDayDone=sessions.some(s=>s.date===tabDate);
   const doneSession=isDayDone?sessions.find(s=>s.date===tabDate):null;
   const isBeforeProgramStart=!!(profile?.program_start&&tabDate<profile.program_start);
+  // Le programme est une SEQUENCE de 60 seances, pas un calendrier. Une seance non faite
+  // devait donc etre reportee jusqu'a etre executee. Or la seance en attente n'etait proposee
+  // que si le planning de la semaine declarait ce jour comme un jour d'entrainement : rater
+  // un lundi et se presenter un mardi de repos affichait "Recuperation", et la sequence
+  // restait bloquee. On compte les creneaux prevus et deja passes qui n'ont pas ete honores.
+  const overdueCount=useMemo(()=>{
+    const start=profile?.program_start; if(!start) return 0;
+    const today=todayKey(); if(today<=start) return 0;
+    // On compte les creneaux manques DEPUIS LA DERNIERE SEANCE, et non depuis le debut du
+    // programme : un cumul depuis l'origine annoncerait "7 seances en retard" a quelqu'un
+    // qui s'est entraine hier, ce qui n'a aucun sens et decourage sans rien apprendre.
+    const last=(sessions||[]).map(x=>x.date).filter(x=>x<today).sort().pop()||start;
+    let slots=0,guard=0;
+    const d=new Date(last+"T00:00:00"); d.setDate(d.getDate()+1);
+    const end=new Date(today+"T00:00:00");
+    while(d<end&&guard++<400){
+      const dow=(d.getDay()+6)%7;
+      const dd=(schedule&&schedule[dow])||PROG_DEF[dow];
+      if(dd&&dd.salle) slots++;
+      d.setDate(d.getDate()+1);
+    }
+    return slots;
+  },[profile,schedule,sessions]);
+  const isLate=overdueCount>0;
   const pendingTemplate=(!programDone&&!isBeforeProgramStart)?pendingSessionFor(profile?.goal||"hybride",sessionIndex,profile?.equipment):null;
   // Une journee DEJA ENREGISTREE s'affiche telle qu'elle a ete faite : intitule, muscles et
   // exercices viennent de la seance sauvegardee, qui est la seule verite sur ce qui s'est passe
@@ -3757,7 +3782,7 @@ export default function SomaApp() {
       exercises:dex,abs:[],
     };
   })():null;
-  const day0=doneDay||(isBeforeProgramStart?{...REST_TPL,day:rawDay0?.day}:(isViewingToday&&rawDay0?.salle&&pendingTemplate)?(()=>{let c={...pendingTemplate,day:rawDay0.day};if(profile?.equipment?.length)c=adaptEquip(c,profile.equipment);c=personalizeDay(c,profile,sessionWeek,perf);return c;})():rawDay0);
+  const day0=doneDay||(isBeforeProgramStart?{...REST_TPL,day:rawDay0?.day}:(isViewingToday&&(rawDay0?.salle||isLate)&&pendingTemplate)?(()=>{let c={...pendingTemplate,day:rawDay0.day};if(profile?.equipment?.length)c=adaptEquip(c,profile.equipment);c=personalizeDay(c,profile,sessionWeek,perf);return c;})():rawDay0);
   // Seance "aujourd'hui" pour la page Accueil : DOIT utiliser la meme logique de sequence que day0 ci-dessus,
   // independamment de l'onglet jour actuellement affiche (dayIdx peut pointer vers un autre jour que aujourd'hui).
   const todaySessionForHome=(()=>{
@@ -3766,7 +3791,7 @@ export default function SomaApp() {
     const trDate=programDate(trIdx);
     const trBeforeStart=!!(profile?.program_start&&trDate<profile.program_start);
     if(trBeforeStart) return {...REST_TPL,day:trRaw?.day};
-    if(!trRaw?.salle||programDone||!pendingTemplate) return trRaw;
+    if((!trRaw?.salle&&!isLate)||programDone||!pendingTemplate) return trRaw;
     let c={...pendingTemplate,day:trRaw.day};
     if(profile?.equipment?.length) c=adaptEquip(c,profile.equipment);
     c=personalizeDay(c,profile,sessionWeek,perf);
@@ -3880,12 +3905,21 @@ const NAV=[{id:"home",l:"Accueil"},{id:"seance",l:"Séances"},{id:"stats",l:"Sta
             const pct=exList.length?done/exList.length:0;
             const dayFullyDone=sessions.some(s=>s.date===dStrDate);
             const isSel=i===dayIdx,isToday=i===todayIdx();
+            // Trois etats distincts etaient confondus : la barre ne montrait qu'une coche
+            // pour le fait et un point pour aujourd'hui. Une echeance passee sans seance
+            // n'etait signalee nulle part, alors que c'est l'information qui doit alerter.
+            const isPastDay=dStrDate<todayKey();
+            const wasPlanned=!!(d&&d.salle);
+            const isMissed=isPastDay&&wasPlanned&&!dayFullyDone&&(!profile?.program_start||dStrDate>=profile.program_start);
             return(
               <Tap key={i} onTap={()=>{setDayIdx(i);setAiOverride(null);setDayCons(null);setModeOverride(null);setCircuitStart(0);setSupBlock(null);}} style={{flexShrink:0,minWidth:52,padding:"10px 6px",textAlign:"center",borderRadius:12,background:isSel?C.s2:"transparent",border:`1px solid ${isSel?C.s4:"transparent"}`,transition:`all 200ms ${EO}`}}>
                 <div style={{fontSize:10,fontWeight:600,color:isSel?C.ink2:C.ink4,letterSpacing:".06em",marginBottom:4}}>{d.day}</div>
                 {isToday&&!dayFullyDone&&<div style={{width:6,height:6,borderRadius:"50%",background:C.lime,margin:"0 auto 4px"}}/>}
+                {!isToday&&isMissed&&<div title="Séance manquée" style={{width:6,height:6,borderRadius:"50%",border:`1.5px solid ${C.ink4}`,margin:"0 auto 4px",boxSizing:"border-box"}}/>}
                 {dayFullyDone?(
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={accent||C.green} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" style={{margin:"0 auto",display:"block"}}><path d="M20 6L9 17l-5-5"/></svg>
+                ):isMissed?(
+                  <span style={{display:"block",textAlign:"center",fontSize:12,fontWeight:700,color:C.ink4,lineHeight:"12px"}}>↷</span>
                 ):(d.salle&&pct>0&&<div style={{width:"70%",height:2,background:C.s4,borderRadius:1,margin:"0 auto"}}>
                   <div style={{width:`${pct*100}%`,height:2,background:accent,borderRadius:1,transition:`width 400ms ${EO}`}}/>
                 </div>)}
@@ -3997,6 +4031,17 @@ const NAV=[{id:"home",l:"Accueil"},{id:"seance",l:"Séances"},{id:"stats",l:"Sta
                       </div>
                     );
                   }))}
+                  {isViewingToday&&isLate&&!isDayDone&&(
+                    <div style={{background:C.s2,border:`1px solid ${C.s4}`,borderRadius:14,padding:"12px 15px",marginBottom:16,display:"flex",alignItems:"center",gap:10}}>
+                      <span style={{fontSize:15,fontWeight:700,color:C.ink}}>↷</span>
+                      <div>
+                        <div style={{fontSize:14,fontWeight:600,color:C.ink}}>Séance reportée</div>
+                        <div style={{fontSize:12,color:C.ink3,marginTop:1}}>
+                          {overdueCount>1?`${overdueCount} séances en retard — voici la prochaine dans l'ordre du programme.`:"Une séance n'a pas été faite — la voici, à sa place dans le programme."}
+                        </div>
+                      </div>
+                    </div>
+                  )}
                   {day.salle&&<div style={{marginBottom:16}}>
                     <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:sessionMode==="classique"?0:10}}><span style={{fontSize:11,fontWeight:700,color:C.ink3,textTransform:"uppercase",letterSpacing:".1em"}}>Séance du jour</span><span style={{fontSize:11,fontWeight:800,color:"#000",background:C.blue,padding:"2px 9px",borderRadius:7,textTransform:"uppercase",letterSpacing:".06em"}}>{modeLabel}</span></div>
                     {sessionMode!=="classique"&&!locked&&<Tap onTap={()=>setShowCircuit(true)} style={{display:"flex",alignItems:"center",justifyContent:"center",gap:8,padding:"14px",borderRadius:12,background:C.blueDim,border:`1px solid ${C.blue}`}}><span style={{fontSize:15}}>⏱</span><span style={{fontSize:15,fontWeight:700,color:C.blue}}>Démarrer le circuit {sessionMode==="amrap"?"AMRAP":"EMOM"}</span></Tap>}
