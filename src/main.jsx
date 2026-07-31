@@ -26,7 +26,7 @@ class ErrorBoundary extends React.Component {
           {String(this.state.error && (this.state.error.message || this.state.error))}
         </pre>
         <button type="button" onClick={() => window.location.reload()}
-          style={{appearance:'none',border:0,background:'#75FB90',color:'#000',fontFamily:F,
+          style={{appearance:'none',border:0,background:'#C0B4FE',color:'#000',fontFamily:F,
                   fontSize:16,fontWeight:700,padding:'15px 28px',borderRadius:14,cursor:'pointer'}}>
           Recharger
         </button>

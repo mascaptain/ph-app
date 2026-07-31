@@ -1,7 +1,10 @@
 * { margin: 0; padding: 0; box-sizing: border-box; }
+/* Les couleurs ne sont plus figees ici : applyTheme ecrit le fond et l'encre sur <body>
+   selon le theme choisi, sans quoi le mode sombre laissait un fond blanc derriere l'app. */
 body {
   background: #FFFFFF;
-  color: #000000;
+  color: #1B1B1B;
   font-family: 'Urbanist', sans-serif;
   -webkit-font-smoothing: antialiased;
+  transition: background-color 280ms cubic-bezier(.23,1,.32,1), color 280ms cubic-bezier(.23,1,.32,1);
 }

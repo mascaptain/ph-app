@@ -6,29 +6,74 @@ import { DB } from "./catalog.js";
 // Apple dark system + Emil micro-interactions + Impeccable rules
 // OKLCH-inspired palette. One accent. No border-left hacks. No nested cards.
 // Letter-spacing floor: -0.03em on display. Body: 17px/1.47.
-const C = {
+// ─── PALETTE ────────────────────────────────────────────────────────────────
+// Eerie Black 1B1B1B · Washed Black 343434 · Black Denim 1C1C2B · Primary C0B4FE · White.
+// Deux themes construits sur les MEMES cinq couleurs : le clair pose l'encre sur du blanc,
+// le sombre pose le blanc sur l'encre et teinte les surfaces de Black Denim, ce qui donne
+// de la profondeur sans introduire une seule teinte supplementaire.
+const LIGHT = {
   bg:      "#FFFFFF",
-  s1:      "#F2F2F3",
-  s2:      "#EAEAEB",
-  s3:      "#DBDADD",
-  s4:      "#C9C8CC",
-  div:     "#DBDADD",
-  ink:     "#000000",
-  ink2:    "rgba(0,0,0,.82)",
-  ink3:    "rgba(0,0,0,.56)",
-  ink4:    "rgba(0,0,0,.40)",
-  ink5:    "rgba(0,0,0,.16)",
-  blue:    "#75FB90",
-  blueDim: "rgba(117,251,144,.22)",
-  green:   "#75FB90",
-  greenDim:"rgba(117,251,144,.18)",
-  red:     "#000000",
-  redDim:  "rgba(0,0,0,.07)",
-  orange:  "#000000",
-  orDim:   "rgba(0,0,0,.06)",
-  lime:    "#75FB90",
-  purple:  "#AAA9AB",
-  purDim:  "rgba(170,169,171,.16)",
+  s1:      "#F5F4FA",
+  s2:      "#EDEBF6",
+  s3:      "#E2DFF0",
+  s4:      "#CFC9E7",
+  div:     "#E2DFF0",
+  ink:     "#1B1B1B",
+  ink2:    "rgba(27,27,27,.82)",
+  ink3:    "rgba(27,27,27,.56)",
+  ink4:    "rgba(27,27,27,.40)",
+  ink5:    "rgba(27,27,27,.16)",
+  blue:    "#C0B4FE",
+  blueDim: "rgba(192,180,254,.26)",
+  // "green" designe ce qui est FAIT. En clair, le denim tranche mieux sur du blanc que
+  // le lavande, qui servirait alors a la fois d'action et de confirmation.
+  green:   "#1C1C2B",
+  greenDim:"rgba(28,28,43,.09)",
+  red:     "#1B1B1B",
+  redDim:  "rgba(27,27,27,.07)",
+  orange:  "#343434",
+  orDim:   "rgba(52,52,52,.07)",
+  lime:    "#C0B4FE",
+  purple:  "#1C1C2B",
+  purDim:  "rgba(28,28,43,.12)",
+};
+const DARK = {
+  bg:      "#1B1B1B",
+  s1:      "#1C1C2B",
+  s2:      "#242433",
+  s3:      "#343434",
+  s4:      "#4B4B55",
+  div:     "#343434",
+  ink:     "#FFFFFF",
+  ink2:    "rgba(255,255,255,.84)",
+  ink3:    "rgba(255,255,255,.60)",
+  ink4:    "rgba(255,255,255,.42)",
+  ink5:    "rgba(255,255,255,.18)",
+  blue:    "#C0B4FE",
+  blueDim: "rgba(192,180,254,.20)",
+  green:   "#C0B4FE",
+  greenDim:"rgba(192,180,254,.16)",
+  red:     "#FFFFFF",
+  redDim:  "rgba(255,255,255,.10)",
+  orange:  "#FFFFFF",
+  orDim:   "rgba(255,255,255,.08)",
+  lime:    "#C0B4FE",
+  purple:  "#C0B4FE",
+  purDim:  "rgba(192,180,254,.16)",
+};
+// C reste un objet MUTE plutot qu'un remplacement : les centaines de styles en ligne le
+// lisent au moment du rendu, il suffit donc de reecrire ses cles puis de re-rendre.
+const C = {...LIGHT};
+const applyTheme=(mode)=>{
+  const src=(mode==="dark")?DARK:LIGHT;
+  Object.keys(src).forEach(k=>{C[k]=src[k];});
+  try{
+    document.documentElement.style.background=src.bg;
+    document.body.style.background=src.bg;
+    document.body.style.color=src.ink;
+    const m=document.querySelector('meta[name="theme-color"]');
+    if(m) m.setAttribute("content",src.bg);
+  }catch(_e){}
 };
 
 const F = "'Urbanist',system-ui,sans-serif";
@@ -2740,6 +2785,26 @@ function SettingsTab({user,excluded,onToggleExclude,onSignOut,onReset,onOpenLibr
         <span style={{fontSize:17,color:C.ink}}>Bibliothèque d'exercices</span>
         <span style={{fontSize:17,color:C.blue}}>›</span>
       </Tap>
+      {/* Apparence */}
+      <div style={{fontSize:12,fontWeight:600,color:C.ink4,textTransform:"uppercase",letterSpacing:".1em",marginBottom:10,marginTop:20}}>Apparence</div>
+      <div style={{display:"flex",gap:9}}>
+        {[["light","Clair","Encre sur blanc"],["dark","Sombre","Blanc sur encre"]].map(([v,t,d])=>{
+          const on=((profile&&profile.theme)||"light")===v;
+          return (
+            <Tap key={v} label={t} onTap={()=>{onUpdateConfig&&onUpdateConfig({theme:v});play("clic");buzz(15);}}
+              style={{flex:1,padding:"14px 15px",borderRadius:16,background:on?C.blueDim:C.s1,
+                      border:`1px solid ${on?C.blue:C.s3}`,transition:`all 200ms ${EO}`}}>
+              <div style={{display:"flex",gap:6,marginBottom:9}}>
+                <span style={{width:20,height:20,borderRadius:6,background:v==="dark"?"#1B1B1B":"#FFFFFF",border:`1px solid ${C.s4}`}}/>
+                <span style={{width:20,height:20,borderRadius:6,background:v==="dark"?"#1C1C2B":"#F5F4FA",border:`1px solid ${C.s4}`}}/>
+                <span style={{width:20,height:20,borderRadius:6,background:"#C0B4FE"}}/>
+              </div>
+              <div style={{fontSize:15,fontWeight:600,color:C.ink}}>{t}</div>
+              <div style={{fontSize:12,color:C.ink4,marginTop:1}}>{d}</div>
+            </Tap>
+          );
+        })}
+      </div>
       {/* Signaux */}
       <div style={{fontSize:12,fontWeight:600,color:C.ink4,textTransform:"uppercase",letterSpacing:".1em",marginBottom:10,marginTop:20}}>Signaux</div>
       {[
@@ -2790,7 +2855,7 @@ function SettingsTab({user,excluded,onToggleExclude,onSignOut,onReset,onOpenLibr
           <span style={{fontSize:17,color:C.red}}>›</span>
         </Tap>
       </div>
-      <div style={{fontSize:12,color:C.ink4,textAlign:"center",marginTop:28}}>SŌMA · {"S"+weekNumber()} · {DB.length} exercices · build 23.77a</div>
+      <div style={{fontSize:12,color:C.ink4,textAlign:"center",marginTop:28}}>SŌMA · {"S"+weekNumber()} · {DB.length} exercices · build 23.78a</div>
     </div>
   );
 }
@@ -2805,7 +2870,7 @@ function TabContent({tab,prevTab,children}) {
     return ci>pi?1:-1;
   },[tab,prevTab]);
   return(
-    <div key={tab} style={{animation:`slideTab${dir>0?"Right":"Left"} 320ms ${EO} both`}}>
+    <div key={tab} className="tabin" style={{animation:`slideTab${dir>0?"Right":"Left"} 320ms ${EO} both`}}>
       {children}
     </div>
   );
@@ -3259,6 +3324,10 @@ export default function SomaApp() {
   // une seance enregistree d'une seance qui n'a pas encore quitte le telephone.
   const[pending,setPending]=useState(0);
   useEffect(()=>{ outboxSubs.add(setPending); return()=>{outboxSubs.delete(setPending);}; },[]);
+  // Le theme est applique AVANT le rendu des enfants : ils lisent C au moment de rendre,
+  // donc reecrire ses cles ici suffit, sans toucher a un seul style en ligne.
+  const themeMode=(profile&&profile.theme==="dark")?"dark":"light";
+  applyTheme(themeMode);
   const[toasts,setToasts]=useState([]);
   useEffect(()=>{ toastSubs.add(setToasts); return()=>{toastSubs.delete(setToasts);}; },[]);
   const clock=useStopwatch(clockPersist);
@@ -3866,6 +3935,17 @@ const NAV=[{id:"home",l:"Accueil"},{id:"seance",l:"Séances"},{id:"stats",l:"Sta
         @keyframes dropIn{from{opacity:0;transform:translateY(-14px)}to{opacity:1;transform:none}}
         @keyframes popIn{0%{transform:scale(.7);opacity:.4}60%{transform:scale(1.14)}100%{transform:scale(1);opacity:1}}
         @keyframes shimmer{from{background-position:-360px 0}to{background-position:360px 0}}
+        @keyframes cardIn{from{opacity:0;transform:translateY(18px) scale(.985)}to{opacity:1;transform:none}}
+        @keyframes swap{0%{opacity:1}45%{opacity:0;transform:translateY(6px)}100%{opacity:1;transform:none}}
+        /* Entree en cascade des cartes a chaque changement d'onglet : les elements arrivent
+           l'un apres l'autre au lieu d'apparaitre d'un bloc. */
+        .tabin>*{animation:cardIn 460ms cubic-bezier(.23,1,.32,1) both}
+        .tabin>*:nth-child(1){animation-delay:10ms}   .tabin>*:nth-child(2){animation-delay:55ms}
+        .tabin>*:nth-child(3){animation-delay:100ms}  .tabin>*:nth-child(4){animation-delay:145ms}
+        .tabin>*:nth-child(5){animation-delay:185ms}  .tabin>*:nth-child(6){animation-delay:220ms}
+        .tabin>*:nth-child(7){animation-delay:250ms}  .tabin>*:nth-child(8){animation-delay:275ms}
+        .tabin>*:nth-child(n+9){animation-delay:300ms}
+        .themed{transition:background-color 280ms cubic-bezier(.23,1,.32,1),color 280ms cubic-bezier(.23,1,.32,1)}
         [role="button"]:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{
           outline:2px solid ${C.ink};outline-offset:3px;border-radius:10px}
         [role="button"]:focus:not(:focus-visible){outline:none}
