@@ -156,7 +156,7 @@ const REST_TPL = {label:"Repos",salle:null,muscle:"Recuperation active",exercise
 const SESSION_TEMPLATES = [...PROGRAM.filter(d=>d.salle).map(d=>({label:d.label,salle:d.salle,muscle:d.muscle,exercises:d.exercises,abs:d.abs,ids:d.ids})), REST_TPL];
 
 // Rotation hebdo - mesocycle hybride (Volume -> Intensite -> Puissance -> Deload)
-const VERSION="1.37.0";
+const VERSION="1.38.0";
 const weekNumber = () => { const dt=new Date(); const d=new Date(Date.UTC(dt.getFullYear(),dt.getMonth(),dt.getDate())); const dn=(d.getUTCDay()+6)%7; d.setUTCDate(d.getUTCDate()-dn+3); const ft=new Date(Date.UTC(d.getUTCFullYear(),0,4)); const fn=(ft.getUTCDay()+6)%7; ft.setUTCDate(ft.getUTCDate()-fn+3); return 1+Math.round((d-ft)/604800000); };
 const PHASES12=[{n:"Accumulation",f:"Volume, base"},{n:"Accumulation",f:"Volume"},{n:"Accumulation",f:"Volume +"},{n:"Intensification",f:"Charges +"},{n:"Intensification",f:"Charges ++"},{n:"Intensification",f:"Lourd"},{n:"Réalisation",f:"Explosif"},{n:"Réalisation",f:"Puissance"},{n:"Réalisation",f:"Pic de force"},{n:"Deload",f:"Récupération"},{n:"Test / PR",f:"Validation"},{n:"Test / PR",f:"Nouveaux maxs"}];
 const programWeek=()=>((weekNumber()-1)%12)+1;
@@ -1050,11 +1050,44 @@ const groupBlocks=(exos,mode)=>{
 // d'exercice. Une rampe y prescrivait des poids qui n'existent pas (17,5 / 22,5 kg)
 // et un changement de kettlebell entre chaque serie.
 const FIXED_LOAD_EQ={kb:true};
+// Ratelier reel. Toute charge de kettlebell est ramenee a la cloche existante la plus
+// proche : le moteur prescrivait 17,5 ou 22,5 kg, qui ne se soulevent nulle part.
+const KB_RACK=[6,8,10,12,16,20,24,32];
+const snapKb=(kg)=>{ if(!(kg>0)) return 0;
+  return KB_RACK.reduce((best,w)=>Math.abs(w-kg)<Math.abs(best-kg)?w:best,KB_RACK[0]); };
+// Cloche suivante / precedente du ratelier : les boutons + et − sautaient de 2,5 kg,
+// ce qui fabriquait des poids inexistants des la premiere pression.
+const kbStep=(kg,dir)=>{ const i=KB_RACK.indexOf(snapKb(kg));
+  return KB_RACK[Math.max(0,Math.min(KB_RACK.length-1,(i<0?0:i)+dir))]; };
 const isFixedLoad=(ex)=>{const e=ex&&ex.eq;const k=Array.isArray(e)?e[0]:e;return !!FIXED_LOAD_EQ[k];};
+// Echauffement : chaque mouvement porte sa duree, et la somme fait exactement 5 min.
+const WARMUP={
+  haut:[["Rotations épaules","60s"],["Wall slide","60s"],["Push-up to downdog","90s"],["Mobilité thoracique","90s"]],
+  bas :[["Corde à sauter","90s"],["Hip circle","60s"],["Leg swing","60s"],["KB Swing léger","90s"]],
+};
+const warmupExos=(salle)=>(WARMUP[salle==="haut"?"haut":"bas"]).map(([n,d],i)=>(
+  {id:`warm_${salle==="haut"?"h":"b"}${i}`,n,m:"Échauffement",eq:"bw",kg:0,sets:1,reps:d,rest:0,aux:"warmup"}));
+const WARMUP_SEC=300;
+
+// Gainage : le catalogue donne un volume texte ("4×6", "3×20s"). Pour se comporter
+// comme un exercice il faut un nombre de series et des reps separes.
+const absExo=(a)=>{
+  const m=String(a.vol||"").match(/^(\d+)\s*[x×]\s*(.+)$/);
+  return {id:a.id,n:a.n||a.name,m:"Gainage · abdominaux",eq:a.eq||"bw",kg:0,
+    sets:m?parseInt(m[1]):3,reps:m?m[2]:(a.vol||"12"),rest:45,aux:"abs"};
+};
+
+// Etape d'apprentissage : l'objectif est ecrit "5×5 propres". Meme traitement.
+const skillExo=(sk,step)=>{
+  const m=String(step.target||"").match(/^(\d+)\s*[x×]\s*([^\s]+)/);
+  return {id:`skill_${sk.id}`,n:step.label,m:`Apprentissage · ${sk.name}`,eq:"bw",kg:0,
+    sets:m?parseInt(m[1]):4,reps:m?m[2]:(step.target||"5"),rest:90,aux:"skill"};
+};
+
 const setPlanFor=(ex)=>{
   const n=Math.max(1,typeof ex.sets==="number"?ex.sets:4);
-  const W=ex.kg||0;
   const fixed=isFixedLoad(ex);
+  const W=fixed?snapKb(ex.kg||0):(ex.kg||0);
   return Array.from({length:n},(_,i)=>{
     // Une cloche de 24 kg pese 24 kg : l'arrondi au pas de 2,5 la faisait afficher a 25.
     if(fixed) return {w:W,reps:ex.reps};
@@ -1587,6 +1620,7 @@ function ExerciseFocus({ex,dayIdx,sDate,log,onLogSet,onClose,onNext,hasNext,idx,
   const [closing,setClosing]=useState(false);
   const leave=useCallback((after)=>{setClosing(true);setTimeout(()=>{(after||onClose)();},200);},[onClose]);
   const plan=setPlanFor(ex);const n=plan.length;
+  const fixedLoad=isFixedLoad(ex);
   const lk=`${sDate}_${ex.id}`;
   const [done,setDone]=useState(()=>plan.map((_,i)=>!!(log[`${lk}_s${i}`]&&log[`${lk}_s${i}`].done)));
   // Charge et reps ajustables serie par serie, initialisees sur ce qui est deja enregistre
@@ -1769,9 +1803,9 @@ function ExerciseFocus({ex,dayIdx,sDate,log,onLogSet,onClose,onNext,hasNext,idx,
             {/* Ajustement avant validation : la charge reelle differe souvent du prescrit,
                 et c'est la seule facon d'enregistrer une vraie montee en charge. */}
             <div style={{display:"flex",gap:10,alignItems:"center",justifyContent:"center"}}>
-              {step("−",()=>setLoads(l=>l.map((v,i)=>i===cur?Math.max(0,Math.round((v-2.5)*10)/10):v)))}
+              {step("−",()=>setLoads(l=>l.map((v,i)=>i!==cur?v:(fixedLoad?kbStep(v,-1):Math.max(0,Math.round((v-2.5)*10)/10)))))}
               <span style={{fontSize:12,fontWeight:600,color:C.ink4,textTransform:"uppercase",letterSpacing:".1em",width:56,textAlign:"center"}}>Charge</span>
-              {step("+",()=>setLoads(l=>l.map((v,i)=>i===cur?Math.round((v+2.5)*10)/10:v)))}
+              {step("+",()=>setLoads(l=>l.map((v,i)=>i!==cur?v:(fixedLoad?kbStep(v,1):Math.round((v+2.5)*10)/10))))}
               <div style={{width:14}}/>
               {step("−",()=>setReps(r=>r.map((v,i)=>i===cur?Math.max(1,v-1):v)))}
               <span style={{fontSize:12,fontWeight:600,color:C.ink4,textTransform:"uppercase",letterSpacing:".1em",width:56,textAlign:"center"}}>Reps</span>
@@ -2093,22 +2127,35 @@ const mondayOf=(d)=>{const t=(typeof d==="string")?new Date(d+"T00:00:00"):new D
 function WeighInCard({weighIns,onSave,compact}) {
   const list=(weighIns||[]).slice().sort((a,b)=>String(a.date).localeCompare(String(b.date)));
   const today=todayKey();
-  const done=list.find(w=>w.date===today);
-  const prev=list.filter(w=>w.date!==today).pop();
-  const [val,setVal]=useState(()=>done?String(done.weight_kg):(prev?String(prev.weight_kg):""));
+  const [date,setDate]=useState(today);
+  const done=list.find(w=>w.date===date);
+  const prev=list.filter(w=>w.date<date).pop();
+  const [val,setVal]=useState(()=>{const d=list.find(w=>w.date===today);
+    return d?String(d.weight_kg):(list.length?String(list[list.length-1].weight_kg):"");});
   const [edit,setEdit]=useState(false);
   const delta=(done&&prev)?Math.round((Number(done.weight_kg)-Number(prev.weight_kg))*10)/10:null;
+  const pick=(d)=>{ setDate(d); const e=list.find(w=>w.date===d);
+    setVal(e?String(e.weight_kg):(list.length?String(list[list.length-1].weight_kg):"")); setEdit(false); };
 
-  // Pesee du jour deja faite : on l'affiche, mais on laisse la corriger. Avant, une pesee
-  // enregistree fermait le sujet jusqu'au lundi suivant.
+  const DateField=(
+    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,marginTop:11}}>
+      <span style={{fontSize:11.5,color:C.ink4}}>Date de la pesée</span>
+      <input type="date" value={date} max={today} onChange={e=>pick(e.target.value||today)}
+        aria-label="Date de la pesée"
+        style={{border:`1px solid ${C.s3}`,borderRadius:14,background:C.bg,color:C.ink,fontSize:13,
+          fontFamily:F,padding:"8px 11px",outline:"none",fontVariantNumeric:"tabular-nums"}}/>
+    </div>
+  );
+
   if(done&&!edit) return (
     <div style={{background:C.bg,border:`1px solid ${C.s2}`,boxShadow:`0 3px 16px ${C.ink5}`,
       borderRadius:22,padding:"15px 16px",marginBottom:11}}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:10}}>
         <div style={{minWidth:0}}>
-          <div style={{fontSize:14,fontWeight:600,color:C.ink}}>Pesée du jour</div>
+          <div style={{fontSize:14,fontWeight:600,color:C.ink}}>
+            Pesée {date===today?"du jour":`du ${fmtDateShort(date)}`}</div>
           <div style={{fontSize:11.5,color:C.ink4,marginTop:2}}>
-            {list.length} pesée{list.length>1?"s":""} enregistrée{list.length>1?"s":""}
+            {list.length} pesée{list.length>1?"s":""} au total
             {delta!==null&&delta!==0&&` · ${delta>0?"+":""}${String(delta).replace(".",",")} kg`}
           </div>
         </div>
@@ -2120,21 +2167,23 @@ function WeighInCard({weighIns,onSave,compact}) {
             <span style={{fontSize:11.5,fontWeight:600,color:C.ink3}}>Corriger</span></Tap>
         </div>
       </div>
+      {!compact&&DateField}
     </div>
   );
 
   const save=()=>{const n=parseFloat(String(val).replace(",","."));if(!(n>20&&n<300))return;
-    onSave(n);setEdit(false);play("cloche");buzz(40);};
+    onSave(n,date);setEdit(false);play("cloche");buzz(40);};
   return (
     <div style={{background:C.bg,border:`1px solid ${C.s2}`,boxShadow:`0 3px 16px ${C.ink5}`,
       borderRadius:22,padding:"15px 16px",marginBottom:11,animation:`riseIn 320ms ${EO} both`}}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:10}}>
-        <span style={{fontSize:14,fontWeight:600,color:C.ink}}>Pesée du jour</span>
+        <span style={{fontSize:14,fontWeight:600,color:C.ink}}>
+          {date===today?"Pesée du jour":`Pesée du ${fmtDateShort(date)}`}</span>
         <span style={{fontSize:10.5,fontWeight:600,padding:"4px 11px",borderRadius:999,background:C.s2,color:C.ink3}}>
           {list.length?`${list.length} au total`:"Première"}</span>
       </div>
       {!compact&&<div style={{fontSize:11.5,color:C.ink4,marginTop:4,lineHeight:1.5}}>
-        N'importe quel jour, autant de fois que tu veux — chaque pesée est un point de plus sur la courbe.</div>}
+        N'importe quel jour, autant de fois que tu veux — et tu peux rattraper une pesée oubliée en changeant la date.</div>}
       <div style={{display:"flex",gap:9,alignItems:"center",marginTop:12}}>
         <input type="number" inputMode="decimal" step="0.1" value={val} onChange={e=>setVal(e.target.value)}
           placeholder={prev?String(prev.weight_kg):"kg"} aria-label="Poids en kilogrammes"
@@ -2145,6 +2194,7 @@ function WeighInCard({weighIns,onSave,compact}) {
           style={{padding:"0 22px",height:48,borderRadius:18,background:C.blue,display:"flex",alignItems:"center"}}>
           <span style={{fontSize:15,fontWeight:600,color:"#1B1B1B"}}>Enregistrer</span></Tap>
       </div>
+      {!compact&&DateField}
     </div>
   );
 }
@@ -3616,12 +3666,18 @@ export default function SomaApp() {
   // Hauteur (en % de l'ecran) de la carte touchee, pour que le plein ecran s'ouvre de la.
   const[focusOrigin,setFocusOrigin]=useState(50);
   const[weighIns,setWeighIns]=useState([]);
-  const saveWeighIn=useCallback((kg)=>{
+  const weighInsRef=useRef([]);
+  useEffect(()=>{weighInsRef.current=weighIns;},[weighIns]);
+  // La pesee acceptait implicitement la date du jour : impossible de rattraper une
+  // pesee oubliee, alors que la courbe vit justement du nombre de points.
+  const saveWeighIn=useCallback((kg,when)=>{
     const id=user?.id; if(!id||!(kg>0)) return;
-    const date=todayKey();
+    const date=(typeof when==="string"&&/^\d{4}-\d{2}-\d{2}$/.test(when))?when:todayKey();
     setWeighIns(prev=>[...prev.filter(w=>w.date!==date),{date,weight_kg:kg}]);
-    // La pesee fait autorite sur le poids du profil : c'est lui qui echelonne le moteur.
-    updateConfigRef.current&&updateConfigRef.current({weight_kg:kg});
+    // La pesee fait autorite sur le poids du profil - mais seule la plus RECENTE :
+    // saisir une pesee d'il y a trois semaines ne doit pas redefinir le poids courant.
+    if(date>=todayKey()||!weighInsRef.current.some(w=>w.date>date))
+      updateConfigRef.current&&updateConfigRef.current({weight_kg:kg});
     enqueue(`weigh:${date}`,"pesée",()=>supabase.from("weigh_ins").upsert({user_id:id,date,weight_kg:kg},{onConflict:"user_id,date"}));
   },[user]);
   const updateConfigRef=useRef(null);
@@ -4210,6 +4266,26 @@ export default function SomaApp() {
     return (nGrouped>0&&nGrouped===exos.length)?label:`${base} + ${label}`;
   })();
   const absExos=aiOverride?.abs||day?.abs||[];
+  // Echauffement, gainage et apprentissage etaient du texte : on ne pouvait ni les
+  // ouvrir, ni les cocher, ni voir qu'ils etaient faits. Ils deviennent des exercices
+  // a part entiere, dans la meme liste que les autres, donc lisibles par le meme
+  // lecteur. Ils restent apres les exercices principaux pour ne pas decaler les index
+  // deja utilises par les blocs, les supersets et les circuits.
+  const warmExos=day?.salle?warmupExos(day.salle):[];
+  const absAsExos=absExos.map(absExo);
+  const skillPairs=(day?.salle&&(profile?.active_skills||[]).length&&sessionIndex%2===0)
+    ?(profile.active_skills.map(as=>{const sk=SKILLS_CATALOG.find(x=>x.id===as.skillId);
+        if(!sk) return null; const st=sk.steps[as.stepIndex]||sk.steps[sk.steps.length-1];
+        return {as,sk,step:st,ex:skillExo(sk,st)};}).filter(Boolean)):[];
+  const auxExos=warmExos.concat(absAsExos,skillPairs.map(x=>x.ex));
+  const focusList=exos.concat(auxExos);
+  const WARM_OFF=exos.length, ABS_OFF=WARM_OFF+warmExos.length, SKILL_OFF=ABS_OFF+absAsExos.length;
+  // Un bloc auxiliaire est termine quand chacune de ses lignes a ses series enregistrees.
+  const auxDone=(list)=>list.length>0&&list.every(ex=>{
+    const tgt=setPlanFor(ex).length;
+    const c=Object.keys(log||{}).reduce((a,k)=>(k.indexOf(`${sDate}_${ex.id}_s`)===0&&log[k]&&log[k].done)?a+1:a,0);
+    return tgt>0&&c>=tgt;
+  });
 const NAV=[{id:"home",l:"Accueil"},{id:"seance",l:"Séances"},{id:"stats",l:"Stats"},{id:"settings",l:"Profil"}];
 
   return(
@@ -4387,29 +4463,33 @@ const NAV=[{id:"home",l:"Accueil"},{id:"seance",l:"Séances"},{id:"stats",l:"Sta
                       </Tap>
                     </div>
                   )}
-                  {/* L'echauffement etait un simple retrait derriere un trait vertical.
-                      C'est un bloc de la seance : il en prend la carte et la grammaire. */}
-                  <div style={{background:C.bg,border:`1px solid ${C.s2}`,borderRadius:24,padding:"14px 16px",
-                    marginBottom:11,boxShadow:`0 3px 16px ${C.ink5}`}}>
-                    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,marginBottom:4}}>
-                      <span style={{fontSize:11.5,fontWeight:500,color:C.ink4}}>Bloc échauffement</span>
-                      <span style={{fontSize:10.5,fontWeight:600,padding:"4px 11px",borderRadius:999,background:C.s2,color:C.ink3}}>5 min</span>
-                    </div>
-                    {(day.salle==="haut"
-                      ?["Rotations épaules","Wall slide","Push-up to downdog","Mobilité thoracique"]
-                      :["Corde 2 min","Hip circle","Leg swing","KB Swing léger ×10"]).map((w,k)=>(
-                      <div key={w} style={{display:"flex",alignItems:"center",gap:11,padding:"9px 0",
-                        borderTop:k?`1px solid ${C.s2}`:"none"}}>
-                        <span style={{width:4,height:26,borderRadius:2,flexShrink:0,background:C.s4}}/>
-                        <span style={{flex:1,minWidth:0,fontSize:14,fontWeight:500,color:C.ink,
-                          whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{w}</span>
+                  {/* L'echauffement etait une liste de texte : meme carte, mais on ne
+                      pouvait rien y faire. Il devient un bloc d'exercices comme les autres,
+                      lignes ouvrables et cochables comprises. */}
+                  {warmExos.length>0&&(()=>{
+                    const wDone=auxDone(warmExos);
+                    return(
+                    <div style={{background:C.bg,border:`1px solid ${wDone?C.green:C.s2}`,borderRadius:24,
+                      padding:"14px 16px",marginBottom:11,boxShadow:`0 3px 16px ${C.ink5}`,
+                      transition:`border-color 260ms ${EO}`}}>
+                      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,marginBottom:4}}>
+                        <span style={{fontSize:11.5,fontWeight:500,color:C.ink4}}>Bloc échauffement</span>
+                        <span style={{fontSize:10.5,fontWeight:600,padding:"4px 11px",borderRadius:999,whiteSpace:"nowrap",
+                          background:wDone?C.greenDim:C.s2,color:wDone?C.green:C.ink3}}>
+                          {wDone?"terminé":`${Math.round(WARMUP_SEC/60)} min`}</span>
                       </div>
-                    ))}
-                  </div>
-                  {day.salle&&!locked&&(profile?.active_skills||[]).length>0&&sessionIndex%2===0&&(profile.active_skills.map(as=>{
-                    const sk=SKILLS_CATALOG.find(s=>s.id===as.skillId);
-                    if(!sk) return null;
-                    const step=sk.steps[as.stepIndex]||sk.steps[sk.steps.length-1];
+                      {warmExos.map((ex,k)=>(
+                        <ExerciseRowCollapsed key={ex.id} ex={ex} idx={k} first={k===0} barColor={C.s4}
+                          dayIdx={dayIdx} sDate={sDate} log={log} doneSession={doneSession}
+                          onOpen={()=>{if(!locked)setFocusIdx(WARM_OFF+k);}} onOriginY={setFocusOrigin}/>
+                      ))}
+                    </div>);
+                  })()}
+                  {/* L'apprentissage etait un encart a part : titre, objectif en texte et
+                      deux boutons de verdict. Il devient un bloc de seance — la ligne s'ouvre
+                      et se coche comme un exercice — et le verdict reste, car c'est lui qui
+                      fait avancer l'etape. */}
+                  {skillPairs.length>0&&skillPairs.map(({as,sk,step,ex},k)=>{
                     const doneToday=as.lastAssessedDate===sDate;
                     const assess=(success)=>{
                       const next=(profile.active_skills||[]).map(x=>{
@@ -4422,26 +4502,37 @@ const NAV=[{id:"home",l:"Accueil"},{id:"seance",l:"Séances"},{id:"stats",l:"Sta
                         return {...x,successCount:newCount,lastAssessedDate:sDate};
                       });
                       updateConfig({active_skills:next});
+                      play(success?"cloche":"clic");buzz(40);
                     };
                     return(
-                      <div key={as.skillId} style={{marginBottom:16,padding:"14px 16px",borderRadius:14,background:C.s1,border:`1px solid ${C.s3}`}}>
-                        <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:4}}>
-                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={C.ink3} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">{sk.icon}</svg>
-                          <span style={{fontSize:12,fontWeight:600,color:C.ink3,textTransform:"uppercase",letterSpacing:".08em"}}>Apprentissage · {sk.name} · Étape {as.stepIndex+1}/{sk.steps.length}</span>
-                        </div>
-                        <div style={{fontSize:16,fontWeight:600,color:C.ink,marginBottom:2}}>{step.label}</div>
-                        <div style={{fontSize:13,color:C.ink4,marginBottom:12}}>{step.target}</div>
-                        {doneToday?(
-                          <div style={{fontSize:13,fontWeight:600,color:C.blue}}>Validé aujourd'hui ✓</div>
-                        ):(
-                          <div style={{display:"flex",gap:8}}>
-                            <Tap onTap={()=>assess(false)} style={{flex:1,padding:"10px",borderRadius:10,background:C.s2,textAlign:"center"}}><span style={{fontSize:13,fontWeight:600,color:C.ink3}}>Pas encore</span></Tap>
-                            <Tap onTap={()=>assess(true)} style={{flex:1,padding:"10px",borderRadius:10,background:C.blue,textAlign:"center"}}><span style={{fontSize:13,fontWeight:600,color:"#000"}}>Ça passe</span></Tap>
-                          </div>
-                        )}
+                    <div key={as.skillId} style={{background:C.bg,
+                      border:`1px solid ${doneToday?C.green:C.s2}`,borderRadius:24,padding:"14px 16px",
+                      marginBottom:11,boxShadow:`0 3px 16px ${C.ink5}`,transition:`border-color 260ms ${EO}`}}>
+                      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,marginBottom:4}}>
+                        <span style={{fontSize:11.5,fontWeight:500,color:C.ink4}}>Bloc apprentissage · {sk.name}</span>
+                        <span style={{fontSize:10.5,fontWeight:600,padding:"4px 11px",borderRadius:999,whiteSpace:"nowrap",
+                          background:doneToday?C.greenDim:C.s2,color:doneToday?C.green:C.ink3}}>
+                          {doneToday?"validé":`étape ${as.stepIndex+1}/${sk.steps.length}`}</span>
                       </div>
-                    );
-                  }))}
+                      <ExerciseRowCollapsed ex={ex} idx={0} first barColor={C.blue}
+                        dayIdx={dayIdx} sDate={sDate} log={log} doneSession={doneSession}
+                        onOpen={()=>{if(!locked)setFocusIdx(SKILL_OFF+k);}} onOriginY={setFocusOrigin}/>
+                      {!locked&&(doneToday?(
+                        <div style={{marginTop:9,fontSize:12,fontWeight:600,color:C.green}}>Validé aujourd'hui</div>
+                      ):(
+                        <div style={{display:"flex",gap:8,marginTop:11}}>
+                          <Tap label="Pas encore acquis" onTap={()=>assess(false)}
+                            style={{flex:1,padding:"11px",borderRadius:14,background:C.bg,border:`1px solid ${C.s3}`,
+                              display:"flex",alignItems:"center",justifyContent:"center"}}>
+                            <span style={{fontSize:13,fontWeight:600,color:C.ink3}}>Pas encore</span></Tap>
+                          <Tap label="Étape acquise" onTap={()=>assess(true)}
+                            style={{flex:1,padding:"11px",borderRadius:14,background:C.blue,
+                              display:"flex",alignItems:"center",justifyContent:"center"}}>
+                            <span style={{fontSize:13,fontWeight:600,color:"#1B1B1B"}}>Ça passe</span></Tap>
+                        </div>
+                      ))}
+                    </div>);
+                  })}
                   {isViewingToday&&isLate&&!isDayDone&&(
                     <div style={{background:C.s2,border:`1px solid ${C.s4}`,borderRadius:14,padding:"12px 15px",marginBottom:16,display:"flex",alignItems:"center",gap:10}}>
                       <Icon name="swap" size={17} stroke={C.ink}/>
@@ -4503,27 +4594,27 @@ const NAV=[{id:"home",l:"Accueil"},{id:"seance",l:"Séances"},{id:"stats",l:"Sta
                       </div>);
                     })}
                   </div>
-                  {/* Les abdominaux formaient une liste a part, separee par un filet et avec
-                      son propre style de ligne. Ils deviennent un bloc comme les autres. */}
-                  {absExos.length>0&&(
-                    <div style={{background:C.bg,border:`1px solid ${C.s2}`,borderRadius:24,padding:"14px 16px",
-                      marginBottom:11,boxShadow:`0 3px 16px ${C.ink5}`}}>
+                  {/* Les abdominaux etaient une liste de texte a droite de laquelle on
+                      lisait "4×6" sans jamais pouvoir l'ouvrir ni la valider. */}
+                  {absAsExos.length>0&&(()=>{
+                    const aDone=auxDone(absAsExos);
+                    return(
+                    <div style={{background:C.bg,border:`1px solid ${aDone?C.green:C.s2}`,borderRadius:24,
+                      padding:"14px 16px",marginBottom:11,boxShadow:`0 3px 16px ${C.ink5}`,
+                      transition:`border-color 260ms ${EO}`}}>
                       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,marginBottom:4}}>
                         <span style={{fontSize:11.5,fontWeight:500,color:C.ink4}}>Bloc gainage · abdominaux</span>
-                        <span style={{fontSize:10.5,fontWeight:600,padding:"4px 11px",borderRadius:999,background:C.s2,color:C.ink3}}>
-                          {absExos.length} exercice{absExos.length>1?"s":""}</span>
+                        <span style={{fontSize:10.5,fontWeight:600,padding:"4px 11px",borderRadius:999,whiteSpace:"nowrap",
+                          background:aDone?C.greenDim:C.s2,color:aDone?C.green:C.ink3}}>
+                          {aDone?"terminé":`${absAsExos.length} exercice${absAsExos.length>1?"s":""}`}</span>
                       </div>
-                      {absExos.map((a,k)=>(
-                        <div key={a.id} style={{display:"flex",alignItems:"center",gap:11,padding:"10px 0",
-                          borderTop:k?`1px solid ${C.s2}`:"none"}}>
-                          <span style={{width:4,height:30,borderRadius:2,flexShrink:0,background:C.s4}}/>
-                          <span style={{flex:1,minWidth:0,fontSize:14,fontWeight:500,color:C.ink,
-                            whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{a.n||a.name}</span>
-                          <span style={{fontSize:13.5,color:C.ink2,flexShrink:0,fontVariantNumeric:"tabular-nums"}}>{a.vol}</span>
-                        </div>
+                      {absAsExos.map((ex,k)=>(
+                        <ExerciseRowCollapsed key={ex.id} ex={ex} idx={k} first={k===0} barColor={C.s4}
+                          dayIdx={dayIdx} sDate={sDate} log={log} doneSession={doneSession}
+                          onOpen={()=>{if(!locked)setFocusIdx(ABS_OFF+k);}} onOriginY={setFocusOrigin}/>
                       ))}
-                    </div>
-                  )}
+                    </div>);
+                  })()}
                   {!sessionActive&&!locked&&(
                     <Tap onTap={()=>setShowFeedback(true)} style={{marginTop:28,marginBottom:16,padding:"16px",borderRadius:14,background:C.blue,display:"flex",alignItems:"center",justifyContent:"center"}}>
                       <span style={{fontSize:17,fontWeight:600,color:"#000"}}>Fin de séance</span>
@@ -4561,11 +4652,11 @@ const NAV=[{id:"home",l:"Accueil"},{id:"seance",l:"Séances"},{id:"stats",l:"Sta
       {showSkillManager&&<SkillManagerSheet activeSkills={profile?.active_skills} onSave={(sel)=>updateConfig({active_skills:sel})} onClose={()=>setShowSkillManager(false)}/>}
       {showRewardsManager&&<RewardsManagerSheet sessions={sessions} onClose={()=>setShowRewardsManager(false)}/>}
       {/* Overlays plein ecran sortis du wrapper anime (position:fixed casse sous un ancetre avec transform) */}
-      {focusIdx!=null&&exos[focusIdx]&&(
-        <ExerciseFocus key={exos[focusIdx].id} ex={exos[focusIdx]} idx={focusIdx} count={exos.length} dayIdx={dayIdx} sDate={sDate}
-          log={log} onLogSet={saveLog} onDetail={e=>setDetailEx(e)} lastPerf={perf[exos[focusIdx].id]} originY={focusOrigin}
-          onClose={()=>setFocusIdx(null)} hasNext={focusIdx<exos.length-1} onNext={()=>{
-            const _n=exos[focusIdx+1];
+      {focusIdx!=null&&focusList[focusIdx]&&(
+        <ExerciseFocus key={focusList[focusIdx].id} ex={focusList[focusIdx]} idx={focusIdx} count={focusList.length} dayIdx={dayIdx} sDate={sDate}
+          log={log} onLogSet={saveLog} onDetail={e=>setDetailEx(e)} lastPerf={perf[focusList[focusIdx].id]} originY={focusOrigin}
+          onClose={()=>setFocusIdx(null)} hasNext={focusIdx<focusList.length-1} onNext={()=>{
+            const _n=focusList[focusIdx+1];
             if(_n&&_n.circuitId){
               const _g=exos.filter(e=>e.circuitId===_n.circuitId);
               setFocusIdx(null);
@@ -4634,6 +4725,7 @@ const NAV=[{id:"home",l:"Accueil"},{id:"seance",l:"Séances"},{id:"stats",l:"Sta
     </div>
   );
 }
+
 
 
 
