@@ -188,7 +188,7 @@ const REST_TPL = {label:"Repos",salle:null,muscle:"Recuperation active",exercise
 const SESSION_TEMPLATES = [...PROGRAM.filter(d=>d.salle).map(d=>({label:d.label,salle:d.salle,muscle:d.muscle,exercises:d.exercises,abs:d.abs,ids:d.ids})), REST_TPL];
 
 // Rotation hebdo - mesocycle hybride (Volume -> Intensite -> Puissance -> Deload)
-const VERSION="1.43.0";
+const VERSION="1.44.0";
 const weekNumber = () => { const dt=new Date(); const d=new Date(Date.UTC(dt.getFullYear(),dt.getMonth(),dt.getDate())); const dn=(d.getUTCDay()+6)%7; d.setUTCDate(d.getUTCDate()-dn+3); const ft=new Date(Date.UTC(d.getUTCFullYear(),0,4)); const fn=(ft.getUTCDay()+6)%7; ft.setUTCDate(ft.getUTCDate()-fn+3); return 1+Math.round((d-ft)/604800000); };
 const PHASES12=[{n:"Accumulation",f:"Volume, base"},{n:"Accumulation",f:"Volume"},{n:"Accumulation",f:"Volume +"},{n:"Intensification",f:"Charges +"},{n:"Intensification",f:"Charges ++"},{n:"Intensification",f:"Lourd"},{n:"Réalisation",f:"Explosif"},{n:"Réalisation",f:"Puissance"},{n:"Réalisation",f:"Pic de force"},{n:"Deload",f:"Récupération"},{n:"Test / PR",f:"Validation"},{n:"Test / PR",f:"Nouveaux maxs"}];
 const programWeek=()=>((weekNumber()-1)%12)+1;
@@ -4190,6 +4190,19 @@ export default function SomaApp() {
   },[persist,user,profile]);
   useEffect(()=>{updateConfigRef.current=updateConfig;},[updateConfig]);
   useEffect(()=>{profileRef.current=profile;},[profile]);
+  // Remise en accord du compteur stocke avec le nombre reel de seances. Sans
+  // cela, l'accueil et la page profil continueraient d'annoncer l'ancienne
+  // position tant qu'aucune seance n'est enregistree.
+  useEffect(()=>{
+    if(!user||!dataReady) return;
+    if(!sessions) return;
+    const start=profile&&profile.program_start;
+    const real=start?sessions.filter(x=>x&&x.date>=start).length:sessions.length;
+    if(profile&&Number(profile.session_index||0)!==real&&updateConfigRef.current){
+      updateConfigRef.current({session_index:real});
+    }
+  },[sessions,profile,user,dataReady]);
+
 
   const switchTab=useCallback(id=>{setPrevTab(tab);setTab(id);if(id==="seance"){const ti=todayIdx();setDayIdx(cur=>cur===ti?cur:ti);}try{window.scrollTo(0,0);}catch(_e){}},[tab]);
   useEffect(()=>{ if(focusIdx!=null){ try{window.scrollTo({top:0,behavior:"auto"});}catch(_e){try{window.scrollTo(0,0);}catch(__e){}} } },[focusIdx]);
@@ -4296,11 +4309,10 @@ export default function SomaApp() {
       mode:sessionMode,
       weights:{...weights,...Object.fromEntries(exercisesData.filter(e=>e.weight>0).map(e=>[e.id,e.weight]))}
     };
-    // avance la sequence du programme (uniquement si ce jour est un jour d'entrainement pris en compte dans la file)
-    if(day?.salle&&!programDone){
-      const nextIdx=sessionIndex+1;
-      updateConfig({session_index:nextIdx});
-    }
+    // La sequence n'a plus besoin d'etre incrementee a la main : elle se deduit
+    // du nombre de seances enregistrees, et l'effet de bord ci-dessous remet le
+    // compteur stocke en accord. C'est cet increment manuel qui pouvait etre
+    // ecrase par une ecriture concurrente et bloquer le programme.
     // 1. (l'ancien cache local des seances a disparu : la table sessions fait foi)
     const uid=user?.id;
     // 2. State React
@@ -4394,7 +4406,15 @@ export default function SomaApp() {
     setShowOnboardingRedo(false);
   };
 
-  const sessionIndex=profile?.session_index||0;
+  // Position dans la file = nombre de seances deja faites DEPUIS le debut du
+  // programme. Les seances anterieures a program_start n'en font pas partie :
+  // celle du 22 juin precedait le programme du 13 juillet et decalait tout d'un
+  // cran si on la comptait.
+  const sessionIndex=(()=>{
+    const start=profile&&profile.program_start;
+    if(!sessions) return profile?.session_index||0;
+    return start?sessions.filter(x=>x&&x.date>=start).length:sessions.length;
+  })();
   const trainingDaysPerWeek=(schedule||[]).filter(d=>d&&d.salle).length||(profile?.frequency||4);
   const expectedTotalSessions=PROGRAM_SESSIONS;
   const totalSessions=profile?.total_sessions||PROGRAM_SESSIONS;
@@ -4992,6 +5012,8 @@ const NAV=[{id:"home",l:"Accueil"},{id:"seance",l:"Séances"},{id:"stats",l:"Sta
     </div>
   );
 }
+
+
 
 
 
