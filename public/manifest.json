@@ -1,16 +1,17 @@
 {
-  "name": "Programme Hybride",
-  "short_name": "PH",
-  "description": "Hybrid fitness training app",
+  "name": "SŌMA",
+  "short_name": "SŌMA",
+  "description": "Programme hybride force et condition.",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#000000",
-  "theme_color": "#000000",
+  "background_color": "#FFFFFF",
+  "theme_color": "#1C1C2B",
   "icons": [
     {
-      "src": "/ph-icon.svg",
+      "src": "/favicon.svg",
       "sizes": "any",
-      "type": "image/svg+xml"
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
     }
   ]
 }

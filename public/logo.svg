@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 110" fill="none"
+     stroke="#1B1B1B" stroke-width="5" stroke-linecap="butt" stroke-linejoin="miter">
+  <!-- SŌMA — monoline geometrique. Le A n'a pas de barre : c'est un lambda,
+       comme sur le logo d'origine. -->
+  <path d="M60 40C60 26 44 20 32 25C20 30 19 45 32 52L54 64C67 71 65 88 50 92C36 96 21 89 17 79"/>
+  <circle cx="134" cy="58" r="34"/>
+  <path d="M104 14H164"/>
+  <path d="M206 92V24L242 72L278 24V92"/>
+  <path d="M316 92L350 24L384 92"/>
+</svg>

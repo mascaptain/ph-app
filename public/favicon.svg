@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <!-- Le mot entier est illisible a 16 px : l'icone ne garde que le Ō, la lettre
+       qui porte le macron et qui identifie la marque. -->
+  <rect width="64" height="64" rx="14" fill="#1C1C2B"/>
+  <g fill="none" stroke="#FFFFFF" stroke-width="3.4">
+    <circle cx="32" cy="36" r="15"/>
+    <path d="M20 14H44"/>
+  </g>
+</svg>

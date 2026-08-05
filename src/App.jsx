@@ -188,7 +188,7 @@ const REST_TPL = {label:"Repos",salle:null,muscle:"Recuperation active",exercise
 const SESSION_TEMPLATES = [...PROGRAM.filter(d=>d.salle).map(d=>({label:d.label,salle:d.salle,muscle:d.muscle,exercises:d.exercises,abs:d.abs,ids:d.ids})), REST_TPL];
 
 // Rotation hebdo - mesocycle hybride (Volume -> Intensite -> Puissance -> Deload)
-const VERSION="1.44.0";
+const VERSION="1.45.0";
 const weekNumber = () => { const dt=new Date(); const d=new Date(Date.UTC(dt.getFullYear(),dt.getMonth(),dt.getDate())); const dn=(d.getUTCDay()+6)%7; d.setUTCDate(d.getUTCDate()-dn+3); const ft=new Date(Date.UTC(d.getUTCFullYear(),0,4)); const fn=(ft.getUTCDay()+6)%7; ft.setUTCDate(ft.getUTCDate()-fn+3); return 1+Math.round((d-ft)/604800000); };
 const PHASES12=[{n:"Accumulation",f:"Volume, base"},{n:"Accumulation",f:"Volume"},{n:"Accumulation",f:"Volume +"},{n:"Intensification",f:"Charges +"},{n:"Intensification",f:"Charges ++"},{n:"Intensification",f:"Lourd"},{n:"Réalisation",f:"Explosif"},{n:"Réalisation",f:"Puissance"},{n:"Réalisation",f:"Pic de force"},{n:"Deload",f:"Récupération"},{n:"Test / PR",f:"Validation"},{n:"Test / PR",f:"Nouveaux maxs"}];
 const programWeek=()=>((weekNumber()-1)%12)+1;
@@ -957,7 +957,7 @@ function AuthScreen({onAuth}) {
       <div style={{flex:1,display:"flex",flexDirection:"column",justifyContent:"center",padding:"40px 28px",maxWidth:440,margin:"0 auto",width:"100%",animation:`fadeUp 400ms ${EO} both`}}>
         {/* Brand */}
         <div style={{marginBottom:48}}>
-          <div style={{fontSize:34,fontWeight:600,color:C.ink,letterSpacing:"-.03em",marginBottom:6}}>SŌMA</div>
+          <div style={{marginBottom:10,display:"flex",justifyContent:"center"}}><Wordmark h={34}/></div>
           <div style={{fontSize:15,color:C.ink3,lineHeight:1.5}}>
             {mode==="login"?"Bon retour.":mode==="signup"?"Crée ton compte et commence à tracker.":"Connexion sans mot de passe."}
           </div>
@@ -1150,7 +1150,11 @@ function HomeTab({profile,streak,sessions,weights,todaySession,onStartToday,acce
   const weekSessions=sessions.filter(s=>weekKeys.indexOf(s.date)>=0);
   const weekVol=weekSessions.reduce((a,s)=>a+(s.totalKg||0),0);
   const weekSets=weekSessions.reduce((a,s)=>a+(Number(s.totalSets)||0),0);
-  const totalSessions=sessions.length;
+  // Seances de CE programme : le meme perimetre que la barre d'avancement juste
+  // en dessous, qui annoncait "5 / 60" au-dessus de "6 seances enregistrees".
+  const progStart=profile&&profile.program_start;
+  const progSessions=progStart?sessions.filter(x=>x&&x.date>=progStart):sessions;
+  const totalSessions=progSessions.length;
   const lwStart=new Date(wk);lwStart.setDate(lwStart.getDate()-7);
   const lwKeys=Array.from({length:7},(_,i)=>{const d=new Date(lwStart);d.setDate(lwStart.getDate()+i);return localDateKey(d);});
   const lastWeekSessions=sessions.filter(s=>lwKeys.indexOf(s.date)>=0);
@@ -1166,7 +1170,7 @@ function HomeTab({profile,streak,sessions,weights,todaySession,onStartToday,acce
   const hello=hour<12?"Bonjour":hour<18?"Bon après-midi":"Bonsoir";
   const name=(profile&&profile.name)?profile.name:"";
   const isRest=!todaySession||!todaySession.salle;
-  const progIndex=Math.min(profile?.session_index||0,profile?.total_sessions||PROGRAM_SESSIONS);
+  const progIndex=Math.min(totalSessions,profile?.total_sessions||PROGRAM_SESSIONS);
   const progTotal=profile?.total_sessions||PROGRAM_SESSIONS;
   const goalLabel=(GOALS.find(g=>g[0]===profile?.goal)||[])[1]||null;
   const todayKeyStr=todayKey();
@@ -1294,7 +1298,7 @@ function HomeTab({profile,streak,sessions,weights,todaySession,onStartToday,acce
               background:i<Math.round(progIndex/progTotal*20)?C.accent:C.s2,transition:`background 400ms ${EO}`}}/>
           ))}
         </div>
-        <div style={{fontSize:11.5,color:C.ink4,marginTop:7}}>{totalSessions} séances enregistrées</div>
+        <div style={{fontSize:11.5,color:C.ink4,marginTop:7}}>{totalSessions} séance{totalSessions>1?"s":""} dans ce programme</div>
       </Card>
     </div>
 
@@ -2580,12 +2584,15 @@ function SkillsOctagon({sessions,profile}) {
 //   Resume — ou j'en suis      Corps — comment j'evolue      Force — ce que je vaux
 function StatsTab({sessions,weights,accent,onOpenPhotos,pinnedPBs,onManagePBs,activeSkills,onManageSkills,onOpenRewards,trainingDaysPerWeek,profile,weighIns,onSaveWeighIn,photos,photoUrls,children}) {
   const [view,setView]=useState("resume");
-  const total=sessions.length,totalKg=sessions.reduce((a,s)=>a+(s.totalKg||0),0);
-  const avgScore=total?Math.round(sessions.reduce((a,s)=>a+computeScore(s.totalKg,s.totalSets,s.feedback,targetOf(s)),0)/total):0;
+  // Meme perimetre que l'accueil et que la page profil : ce programme.
+  const progStart=profile&&profile.program_start;
+  const inProg=progStart?sessions.filter(x=>x&&x.date>=progStart):sessions;
+  const total=inProg.length,totalKg=inProg.reduce((a,s)=>a+(s.totalKg||0),0);
+  const avgScore=total?Math.round(inProg.reduce((a,s)=>a+computeScore(s.totalKg,s.totalSets,s.feedback,targetOf(s)),0)/total):0;
   const pbs=useMemo(()=>computePBs(sessions),[sessions]);
   const pinnedSet=new Set(pinnedPBs||[]);
   const displayedPBs=(pinnedPBs&&pinnedPBs.length)?pbs.filter(pb=>pinnedSet.has(pb.id)):pbs.slice(0,4);
-  const totalMin=Math.round(sessions.reduce((a,s)=>a+(Number(s.duration)||0),0)/60);
+  const totalMin=Math.round(inProg.reduce((a,s)=>a+(Number(s.duration)||0),0)/60);
   const totalTime=totalMin>=60?`${Math.floor(totalMin/60)}h${String(totalMin%60).padStart(2,"0")}`:`${totalMin}min`;
   const badges=useMemo(()=>computeBadges(sessions),[sessions]);
   const earned=badges.filter(b=>b.ok).length;
@@ -2644,7 +2651,7 @@ function StatsTab({sessions,weights,accent,onOpenPhotos,pinnedPBs,onManagePBs,ac
         {/* Chiffre-titre : le seul bloc pleine largeur de la vue. */}
         <div style={{background:C.accent,border:`1px solid ${C.accent}`,borderRadius:22,padding:"16px",marginBottom:10}}>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:10}}>
-            <span style={{fontSize:11.5,fontWeight:600,color:"rgba(27,27,27,.62)"}}>Volume total soulevé</span>
+            <span style={{fontSize:12,fontWeight:600,color:"rgba(27,27,27,.62)"}}>Volume de ce programme</span>
             {trend!==null&&<span style={{fontSize:10,fontWeight:600,padding:"4px 11px",borderRadius:999,
               background:"rgba(255,255,255,.5)",color:C.onAccent}}>{trend>0?"+":""}{trend} % cette semaine</span>}
           </div>
@@ -2654,7 +2661,7 @@ function StatsTab({sessions,weights,accent,onOpenPhotos,pinnedPBs,onManagePBs,ac
             <span style={{fontSize:12.5,fontWeight:400,color:"rgba(27,27,27,.55)"}}> tonnes</span>
           </div>
           <div style={{fontSize:11.5,color:"rgba(27,27,27,.62)",marginTop:6}}>
-            sur {total} séance{total>1?"s":""}{profile&&profile.total_sessions?` · programme ${Math.min(total,profile.total_sessions)} / ${profile.total_sessions}`:""}
+            {total} / {(profile&&profile.total_sessions)||60} séances du programme
           </div>
         </div>
 
@@ -3125,7 +3132,7 @@ function ScheduleEditor({schedule,onChange,onReset,onClose,autoRotate,onToggleAu
 // l'objectif d'entrainement. La frontiere est desormais nette —
 //   Moi       ce qui te decrit et ce qui nourrit le moteur
 //   Reglages  ce qui habille l'application et le compte
-function SettingsTab({user,excluded,onToggleExclude,onSignOut,onReset,onOpenLibrary,profile,schedule,avatarUrl,onUpdateConfig,onOpenScheduleEditor,onRedoOnboarding}) {
+function SettingsTab({user,excluded,onToggleExclude,onSignOut,onReset,onOpenLibrary,profile,schedule,avatarUrl,onUpdateConfig,onOpenScheduleEditor,onRedoOnboarding,progDone}) {
   const[view,setView]=useState("moi");
   const[showLib,setShowLib]=useState(false);
   const[w,setW]=useState(profile?.weight_kg!=null?String(profile.weight_kg):"");
@@ -3154,7 +3161,9 @@ function SettingsTab({user,excluded,onToggleExclude,onSignOut,onReset,onOpenLibr
   const trainDays=(schedule||[]).map((d,i)=>(d&&d.salle)?i:-1).filter(i=>i>=0);
   const goalLabel=(GOALS.find(g=>g[0]===profile?.goal)||[])[1]||"Non défini";
   const total=profile?.total_sessions||60;
-  const doneN=Math.min(profile?.session_index||0,total);
+  // Le compte vient des seances reellement enregistrees dans ce programme, pas
+  // du compteur stocke : c'est lui qui avait derive et affichait un cran de moins.
+  const doneN=Math.min(progDone!=null?progDone:(profile?.session_index||0),total);
   const pct=total?Math.round(doneN/total*100):0;
   // Semaine du programme : "semaine 6" se deduit de la date de debut, pas du calendrier.
   const progWeek=profile?.program_start
@@ -3447,6 +3456,22 @@ function SettingsTab({user,excluded,onToggleExclude,onSignOut,onReset,onOpenLibr
 }
 
 // ─── TAB TRANSITION — slide between tabs ─────────────────────────────────────
+// SŌMA en trace monoline. Le A n'a pas de barre : c'est un lambda, comme sur le
+// logo d'origine. La couleur suit le texte courant, donc le theme.
+function Wordmark({h=22,color}) {
+  return (
+    <svg viewBox="0 0 400 110" height={h} style={{display:"block",width:h*400/110}}
+      fill="none" stroke={color||C.ink} strokeWidth="5" strokeLinecap="butt"
+      strokeLinejoin="miter" role="img" aria-label="SŌMA">
+      <path d="M60 40C60 26 44 20 32 25C20 30 19 45 32 52L54 64C67 71 65 88 50 92C36 96 21 89 17 79"/>
+      <circle cx="134" cy="58" r="34"/>
+      <path d="M104 14H164"/>
+      <path d="M206 92V24L242 72L278 24V92"/>
+      <path d="M316 92L350 24L384 92"/>
+    </svg>
+  );
+}
+
 function TabContent({tab,prevTab,children}) {
   const dir = useMemo(()=>{
     // La liste ne correspondait pas aux onglets reels ("home" manquait, "history" n'existe
@@ -4378,14 +4403,14 @@ export default function SomaApp() {
 
   if(authLoading) return(
     <div style={{position:"fixed",inset:0,background:C.bg,display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",gap:16,fontFamily:F}}>
-      <div style={{fontSize:34,fontWeight:600,color:C.ink,letterSpacing:"-.03em"}}>SŌMA</div>
+      <Wordmark h={30}/>
       <div style={{width:6,height:6,borderRadius:"50%",background:C.accent,animation:"pulse 1s ease-in-out infinite"}}/>
       <style>{`@keyframes pulse{0%,100%{opacity:.3;transform:scale(.8)}50%{opacity:1;transform:scale(1.2)}}`}</style>
     </div>
   );
 
   if(!user) return <AuthScreen onAuth={u=>{setUser(u);loadUserData(u.id);}}/>;
-  if(!dataReady) return(<div style={{position:"fixed",inset:0,background:C.bg,display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",gap:20,fontFamily:F}}><style>{"@keyframes p{0%,100%{opacity:.3}50%{opacity:1}}"}</style><div style={{fontSize:34,fontWeight:600,color:C.ink,letterSpacing:"-.03em"}}>SŌMA</div><div style={{width:8,height:8,borderRadius:"50%",background:C.accent,animation:"p 1s ease-in-out infinite"}}/></div>);
+  if(!dataReady) return(<div style={{position:"fixed",inset:0,background:C.bg,display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",gap:20,fontFamily:F}}><style>{"@keyframes p{0%,100%{opacity:.3}50%{opacity:1}}"}</style><Wordmark h={30}/><div style={{width:8,height:8,borderRadius:"50%",background:C.accent,animation:"p 1s ease-in-out infinite"}}/></div>);
   if(!profile) return <OnboardingScreen user={user} onDone={async(data)=>{
     const uid=user.id;
     const sched=generateSchedule(data.frequency);
@@ -4614,7 +4639,7 @@ const NAV=[{id:"home",l:"Accueil"},{id:"seance",l:"Séances"},{id:"stats",l:"Sta
       <div style={{background:C.bg,backdropFilter:"blur(24px)",WebkitBackdropFilter:"blur(24px)",position:"sticky",top:0,zIndex:Z.sticky}}>
         <div style={{maxWidth:600,margin:"0 auto",padding:`calc(14px + env(safe-area-inset-top)) 18px 10px`,display:"flex",justifyContent:"space-between",alignItems:"center",gap:10}}>
           <div>
-            <div style={{fontSize:21,fontWeight:600,color:C.ink,letterSpacing:"-.04em"}}>SŌMA</div>
+            <Wordmark h={19}/>
             <div style={{fontSize:10,fontWeight:600,color:C.ink4,letterSpacing:".16em",textTransform:"uppercase"}}>{"S"+wk+" · "}{user?.user_metadata?.name||"Athlète"}</div>
           </div>
           <div style={{display:"flex",alignItems:"center",gap:10}}>
@@ -4900,7 +4925,7 @@ const NAV=[{id:"home",l:"Accueil"},{id:"seance",l:"Séances"},{id:"stats",l:"Sta
             </div>
           )}
           {tab==="stats"&&<StatsTab sessions={sessions} weights={weights} accent={accent} trainingDaysPerWeek={trainingDaysPerWeek} profile={profile} weighIns={weighIns} onSaveWeighIn={saveWeighIn} onOpenPhotos={()=>setShowPhotos(true)} photos={photos} photoUrls={photoUrls} pinnedPBs={profile?.pinned_pbs} onManagePBs={()=>setShowPBManager(true)} activeSkills={profile?.active_skills} onManageSkills={()=>setShowSkillManager(true)} onOpenRewards={()=>setShowRewardsManager(true)}><HistoryTab sessions={sessions} onSelect={setShowReport} accent={accent}/></StatsTab>}
-          {tab==="settings"&&<SettingsTab user={user} excluded={excluded} onToggleExclude={toggleExclude} onOpenLibrary={()=>setShowLibrary(true)} profile={profile} schedule={schedule} avatarUrl={avatarUrl} onUpdateConfig={updateConfig} onOpenScheduleEditor={()=>setShowSched(true)} onRedoOnboarding={()=>setShowOnboardingRedo(true)}
+          {tab==="settings"&&<SettingsTab progDone={sessionIndex} user={user} excluded={excluded} onToggleExclude={toggleExclude} onOpenLibrary={()=>setShowLibrary(true)} profile={profile} schedule={schedule} avatarUrl={avatarUrl} onUpdateConfig={updateConfig} onOpenScheduleEditor={()=>setShowSched(true)} onRedoOnboarding={()=>setShowOnboardingRedo(true)}
             onSignOut={async()=>{await supabase.auth.signOut();setUser(null);setLog({});setWeights({});setSessions([]);setExcluded([]);setStreak(0);}}
             onReset={async()=>{
               const uid=user?.id;
@@ -5012,6 +5037,7 @@ const NAV=[{id:"home",l:"Accueil"},{id:"seance",l:"Séances"},{id:"stats",l:"Sta
     </div>
   );
 }
+
 
 
 
