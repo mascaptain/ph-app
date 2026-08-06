@@ -188,7 +188,7 @@ const REST_TPL = {label:"Repos",salle:null,muscle:"Recuperation active",exercise
 const SESSION_TEMPLATES = [...PROGRAM.filter(d=>d.salle).map(d=>({label:d.label,salle:d.salle,muscle:d.muscle,exercises:d.exercises,abs:d.abs,ids:d.ids})), REST_TPL];
 
 // Rotation hebdo - mesocycle hybride (Volume -> Intensite -> Puissance -> Deload)
-const VERSION="1.45.1";
+const VERSION="2.0.0";
 const weekNumber = () => { const dt=new Date(); const d=new Date(Date.UTC(dt.getFullYear(),dt.getMonth(),dt.getDate())); const dn=(d.getUTCDay()+6)%7; d.setUTCDate(d.getUTCDate()-dn+3); const ft=new Date(Date.UTC(d.getUTCFullYear(),0,4)); const fn=(ft.getUTCDay()+6)%7; ft.setUTCDate(ft.getUTCDate()-fn+3); return 1+Math.round((d-ft)/604800000); };
 const PHASES12=[{n:"Accumulation",f:"Volume, base"},{n:"Accumulation",f:"Volume"},{n:"Accumulation",f:"Volume +"},{n:"Intensification",f:"Charges +"},{n:"Intensification",f:"Charges ++"},{n:"Intensification",f:"Lourd"},{n:"Réalisation",f:"Explosif"},{n:"Réalisation",f:"Puissance"},{n:"Réalisation",f:"Pic de force"},{n:"Deload",f:"Récupération"},{n:"Test / PR",f:"Validation"},{n:"Test / PR",f:"Nouveaux maxs"}];
 const programWeek=()=>((weekNumber()-1)%12)+1;
@@ -342,6 +342,7 @@ const restFor=(ex,goal,ph)=>{
 
 const personalizeDay=(day,profile,week,perf)=>{
   if(!day||!day.salle) return day;
+  if(day.v4) return day;
   const scale=engineScale(profile);
   const ph=phaseOf(week);
   const intensity=ph.i;
@@ -377,70 +378,8 @@ const baseGoal=(g)=>g==="force"?"force":g==="endurance"?"endurance":g==="seche"?
 // s'enchainer : buildCircuits appariait donc les exercices par leur RANG dans la liste,
 // ce qui pouvait mettre un soulevé de terre roumain en superset avec un squat gobelet.
 // On derive ici, une fois pour toutes, trois proprietes par exercice.
-const noAccent=(t)=>String(t||"").normalize("NFD").replace(/[̀-ͯ]/g,"").toLowerCase();
-
-// Patron de mouvement. L'ordre des regles compte : du plus specifique au plus general.
-const PATTERN_RULES=[
-  [/gainage|planche|hollow|l-?sit|crunch|twist|releve.*jambe|jambe.*suspendu|ab ?wheel|ab ?rollout|dead ?bug|sit-?up|situp|dragon flag|bird ?dog|pallof/,"core"],
-  [/rameur|velo|corde a sauter|corde 3|course|sprint|burpee|mountain climber|jumping jack|assault|ski erg|wall ball/,"cardio"],
-  [/traction|chin-?up|pull-?up|tirage vertical|lat pulldown|muscle-?up|front lever/,"pull_v"],
-  [/rowing|row |row$|tirage horizontal|face pull|tirage buste/,"pull_h"],
-  [/souleve de terre|deadlift|romanian|good morning|hip thrust|glute bridge|swing|clean|snatch|kettlebell complex|sumo|turkish|get-?up|windmill/,"hinge"],
-  [/squat|fente|lunge|presse a cuisse|leg press|step-?up|pistol|box jump|hack|bulgare/,"squat"],
-  [/curl|biceps/,"arm_pull"],
-  [/triceps|kickback|skull|barre au front|extension.*bras|dips triceps/,"arm_push"],
-  [/couche|bench|pompe|push-?up|push up|dips|ecarte|fly|pec deck|pec |chest/,"push_h"],
-  [/militaire|overhead|epaule|shoulder|arnold|elevation|oiseau|reverse fly|sots|bottoms-?up|press|developpe/,"push_v"],
-];
-const patternOf=(ex)=>{
-  const n=noAccent(ex&&ex.n);
-  for(const [re,pat] of PATTERN_RULES){ if(re.test(n)) return pat; }
-  // Repli sur le libelle musculaire quand le nom ne dit rien.
-  const m=noAccent(ex&&ex.m);
-  if(/quad|fessier|jambe|mollet/.test(m)) return "squat";
-  if(/ischio|lombaire/.test(m)) return "hinge";
-  if(/dos/.test(m)) return "pull_h";
-  if(/pec/.test(m)) return "push_h";
-  if(/epaule/.test(m)) return "push_v";
-  if(/biceps/.test(m)) return "arm_pull";
-  if(/triceps/.test(m)) return "arm_push";
-  if(/core|abdo|gainage/.test(m)) return "core";
-  return "push_h";
-};
-
-// Etage de l'exercice : ce qui doit passer en premier, frais, et ce qui peut etre enchaine.
-const COMPOUND=["squat","hinge","push_h","push_v","pull_v","pull_h"];
-const tierOf=(ex,pattern)=>{
-  if(pattern==="core") return "core";
-  if(pattern==="cardio") return "cardio";
-  const n=noAccent(ex&&ex.n);
-  if(pattern==="arm_pull"||pattern==="arm_push") return "isolation";
-  if(/elevation|oiseau|ecarte|fly|kickback|pec deck|leg extension|leg curl|mollet|shrug/.test(n)) return "isolation";
-  // Seule la BARRE impose la serie droite : elle demande d'etre fraiche et de ne pas etre
-  // enchainee. Les machines sont guidees et securisees, elles peuvent tres bien s'enchainer.
-  if(ex.eq==="bar"&&COMPOUND.indexOf(pattern)>=0) return "lourd";
-  if(COMPOUND.indexOf(pattern)>=0) return "compound";
-  return "isolation";
-};
-
-// Type de progression : appliquer "+2,5 kg" a une planche ou a un kettlebell n'a aucun sens.
-const progOf=(ex,pattern)=>{
-  if(pattern==="cardio") return "densite";
-  if(/\d+\s*s\b/.test(String(ex&&ex.reps))) return "temps";
-  if(ex&&ex.eq==="kb") return "kb";
-  if(ex&&ex.eq==="bw") return "bw";
-  return "charge";
-};
-
-const EX_META={};
-const metaOf=(ex)=>{
-  if(!ex||!ex.id) return {pattern:"push_h",tier:"isolation",prog:"charge"};
-  if(EX_META[ex.id]) return EX_META[ex.id];
-  const pattern=patternOf(ex);
-  const meta={pattern,tier:tierOf(ex,pattern),prog:progOf(ex,pattern)};
-  EX_META[ex.id]=meta;
-  return meta;
-};
+import { noAccent, patternOf, tierOf, progOf, metaOf } from "./classify.js";
+import { v4Session, patternStrength } from "./engine.js";
 
 const REGION={push_h:"haut",push_v:"haut",pull_h:"haut",pull_v:"haut",arm_push:"haut",arm_pull:"haut",squat:"bas",hinge:"bas",core:"core",cardio:"cardio"};
 const ANTAGONIST={push_h:"pull_h",pull_h:"push_h",push_v:"pull_v",pull_v:"push_v",squat:"hinge",hinge:"squat",arm_push:"arm_pull",arm_pull:"arm_push"};
@@ -544,7 +483,8 @@ const metKg=(ex,profile,f,perf)=>{
   return base>0?snapFor(ex.eq,base):0;
 };
 const buildMetcon=(day,mode,profile,week,seed,perf)=>{ if(!day||!day.salle) return day; const goal=baseGoal(profile&&profile.goal); const equip=(profile&&profile.equipment)||[]; const ph=phaseOf(week); let pool=DB.filter(e=>metconScore(e,goal)>0).filter(e=> e.eq==="bw" || !equip.length || equip.indexOf(e.eq)>=0); const seen={}; pool=pool.filter(e=>{ if(seen[e.n]) return false; seen[e.n]=1; return true; }); const dayEqs={};(day.exercises||[]).forEach(e=>{dayEqs[e.eq]=(dayEqs[e.eq]||0)+1;});pool=pool.map(e=>({e,s:metconScore(e,goal)+((dayEqs[e.eq]||0)>0?2:0)})).sort((a,b)=>b.s-a.s).map(x=>x.e); if(pool.length<6) pool=DB.filter(e=>metconScore(e,"hybride")>0); const off=pool.length?(((week-1)*3+(seed||0)*5)%pool.length):0; const rot=pool.slice(off).concat(pool.slice(0,off)); const lvl=profile&&profile.level; let nBlocks=lvl==="avance"?3:lvl==="debutant"?2:3; if(ph.deload) nBlocks=2; const perBlock=3; const rounds=lvl==="debutant"?3:lvl==="avance"?4:3; const cap=lvl==="avance"?12:10; const f=mode==="amrap"?0.55:0.65; const used={}; const blocks=[]; for(let b=0;b<nBlocks;b++){ const exs=[]; let cd=0; const mus={}; while(exs.length<perBlock){ let e=rot.find(x=>!used[x.n]&&(x.eq!=="cd"||cd<1)&&!mus[primaryMuscle(x.m)]); if(!e) e=rot.find(x=>!used[x.n]&&(x.eq!=="cd"||cd<1)); if(!e) e=rot.find(x=>!used[x.n]); if(!e) break; used[e.n]=1; if(e.eq==="cd")cd++; mus[primaryMuscle(e.m)]=1; exs.push(e); } if(!exs.length) break; const exercises=exs.map(ex=>{ const kg=metKg(ex,profile,f,perf); if(mode==="amrap"){ const r=metRepsAmrap(ex); return {...ex,kg,reps:String(ex.eq==="cd"?"40s":r),repsPerRound:r,modeTag:"AMRAP"}; } const r=metRepsEmom(ex); return {...ex,kg,reps:String(ex.eq==="cd"?"40s":r),repsPerMinute:r,modeTag:"EMOM"}; }); const durationMin=mode==="amrap"?cap:(exercises.length*rounds); blocks.push({label:(mode==="amrap"?"AMRAP ":"EMOM ")+(b+1),kind:mode,durationMin,rounds:mode==="emom"?rounds:0,exercises}); } const totalMin=blocks.reduce((a,bl)=>a+bl.durationMin,0)+Math.max(0,blocks.length-1)*2; const flat=[]; blocks.forEach((bl,bidx)=>bl.exercises.forEach(e=>{e.blockIdx=bidx;flat.push(e);})); return {...day,mode,metcon:true,blocks,totalMin,timeCapMin:blocks[0]?blocks[0].durationMin:cap,emomMinutes:blocks[0]?blocks[0].durationMin:8,exercises:flat}; };
-const applyMode=(day,mode,profile,week,seed,perf)=>{ if(!day||!day.salle) return day; if(mode==="amrap"||mode==="emom") return buildMetcon(day,mode,profile,week,seed,perf); return day.circuit?buildCircuits(orderDay(day),profile):orderDay(day); };
+const applyMode=(day,mode,profile,week,seed,perf)=>{ if(!day||!day.salle) return day;
+  if(day.v4) return day.circuit?buildCircuits(orderDay(day),profile):orderDay(day); if(mode==="amrap"||mode==="emom") return buildMetcon(day,mode,profile,week,seed,perf); return day.circuit?buildCircuits(orderDay(day),profile):orderDay(day); };
 const primaryMuscle = (m) => String(m||"").split("·")[0].trim().toLowerCase();
 const altPool = (ex) => DB.filter(e=>e.id!==ex.id && e.eq===ex.eq && primaryMuscle(e.m)===primaryMuscle(ex.m));
 const rotateDay = (day,w) => {
@@ -574,6 +514,9 @@ const adaptGoal = (day, goal) => {
   return {...day,exercises};
 };
 const adaptEquip = (day, equip) => {
+  // Le moteur V4 a deja filtre sur le materiel disponible, et la charge de chaque
+  // exercice a ete calculee pour LUI : substituer ici casserait la prescription.
+  if (day && day.v4) return day;
   if(!day || !day.salle || !equip || !equip.length) return day;
   const exercises=(day.exercises||[]).map(ex=>{
     if(equip.includes(ex.eq)) return ex;
@@ -3773,7 +3716,20 @@ const buildGoalSession=(goal,sessionIndex,equipment)=>{
   return {label:split.label,salle:"full",muscle:split.groups.join(" · "),exercises,abs:[],recommendedMode:split.mode,circuit:!!split.circuit};
 };
 const HYBRID_MODES={"Push Force":{mode:"classique",circuit:true},"KB Power":{mode:"emom",circuit:false},"Pull & Legs":{mode:"classique",circuit:true},"KB Endurance":{mode:"amrap",circuit:false},"Full Power":{mode:"classique",circuit:true}};
-const pendingSessionFor=(goal,sessionIndex,equipment)=>{
+const pendingSessionFor=(goal,sessionIndex,equipment,ctx)=>{
+  // Moteur V4. L'ancien chemin subsiste en repli : si le V4 ne rend rien pour une
+  // raison quelconque, on ne se retrouve pas sans seance.
+  const v4=v4Session(goal||"hybride",sessionIndex,{
+    equipment:(equipment&&equipment.length)?equipment:["bar","db","kb","mc","cd","bw"],
+    frequency:(ctx&&ctx.frequency)||5,
+    rms:(ctx&&ctx.rms)||{},
+    perf:(ctx&&ctx.perf)||{},
+    strength:(ctx&&ctx.strength)||{},
+    scale:(ctx&&ctx.scale)||1,
+    excluded:(ctx&&ctx.excluded)||[],
+    total:(ctx&&ctx.total)||60,
+  });
+  if(v4) return v4;
   const generated=buildGoalSession(goal,sessionIndex,equipment);
   if(generated) return generated;
   const tpl=TRAIN_TEMPLATES.length?TRAIN_TEMPLATES[sessionIndex%TRAIN_TEMPLATES.length]:null;
@@ -4484,7 +4440,11 @@ export default function SomaApp() {
     return slots;
   })();
   const isLate=overdueCount>0;
-  const pendingTemplate=(!programDone&&!isBeforeProgramStart)?pendingSessionFor(profile?.goal||"hybride",sessionIndex,profile?.equipment):null;
+  const engineCtx={frequency:trainingDaysPerWeek,rms:profile?.rms||{},perf,
+    strength:patternStrength(profile?.rms||{}),scale:engineScale(profile),
+    excluded,total:totalSessions};
+  const pendingTemplate=(!programDone&&!isBeforeProgramStart)
+    ?pendingSessionFor(profile?.goal||"hybride",sessionIndex,profile?.equipment,engineCtx):null;
   // Une journee DEJA ENREGISTREE s'affiche telle qu'elle a ete faite : intitule, muscles et
   // exercices viennent de la seance sauvegardee, qui est la seule verite sur ce qui s'est passe
   // ce jour-la. Auparavant l'entete etait toujours recalculee - depuis la seance suivante en
@@ -5041,6 +5001,7 @@ const NAV=[{id:"home",l:"Accueil"},{id:"seance",l:"Séances"},{id:"stats",l:"Sta
     </div>
   );
 }
+
 
 
 
