@@ -209,7 +209,7 @@ const resolveDay = ({rawDay, doneDay, beforeStart, past, queueSession}) => {
 const SESSION_TEMPLATES = [...PROGRAM.filter(d=>d.salle).map(d=>({label:d.label,salle:d.salle,muscle:d.muscle,exercises:d.exercises,abs:d.abs,ids:d.ids})), REST_TPL];
 
 // Rotation hebdo - mesocycle hybride (Volume -> Intensite -> Puissance -> Deload)
-const VERSION="2.0.2";
+const VERSION="2.1.0";
 const weekNumber = () => { const dt=new Date(); const d=new Date(Date.UTC(dt.getFullYear(),dt.getMonth(),dt.getDate())); const dn=(d.getUTCDay()+6)%7; d.setUTCDate(d.getUTCDate()-dn+3); const ft=new Date(Date.UTC(d.getUTCFullYear(),0,4)); const fn=(ft.getUTCDay()+6)%7; ft.setUTCDate(ft.getUTCDate()-fn+3); return 1+Math.round((d-ft)/604800000); };
 const PHASES12=[{n:"Accumulation",f:"Volume, base"},{n:"Accumulation",f:"Volume"},{n:"Accumulation",f:"Volume +"},{n:"Intensification",f:"Charges +"},{n:"Intensification",f:"Charges ++"},{n:"Intensification",f:"Lourd"},{n:"Réalisation",f:"Explosif"},{n:"Réalisation",f:"Puissance"},{n:"Réalisation",f:"Pic de force"},{n:"Deload",f:"Récupération"},{n:"Test / PR",f:"Validation"},{n:"Test / PR",f:"Nouveaux maxs"}];
 const programWeek=()=>((weekNumber()-1)%12)+1;
@@ -4850,9 +4850,9 @@ const NAV=[{id:"home",l:"Accueil"},{id:"seance",l:"Séances"},{id:"stats",l:"Sta
                     <div style={{background:C.s2,border:`1px solid ${C.s4}`,borderRadius:12,padding:"12px 15px",marginBottom:16,display:"flex",alignItems:"center",gap:10}}>
                       <Icon name="swap" size={17} stroke={C.ink}/>
                       <div>
-                        <div style={{fontSize:14,fontWeight:600,color:C.ink}}>Séance reportée</div>
+                        <div style={{fontSize:14,fontWeight:600,color:C.ink}}>Reprise du programme</div>
                         <div style={{fontSize:11.5,color:C.ink3,marginTop:1}}>
-                          {overdueCount>1?`${overdueCount} séances en retard — voici la prochaine dans l'ordre du programme.`:"Une séance n'a pas été faite — la voici, à sa place dans le programme."}
+                          Voici la prochaine séance, à sa place dans la séquence.
                         </div>
                       </div>
                     </div>

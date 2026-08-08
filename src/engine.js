@@ -152,9 +152,25 @@ const TEMPLATES = {
   skill:      { mode: "classique", slots: [["pillar", 1], ["accessory", 3], ["core", 1]] },
   decharge:   { mode: "classique", slots: [["pillar", 1], ["accessory", 2], ["core", 1]] },
 };
-const LABELS = {
-  force: "Force", accessoire: "Accessoires", mixte: "Force + densité",
-  metcon: "Densité", skill: "Puissance", decharge: "Décharge",
+const FAM_TITLE = {
+  hinge: "Chaîne postérieure", squat: "Jambes", push: "Poussée",
+  pull: "Tirage", carry: "Port", core: "Gainage",
+};
+// Chaque type de seance dit ce qu'on y fait :
+//   force       un gros mouvement lourd, puis ses accessoires
+//   mixte       la force d'abord, un bloc chronometre ensuite
+//   metcon      que du bloc chronometre, sans charge lourde
+//   accessoire  pas de mouvement lourd : on rattrape le volume qui manque
+//   skill       le geste technique a vitesse, frais
+//   decharge    fin de bloc, tout est allege pour recuperer
+const sessionTitle = (arch, fam, kind, dur) => {
+  const F = FAM_TITLE[fam] || fam;
+  if (arch === "metcon") return `${kind === "amrap" ? "AMRAP" : "EMOM"} ${dur} min`;
+  if (arch === "mixte") return `Lourd + densité · ${F}`;
+  if (arch === "accessoire") return `Volume · ${F}`;
+  if (arch === "skill") return `Puissance · ${F}`;
+  if (arch === "decharge") return `Décharge · ${F}`;
+  return `Lourd · ${F}`;
 };
 
 // ─── COUCHE 0 — LE PROFIL DERIVE ─────────────────────────────────────────────
@@ -265,6 +281,9 @@ const pillarsOf = (model, fam, ctx) => model.pillars
   .filter((e) => !(ctx.excluded || []).includes(e.id))
   .filter((e) => e.eq === "bw" || !(ctx.equipment || []).length || ctx.equipment.includes(e.eq));
 
+// Roles ou la kettlebell a sa place : le geste continu et le port.
+const KB_ROLES = { density: 1, carry: 1 };
+
 const pickExercise = (want, role, model, idx, state, ctx) => {
   const eq = ctx.equipment && ctx.equipment.length ? ctx.equipment : null;
   let best = null, bestScore = -1e9;
@@ -279,6 +298,10 @@ const pickExercise = (want, role, model, idx, state, ctx) => {
     if (want && fam !== want) continue;
     if (role === "core" && meta.pattern !== "core") continue;
     if (role === "carry" && !CARRY_RE.test(ex.n)) continue;
+
+    // Une serie droite chargee ne se fait pas a la cloche : la kettlebell est
+    // reservee aux blocs chronometres et aux ports.
+    if (ex.eq === "kb" && !KB_ROLES[role]) continue;
 
     let sc = (ROLE_TIERS[role] || {})[meta.tier] || 0;
 
@@ -410,9 +433,10 @@ export const buildProgram = (goal, ctx = {}) => {
           && roomLeft(budget, state.spent, want) < 3) return false;
       let ex = null;
       if (role === "pillar") {
-        // Rotation entre les piliers de la famille : charniere alterne souleve de
-        // terre et swing, ce qui les fait progresser tous les deux.
-        const ps = pillarsOf(model, want, ctx);
+        // Rotation entre les piliers de la famille. Les piliers a la cloche sont
+        // ecartes des seances classiques : le swing progresse dans les blocs de
+        // densite, ou il a sa place.
+        const ps = pillarsOf(model, want, ctx).filter((e) => e.eq !== "kb");
         if (ps.length) ex = ps[Math.floor(i / BIG.length) % ps.length];
       }
       if (!ex) ex = pickExercise(want, role, model, i, state, ctx);
@@ -502,7 +526,7 @@ export const buildProgram = (goal, ctx = {}) => {
 
     const fams = [...new Set(exercises.map((e) => familyOf(e)))];
     const day = {
-      label: `${LABELS[arch]} — ${FAM_FR[mainFam] || mainFam}`,
+      label: sessionTitle(arch, mainFam),
       salle: "full",
       muscle: fams.map((f) => FAM_FR[f] || f).join(" · "),
       exercises,
@@ -521,18 +545,26 @@ export const buildProgram = (goal, ctx = {}) => {
     // que ce qu'attend le lecteur de circuit.
     if (tpl.mode === "emom" || tpl.mode === "amrap") {
       const kind = i % 2 === 0 ? "emom" : "amrap";
-      const dur = kind === "emom" ? Math.max(8, exercises.length * 4) : 12;
+      // Le bloc, ce sont les mouvements de densite et le port — pas les
+      // accessoires ajoutes par ailleurs pour completer la seance.
+      const inBlock = exercises.filter((e) => e.role === "density" || e.role === "carry");
+      const blockEx = inBlock.length ? inBlock : exercises;
+      const rounds = 3;
+      const dur = Math.max(8, Math.min(16,
+        kind === "emom" ? blockEx.length * rounds : 12));
       day.recommendedMode = kind;
+      day.label = sessionTitle(arch, mainFam, kind, dur);
       day.metcon = true;
       day.blocks = [{
         label: (kind === "emom" ? "EMOM " : "AMRAP ") + dur,
-        kind, durationMin: dur, rounds: kind === "emom" ? Math.round(dur / exercises.length) : 0,
-        exercises,
+        kind, durationMin: dur,
+        rounds: kind === "emom" ? Math.max(1, Math.round(dur / blockEx.length)) : 0,
+        exercises: blockEx,
       }];
       day.totalMin = dur;
       day.timeCapMin = dur;
       day.emomMinutes = dur;
-      exercises.forEach((e) => { e.blockIdx = 0; });
+      blockEx.forEach((e) => { e.blockIdx = 0; });
     }
     out.push(day);
   }
