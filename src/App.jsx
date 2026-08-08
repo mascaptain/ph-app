@@ -188,7 +188,7 @@ const REST_TPL = {label:"Repos",salle:null,muscle:"Recuperation active",exercise
 const SESSION_TEMPLATES = [...PROGRAM.filter(d=>d.salle).map(d=>({label:d.label,salle:d.salle,muscle:d.muscle,exercises:d.exercises,abs:d.abs,ids:d.ids})), REST_TPL];
 
 // Rotation hebdo - mesocycle hybride (Volume -> Intensite -> Puissance -> Deload)
-const VERSION="2.0.0";
+const VERSION="2.0.1";
 const weekNumber = () => { const dt=new Date(); const d=new Date(Date.UTC(dt.getFullYear(),dt.getMonth(),dt.getDate())); const dn=(d.getUTCDay()+6)%7; d.setUTCDate(d.getUTCDate()-dn+3); const ft=new Date(Date.UTC(d.getUTCFullYear(),0,4)); const fn=(ft.getUTCDay()+6)%7; ft.setUTCDate(ft.getUTCDate()-fn+3); return 1+Math.round((d-ft)/604800000); };
 const PHASES12=[{n:"Accumulation",f:"Volume, base"},{n:"Accumulation",f:"Volume"},{n:"Accumulation",f:"Volume +"},{n:"Intensification",f:"Charges +"},{n:"Intensification",f:"Charges ++"},{n:"Intensification",f:"Lourd"},{n:"Réalisation",f:"Explosif"},{n:"Réalisation",f:"Puissance"},{n:"Réalisation",f:"Pic de force"},{n:"Deload",f:"Récupération"},{n:"Test / PR",f:"Validation"},{n:"Test / PR",f:"Nouveaux maxs"}];
 const programWeek=()=>((weekNumber()-1)%12)+1;
@@ -4413,6 +4413,7 @@ export default function SomaApp() {
   const isDayDone=sessions.some(s=>s.date===tabDate);
   const doneSession=isDayDone?sessions.find(s=>s.date===tabDate):null;
   const isBeforeProgramStart=!!(profile?.program_start&&tabDate<profile.program_start);
+  const isPastUndone=tabDate<todayKey()&&!isDayDone;
   // Le programme est une SEQUENCE de 60 seances, pas un calendrier. Une seance non faite
   // devait donc etre reportee jusqu'a etre executee. Or la seance en attente n'etait proposee
   // que si le planning de la semaine declarait ce jour comme un jour d'entrainement : rater
@@ -4470,7 +4471,35 @@ export default function SomaApp() {
       exercises:dex,abs:[],
     };
   })():null;
-  const day0=doneDay||(isBeforeProgramStart?{...REST_TPL,day:rawDay0?.day}:(isViewingToday&&(rawDay0?.salle||isLate)&&pendingTemplate)?(()=>{let c={...pendingTemplate,day:rawDay0.day};if(profile?.equipment?.length)c=adaptEquip(c,profile.equipment);c=personalizeDay(c,profile,sessionWeek,perf);return c;})():rawDay0);
+  // Combien de creneaux d'entrainement separent aujourd'hui du jour affiche.
+  // C'est ce nombre qui decale la file : rater un lundi ne change pas la seance
+  // proposee mardi, il la repousse.
+  const queueOffset=(targetIdx)=>{
+    const ti=todayIdx();
+    if(targetIdx<=ti) return 0;
+    let n=0;
+    for(let k=ti;k<targetIdx;k++){
+      const d=viewSchedule[k]||PROGRAM[k];
+      // Le creneau d'aujourd'hui ne compte que s'il reste a faire.
+      if(k===ti){ if(d&&d.salle&&!sessions.some(x=>x.date===programDate(k))) n++; }
+      else if(d&&d.salle) n++;
+    }
+    return n;
+  };
+  const sessionFromQueue=(idx,rawDay)=>{
+    const tpl=(!programDone&&!isBeforeProgramStart)
+      ?pendingSessionFor(profile?.goal||"hybride",sessionIndex+idx,profile?.equipment,engineCtx):null;
+    if(!tpl) return rawDay;
+    let c={...tpl,day:rawDay?.day};
+    if(profile?.equipment?.length) c=adaptEquip(c,profile.equipment);
+    return personalizeDay(c,profile,sessionWeek,perf);
+  };
+  const day0=doneDay
+    ||(isBeforeProgramStart?{...REST_TPL,day:rawDay0?.day}
+    // Un jour desactive dans le planning reste un jour de repos, meme en retard.
+    // Le retard decale la file, il ne fait pas apparaitre de seance un dimanche.
+    :(rawDay0&&rawDay0.salle&&!isPastUndone)?sessionFromQueue(queueOffset(dayIdx),rawDay0)
+    :rawDay0);
   // Seance "aujourd'hui" pour la page Accueil : DOIT utiliser la meme logique de sequence que day0 ci-dessus,
   // independamment de l'onglet jour actuellement affiche (dayIdx peut pointer vers un autre jour que aujourd'hui).
   const todaySessionForHome=(()=>{
@@ -4479,7 +4508,8 @@ export default function SomaApp() {
     const trDate=programDate(trIdx);
     const trBeforeStart=!!(profile?.program_start&&trDate<profile.program_start);
     if(trBeforeStart) return {...REST_TPL,day:trRaw?.day};
-    if((!trRaw?.salle&&!isLate)||programDone||!pendingTemplate) return trRaw;
+    // Meme regle que l'onglet Seance : un jour desactive n'a pas de seance.
+    if(!trRaw?.salle||programDone||!pendingTemplate) return trRaw;
     let c={...pendingTemplate,day:trRaw.day};
     if(profile?.equipment?.length) c=adaptEquip(c,profile.equipment);
     c=personalizeDay(c,profile,sessionWeek,perf);

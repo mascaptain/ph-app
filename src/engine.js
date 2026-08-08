@@ -114,7 +114,7 @@ export const GOAL_MODELS = {
     mix: ["metcon", "metcon", "mixte", "metcon", "metcon",
           "force", "metcon", "metcon", "mixte", "metcon",
           "metcon", "decharge"],
-    budget: { hinge: 6, squat: 8, push: 8, pull: 8, carry: 4, core: 8 },
+    budget: { hinge: 9, squat: 8, push: 8, pull: 8, carry: 4, core: 8 },
     intensity: { pillar: [0.62, 0.70], accessory: [0.50, 0.60], density: [0.35, 0.48] },
     reps: { pillar: [10, 12], accessory: [15, 20], density: [15, 25] },
     rest: { pillar: 90, accessory: 40, density: 25 },
@@ -131,7 +131,7 @@ export const GOAL_MODELS = {
     intensity: { pillar: [0.78, 0.88], accessory: [0.60, 0.72], density: [0.42, 0.55] },
     reps: { pillar: [2, 4], accessory: [6, 10], density: [10, 15] },
     rest: { pillar: 180, accessory: 100, density: 60 },
-    pillars: ["kb03", "kb06", "bb04", "bw01"],
+    pillars: ["kb03", "kb06", "bb03", "bb02", "bw01"],
     eqBias: ["kb", "bar", "bw", "db", "mc", "cd"],
     minutes: 50,
   },
@@ -146,7 +146,7 @@ export const GOAL_MODELS = {
 //   core      le finisseur de gainage
 const TEMPLATES = {
   force:      { mode: "classique", slots: [["pillar", 1], ["accessory", 3], ["core", 1]] },
-  accessoire: { mode: "classique", slots: [["accessory", 4], ["core", 1]] },
+  accessoire: { mode: "classique", slots: [["pillar", 1], ["accessory", 3], ["core", 1]] },
   mixte:      { mode: "classique", slots: [["pillar", 1], ["accessory", 2], ["density", 3]] },
   metcon:     { mode: "emom",      slots: [["density", 3], ["carry", 1]] },
   skill:      { mode: "classique", slots: [["pillar", 1], ["accessory", 3], ["core", 1]] },
@@ -233,6 +233,20 @@ const ROLE_TIERS = {
   core: { core: 80, isolation: -20, compound: -60, lourd: -80, cardio: -40 },
   carry: { compound: 10, isolation: 0, lourd: 0, core: 0, cardio: 0 },
 };
+// Compagnes d'une famille lourde. Ce sont des seances classiques :
+//   charniere + tirage   la chaine posterieure
+//   squat + poussee      bas puis haut
+//   poussee + tirage     le haut du corps en antagonistes
+const COMPANIONS = {
+  hinge: ["hinge", "pull", "carry"],   // chaine posterieure, puis le port
+  squat: ["squat", "push", "carry"],   // bas puis haut
+  push:  ["push", "pull", "carry"],    // le haut en antagonistes
+  pull:  ["pull", "push", "carry"],
+};
+// Ordre de lecture d'une seance : le lourd d'abord, puis chaque famille d'un
+// bloc, le port et le gainage en fin.
+const ORDER_ROLE = { pillar: 0, accessory: 1, density: 2, carry: 3, core: 4 };
+
 const COOLDOWN = { pillar: 0, accessory: 6, density: 5, core: 8, carry: 5 };
 
 // Bruit deterministe : departage les ex aequo sans jamais rendre deux programmes
@@ -287,7 +301,7 @@ const pickExercise = (want, role, model, idx, state, ctx) => {
     const last = state.lastSeen[ex.id];
     // Plafond de nouveaute : passer une seance a decouvrir six mouvements, c'est
     // ne forcer sur aucun. Au-dela du quota, l'inconnu n'est plus favorise.
-    if (last == null && state.newToday >= 2) sc -= 60;
+    if (last == null && state.newToday >= 2) sc -= 140;
     if (last == null) sc += role === "pillar" ? 0 : 45;
     else {
       const gap = idx - last;
@@ -318,6 +332,8 @@ export const weeklyBudget = (model, freq) => {
   const sum = FAMILIES.reduce((a, f) => a + (w[f] || 0), 0) || 1;
   const out = {};
   FAMILIES.forEach((f) => { out[f] = Math.round(total * (w[f] || 0) / sum); });
+  out.core = Math.max(out.core, freq * 3);
+  out.carry = Math.max(out.carry, Math.round(freq * 1.8));
   return out;
 };
 
@@ -373,15 +389,25 @@ export const buildProgram = (goal, ctx = {}) => {
     const exercises = [];
     const spend = (pres) => {
       const fam = familyOf(pres);
-      state.spent[fam] = (state.spent[fam] || 0) + (Number(pres.sets) || 0);
+      // Un tour de bloc chronometre coute moins qu'une serie droite chargee :
+      // le compter pareil revenait a saturer le budget des le deuxieme jour.
+      const cost = pres.role === "density" ? 1 : (Number(pres.sets) || 0);
+      state.spent[fam] = (state.spent[fam] || 0) + cost;
     };
+    const famsToday = () => new Set(exercises.map((e) => familyOf(e)).filter((f) => f !== "core"));
     const place = (role, want, force) => {
+      // Au-dela de trois familles, une seance n'a plus de theme : on refuse d'en
+      // ouvrir une quatrieme et on retombe sur celles deja engagees.
+      if (!force && role !== "core" && role !== "pillar") {
+        const fs = famsToday();
+        if (!fs.has(want) && fs.size >= 3) return false;
+      }
       // Une famille au plafond ne recoit plus d'accessoire : sans ce refus, le
       // budget ne faisait qu'ordonner et la poussee montait a 44 series pour 10.
       // Une place d'une seule serie n'en est pas une : un accessoire en coute trois.
       // Sans ce seuil, le port montait a 12 series pour un budget de 8.
       if (!force && (role === "accessory" || role === "carry")
-          && roomLeft(budget, state.spent, want) < 2) return false;
+          && roomLeft(budget, state.spent, want) < 3) return false;
       let ex = null;
       if (role === "pillar") {
         // Rotation entre les piliers de la famille : charniere alterne souleve de
@@ -401,9 +427,17 @@ export const buildProgram = (goal, ctx = {}) => {
       return true;
     };
 
-    // Familles encore ouvertes cette semaine, les plus en retard d'abord.
+    // Familles du THEME du jour, les plus en retard d'abord. Hors theme, on
+    // n'ajoute rien : c'est ce qui donne une seance qui se tient.
+    const theme = COMPANIONS[mainFam] || ["push", "pull", "core"];
     const openFams = () => deficits(budget, state.spent)
+      .filter((d) => d.f !== "core" && d.left > 0 && theme.indexOf(d.f) >= 0)
+      .map((d) => d.f);
+    // Si le theme est sature, on elargit — mais en gardant l'ordre du theme en
+    // tete, pour que l'ajout reste le moins depaysant possible.
+    const openAny = () => deficits(budget, state.spent)
       .filter((d) => d.f !== "core" && d.left > 0)
+      .sort((a, b) => (theme.indexOf(a.f) < 0 ? 9 : 0) - (theme.indexOf(b.f) < 0 ? 9 : 0))
       .map((d) => d.f);
 
     for (const [role, count] of tpl.slots) {
@@ -413,16 +447,14 @@ export const buildProgram = (goal, ctx = {}) => {
         if (role === "carry") { place("carry", "carry"); continue; }
         // On essaie les familles ouvertes, dans l'ordre du retard. Si aucune n'a de
         // place, on prend celle qui a le MOINS depasse — jamais une au hasard.
-        const open = openFams().filter((f) => f !== mainFam || role === "density");
+        let open = openFams().filter((f) => f !== mainFam || role === "density");
+        if (!open.length) open = openAny();
         let done = false;
         for (let t = 0; t < open.length && !done; t++) {
           done = place(role, open[(k + t) % open.length]);
         }
-        if (!done) {
-          const least = deficits(budget, state.spent)
-            .filter((d) => d.f !== "carry" && d.f !== "core")[0];
-          if (least) place(role, least.f, true);
-        }
+        // Si rien n'a de place, le creneau reste vide. Forcer ici rendait le
+        // plafond decoratif ; le plancher de seance garantit deja le minimum.
       }
     }
 
@@ -440,7 +472,7 @@ export const buildProgram = (goal, ctx = {}) => {
     let guard = 0;
     while (estimateMinutes(exercises) < model.minutes - 6
            && exercises.length < 8 && guard++ < 8) {
-      const open = openFams();
+      const open = openFams().length ? openFams() : openAny();
       if (!open.length) break;                      // semaine pleine : on s'arrete la
       let added = false;
       for (let t = 0; t < open.length && !added; t++) added = place("accessory", open[t]);
@@ -449,6 +481,24 @@ export const buildProgram = (goal, ctx = {}) => {
     if (["hinge", "squat", "push", "pull"].indexOf(mainFam) >= 0 && arch !== "metcon") {
       state.heavyFam = mainFam;
     } else state.heavyFam = null;
+
+    // Regroupement par famille, dans l'ordre du theme. Sans cela l'ordre etait
+    // celui du tirage au sort et la seance sautait d'un groupe a l'autre.
+    exercises.sort((a, b) => {
+      const ra = ORDER_ROLE[a.role] ?? 9, rb = ORDER_ROLE[b.role] ?? 9;
+      // Le pilier ouvre, le gainage et le port ferment. Entre les deux,
+      // accessoires et densite se rangent PAR FAMILLE : on termine un groupe
+      // musculaire avant d'en commencer un autre.
+      const ea = ra === 0 ? 0 : ra >= 3 ? 2 : 1;
+      const eb = rb === 0 ? 0 : rb >= 3 ? 2 : 1;
+      if (ea !== eb) return ea - eb;
+      const fa = familyOf(a), fb = familyOf(b);
+      const ia = theme.indexOf(fa) < 0 ? 9 : theme.indexOf(fa);
+      const ib = theme.indexOf(fb) < 0 ? 9 : theme.indexOf(fb);
+      if (ia !== ib) return ia - ib;
+      if (fa !== fb) return fa < fb ? -1 : 1;   // groupe les hors-theme entre eux
+      return ra - rb;
+    });
 
     const fams = [...new Set(exercises.map((e) => familyOf(e)))];
     const day = {
