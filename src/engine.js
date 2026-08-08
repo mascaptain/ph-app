@@ -138,12 +138,12 @@ export const GOAL_MODELS = {
 //   density   un bloc chronometre
 //   core      le finisseur de gainage
 const TEMPLATES = {
-  force:      { mode: "classique", slots: [["pillar", 1], ["accessory", 3], ["core", 1]] },
-  accessoire: { mode: "classique", slots: [["pillar", 1], ["accessory", 3], ["core", 1]] },
-  mixte:      { mode: "classique", slots: [["pillar", 1], ["accessory", 2], ["density", 3], ["core", 1]] },
-  metcon:     { mode: "emom",      slots: [["density", 3], ["carry", 1]] },
-  skill:      { mode: "classique", slots: [["pillar", 1], ["accessory", 3], ["core", 1]] },
-  decharge:   { mode: "classique", slots: [["pillar", 1], ["accessory", 2], ["core", 1]] },
+  force:      { mode: "classique", slots: [["pillar", 1], ["accessory", 4], ["core", 2]] },
+  accessoire: { mode: "classique", slots: [["pillar", 1], ["accessory", 4], ["core", 2]] },
+  mixte:      { mode: "classique", slots: [["pillar", 1], ["accessory", 3], ["density", 3], ["core", 2]] },
+  metcon:     { mode: "emom",      slots: [["density", 3], ["carry", 1], ["core", 2]] },
+  skill:      { mode: "classique", slots: [["pillar", 1], ["accessory", 4], ["core", 2]] },
+  decharge:   { mode: "classique", slots: [["pillar", 1], ["accessory", 3], ["core", 2]] },
 };
 // Les soixante libelles du catalogue ramenes a dix groupes nommables.
 const GROUP_MAP = [
@@ -586,7 +586,7 @@ export const buildProgram = (goal, ctx = {}) => {
     // d'ajouter produisait des seances de trois exercices : un leger depassement
     // vaut mieux qu'une seance qui ne vaut pas le deplacement.
     let floorGuard = 0;
-    while (exercises.length < 4 && floorGuard++ < 6) {
+    while (exercises.filter((e) => e.role !== "core").length < 5 && floorGuard++ < 8) {
       const least = deficits(budget, state.spent).filter((d) => d.f !== "core")[0];
       if (!least || !place("accessory", least.f, true)) break;
     }

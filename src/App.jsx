@@ -209,7 +209,7 @@ const resolveDay = ({rawDay, doneDay, beforeStart, past, queueSession}) => {
 const SESSION_TEMPLATES = [...PROGRAM.filter(d=>d.salle).map(d=>({label:d.label,salle:d.salle,muscle:d.muscle,exercises:d.exercises,abs:d.abs,ids:d.ids})), REST_TPL];
 
 // Rotation hebdo - mesocycle hybride (Volume -> Intensite -> Puissance -> Deload)
-const VERSION="2.3.0";
+const VERSION="2.3.1";
 const weekNumber = () => { const dt=new Date(); const d=new Date(Date.UTC(dt.getFullYear(),dt.getMonth(),dt.getDate())); const dn=(d.getUTCDay()+6)%7; d.setUTCDate(d.getUTCDate()-dn+3); const ft=new Date(Date.UTC(d.getUTCFullYear(),0,4)); const fn=(ft.getUTCDay()+6)%7; ft.setUTCDate(ft.getUTCDate()-fn+3); return 1+Math.round((d-ft)/604800000); };
 const PHASES12=[{n:"Accumulation",f:"Volume, base"},{n:"Accumulation",f:"Volume"},{n:"Accumulation",f:"Volume +"},{n:"Intensification",f:"Charges +"},{n:"Intensification",f:"Charges ++"},{n:"Intensification",f:"Lourd"},{n:"Réalisation",f:"Explosif"},{n:"Réalisation",f:"Puissance"},{n:"Réalisation",f:"Pic de force"},{n:"Deload",f:"Récupération"},{n:"Test / PR",f:"Validation"},{n:"Test / PR",f:"Nouveaux maxs"}];
 const programWeek=()=>((weekNumber()-1)%12)+1;
@@ -506,7 +506,9 @@ const metKg=(ex,profile,f,perf)=>{
 };
 const buildMetcon=(day,mode,profile,week,seed,perf)=>{ if(!day||!day.salle) return day; const goal=baseGoal(profile&&profile.goal); const equip=(profile&&profile.equipment)||[]; const ph=phaseOf(week); let pool=DB.filter(e=>metconScore(e,goal)>0).filter(e=> e.eq==="bw" || !equip.length || equip.indexOf(e.eq)>=0); const seen={}; pool=pool.filter(e=>{ if(seen[e.n]) return false; seen[e.n]=1; return true; }); const dayEqs={};(day.exercises||[]).forEach(e=>{dayEqs[e.eq]=(dayEqs[e.eq]||0)+1;});pool=pool.map(e=>({e,s:metconScore(e,goal)+((dayEqs[e.eq]||0)>0?2:0)})).sort((a,b)=>b.s-a.s).map(x=>x.e); if(pool.length<6) pool=DB.filter(e=>metconScore(e,"hybride")>0); const off=pool.length?(((week-1)*3+(seed||0)*5)%pool.length):0; const rot=pool.slice(off).concat(pool.slice(0,off)); const lvl=profile&&profile.level; let nBlocks=lvl==="avance"?3:lvl==="debutant"?2:3; if(ph.deload) nBlocks=2; const perBlock=3; const rounds=lvl==="debutant"?3:lvl==="avance"?4:3; const cap=lvl==="avance"?12:10; const f=mode==="amrap"?0.55:0.65; const used={}; const blocks=[]; for(let b=0;b<nBlocks;b++){ const exs=[]; let cd=0; const mus={}; while(exs.length<perBlock){ let e=rot.find(x=>!used[x.n]&&(x.eq!=="cd"||cd<1)&&!mus[primaryMuscle(x.m)]); if(!e) e=rot.find(x=>!used[x.n]&&(x.eq!=="cd"||cd<1)); if(!e) e=rot.find(x=>!used[x.n]); if(!e) break; used[e.n]=1; if(e.eq==="cd")cd++; mus[primaryMuscle(e.m)]=1; exs.push(e); } if(!exs.length) break; const exercises=exs.map(ex=>{ const kg=metKg(ex,profile,f,perf); if(mode==="amrap"){ const r=metRepsAmrap(ex); return {...ex,kg,reps:String(ex.eq==="cd"?"40s":r),repsPerRound:r,modeTag:"AMRAP"}; } const r=metRepsEmom(ex); return {...ex,kg,reps:String(ex.eq==="cd"?"40s":r),repsPerMinute:r,modeTag:"EMOM"}; }); const durationMin=mode==="amrap"?cap:(exercises.length*rounds); blocks.push({label:(mode==="amrap"?"AMRAP ":"EMOM ")+(b+1),kind:mode,durationMin,rounds:mode==="emom"?rounds:0,exercises}); } const totalMin=blocks.reduce((a,bl)=>a+bl.durationMin,0)+Math.max(0,blocks.length-1)*2; const flat=[]; blocks.forEach((bl,bidx)=>bl.exercises.forEach(e=>{e.blockIdx=bidx;flat.push(e);})); return {...day,mode,metcon:true,blocks,totalMin,timeCapMin:blocks[0]?blocks[0].durationMin:cap,emomMinutes:blocks[0]?blocks[0].durationMin:8,exercises:flat}; };
 const applyMode=(day,mode,profile,week,seed,perf)=>{ if(!day||!day.salle) return day;
-  if(day.v4) return day.circuit?buildCircuits(orderDay(day),profile):orderDay(day); if(mode==="amrap"||mode==="emom") return buildMetcon(day,mode,profile,week,seed,perf); return day.circuit?buildCircuits(orderDay(day),profile):orderDay(day); };
+  // Le moteur V4 a deja ordonne la seance — lourd, accessoires, bloc chronometre,
+  // finisseur. orderDay retriait par etage et defaisait ce travail.
+  if(day&&day.v4) return day; if(mode==="amrap"||mode==="emom") return buildMetcon(day,mode,profile,week,seed,perf); return day.circuit?buildCircuits(orderDay(day),profile):orderDay(day); };
 const primaryMuscle = (m) => String(m||"").split("·")[0].trim().toLowerCase();
 const altPool = (ex) => DB.filter(e=>e.id!==ex.id && e.eq===ex.eq && primaryMuscle(e.m)===primaryMuscle(ex.m));
 const rotateDay = (day,w) => {
@@ -4901,6 +4903,11 @@ const NAV=[{id:"home",l:"Accueil"},{id:"seance",l:"Séances"},{id:"stats",l:"Sta
                       <Tap onTap={()=>{clock.stop();setShowFeedback(true);}} style={{flex:2,padding:"16px",borderRadius:12,background:C.accent,border:"none",display:"flex",alignItems:"center",justifyContent:"center"}}>
                         <span style={{fontSize:15,fontWeight:600,color:C.onAccent}}>Fin de séance</span>
                       </Tap>
+                      <Tap label="Ajouter un Hero WOD" onTap={()=>setShowHeroes(true)}
+                        style={{padding:"15px 16px",borderRadius:22,border:`1px solid ${C.div}`,
+                          display:"flex",alignItems:"center",justifyContent:"center"}}>
+                        <span style={{fontSize:12.5,fontWeight:600,color:C.ink3}}>Hero</span>
+                      </Tap>
                       <Tap onTap={()=>setShowSettings(true)} style={{padding:"16px",borderRadius:12,border:`1px solid ${C.div}`,display:"flex",alignItems:"center",justifyContent:"center"}}>
                         <span style={{fontSize:12.5,fontWeight:600,color:C.ink3}}>Réglages</span>
                       </Tap>
@@ -4987,6 +4994,19 @@ const NAV=[{id:"home",l:"Accueil"},{id:"seance",l:"Séances"},{id:"stats",l:"Sta
                       </div>
                     </div>
                   )}
+                  {/* Un Hero se rajoute quand on veut : apres la seance du jour,
+                      un jour de repos, ou a la place de ce qui etait prevu. */}
+                  <Tap label="Faire un Hero WOD" onTap={()=>setShowHeroes(true)}
+                    style={{display:"flex",alignItems:"center",justifyContent:"space-between",
+                      gap:10,background:C.card,border:`1px solid ${C.s2}`,
+                      boxShadow:`0 3px 16px ${C.ink5}`,borderRadius:22,padding:"14px 16px",marginBottom:11}}>
+                    <div style={{minWidth:0}}>
+                      <div style={{fontSize:14,fontWeight:600,color:C.ink}}>Ajouter un Hero WOD</div>
+                      <div style={{fontSize:11.5,color:C.ink4,marginTop:2}}>
+                        250 séances au nom de ceux qui ne sont pas rentrés</div>
+                    </div>
+                    <span style={{fontSize:13,color:C.ink4,flexShrink:0}}>›</span>
+                  </Tap>
                   {day.salle&&<div style={{marginBottom:16}}>
                     <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:sessionMode==="classique"?0:10}}><span style={{fontSize:11.5,fontWeight:600,color:C.ink3,textTransform:"uppercase",letterSpacing:".1em"}}>Séance du jour</span><span style={{fontSize:11.5,fontWeight:600,color:C.onAccent,background:C.accent,padding:"2px 9px",borderRadius:12,textTransform:"uppercase",letterSpacing:".06em"}}>{modeLabel}</span></div>
                     {sessionMode!=="classique"&&!locked&&<Tap onTap={()=>setShowCircuit(true)} style={{display:"flex",alignItems:"center",justifyContent:"center",gap:8,padding:"16px",borderRadius:12,background:C.accentSoft,border:`1px solid ${C.accent}`}}><span style={{fontSize:15}}>⏱</span><span style={{fontSize:15,fontWeight:600,color:C.accent}}>Démarrer le circuit {sessionMode==="amrap"?"AMRAP":"EMOM"}</span></Tap>}
@@ -5182,6 +5202,7 @@ const NAV=[{id:"home",l:"Accueil"},{id:"seance",l:"Séances"},{id:"stats",l:"Sta
     </div>
   );
 }
+
 
 
 
