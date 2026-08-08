@@ -140,7 +140,7 @@ export const GOAL_MODELS = {
 const TEMPLATES = {
   force:      { mode: "classique", slots: [["pillar", 1], ["accessory", 3], ["core", 1]] },
   accessoire: { mode: "classique", slots: [["pillar", 1], ["accessory", 3], ["core", 1]] },
-  mixte:      { mode: "classique", slots: [["pillar", 1], ["accessory", 2], ["density", 3]] },
+  mixte:      { mode: "classique", slots: [["pillar", 1], ["accessory", 2], ["density", 3], ["core", 1]] },
   metcon:     { mode: "emom",      slots: [["density", 3], ["carry", 1]] },
   skill:      { mode: "classique", slots: [["pillar", 1], ["accessory", 3], ["core", 1]] },
   decharge:   { mode: "classique", slots: [["pillar", 1], ["accessory", 2], ["core", 1]] },
@@ -162,11 +162,18 @@ const GROUP_MAP = [
 const HAUT = ["Pectoraux", "Épaules", "Dos", "Biceps", "Triceps", "Avant-bras"];
 const BAS = ["Quadriceps", "Ischios", "Fessiers", "Jambes"];
 
+const FAM_GROUPS = {
+  hinge: ["Ischios", "Fessiers"], squat: ["Quadriceps", "Fessiers"],
+  push: ["Pectoraux", "Épaules"], pull: ["Dos"], carry: [], core: ["Abdominaux"],
+};
 const groupsOf = (ex) => {
   const out = [];
   String((ex && ex.m) || "").split("·").map((x) => x.trim()).filter(Boolean).forEach((lab) => {
     for (const [re, g] of GROUP_MAP) { if (re.test(lab)) { if (out.indexOf(g) < 0) out.push(g); return; } }
   });
+  // "Full body", "Cardio", "Puissance" ne sont pas des groupes musculaires :
+  // quand la fiche n'en donne aucun, on prend ceux de la famille du mouvement.
+  if (!out.length) return (FAM_GROUPS[familyOf(ex)] || []).slice();
   return out;
 };
 
@@ -174,10 +181,15 @@ const groupsOf = (ex) => {
 // l'essentiel du travail, et on bascule vers la region des qu'il y en a trois.
 const zoneOf = (all) => {
   const w = {};
-  const exercises = all.filter((e) => e.role !== "core") .length ? all.filter((e) => e.role !== "core") : all;
+  const body = all.filter((e) => e.role !== "core");
+  const exercises = body.length ? body : all;
   exercises.forEach((e) => {
     const gs = groupsOf(e);
-    const n = (Number(e.sets) || 1) / (gs.length || 1);
+    // Le mouvement principal definit la seance : il pese trois fois plus que le
+    // reste. Sans cela, quatre accessoires de tirage renommaient un jour de
+    // souleve de terre en "Haut du Corps".
+    const weight = e.role === "pillar" ? 3 : 1;
+    const n = ((Number(e.sets) || 1) * weight) / (gs.length || 1);
     gs.forEach((g) => { w[g] = (w[g] || 0) + n; });
   });
   const tot = Object.values(w).reduce((a, b) => a + b, 0);
@@ -188,6 +200,8 @@ const zoneOf = (all) => {
   if (!main.length) return "Full Body";
   if (main.length === 1) return main[0];
   if (main.length === 2) return `${main[0]} & ${main[1]}`;
+  const top2 = (w[main[0]] + w[main[1]]) / tot;
+  if (top2 >= 0.5) return `${main[0]} & ${main[1]}`;
   const haut = main.filter((g) => HAUT.indexOf(g) >= 0).length;
   const bas = main.filter((g) => BAS.indexOf(g) >= 0).length;
   if (haut && bas) return "Full Body";
@@ -333,6 +347,9 @@ const pillarsOf = (model, fam, ctx) => model.pillars
 
 // Roles ou la kettlebell a sa place : le geste continu et le port.
 const KB_ROLES = { density: 1, carry: 1 };
+// Preparation, correctif, gainage debout : utile, mais pas a la place d'un
+// accessoire charge sur une seance de force.
+const PREHAB_RE = /superman|bird ?dog|wall slide|scapular|pass under|halo|around the world|dead ?bug|band pull|face pull|y raise|external rotation|rotation externe|shrug|mollet|calf|couch|cat-?cow|hollow|plank|gainage/i;
 
 const pickExercise = (want, role, model, idx, state, ctx) => {
   const eq = ctx.equipment && ctx.equipment.length ? ctx.equipment : null;
@@ -353,7 +370,11 @@ const pickExercise = (want, role, model, idx, state, ctx) => {
     // reservee aux blocs chronometres et aux ports.
     if (ex.eq === "kb" && !KB_ROLES[role]) continue;
 
+    if (role === "accessory" && PREHAB_RE.test(ex.n)) continue;
+    // Sur un creneau d'accessoire, une charge vaut mieux qu'un mouvement a vide :
+    // c'est la que se construit le volume qui compte.
     let sc = (ROLE_TIERS[role] || {})[meta.tier] || 0;
+    if (role === "accessory" && Number(ex.kg) > 0) sc += 18;
 
     // Une seance ne doit pas devenir un cours de kettlebell parce que le catalogue
     // en contient beaucoup et que la nouveaute les favorise. Au-dela de deux
@@ -599,8 +620,10 @@ export const buildProgram = (goal, ctx = {}) => {
       // Le pilier ouvre, le gainage et le port ferment. Entre les deux,
       // accessoires et densite se rangent PAR FAMILLE : on termine un groupe
       // musculaire avant d'en commencer un autre.
-      const ea = ra === 0 ? 0 : ra >= 3 ? 2 : 1;
-      const eb = rb === 0 ? 0 : rb >= 3 ? 2 : 1;
+      // Quatre temps : le lourd, les accessoires, le bloc chronometre, le
+      // finisseur. Accessoires et densite partageaient le meme temps.
+      const ea = ra === 0 ? 0 : ra === 1 ? 1 : ra === 2 ? 2 : 3;
+      const eb = rb === 0 ? 0 : rb === 1 ? 1 : rb === 2 ? 2 : 3;
       if (ea !== eb) return ea - eb;
       const fa = familyOf(a), fb = familyOf(b);
       const ia = theme.indexOf(fa) < 0 ? 9 : theme.indexOf(fa);
@@ -615,8 +638,11 @@ export const buildProgram = (goal, ctx = {}) => {
       label: sessionTitle(arch, zoneOf(exercises)),
       salle: "full",
       muscle: fams.map((f) => FAM_FR[f] || f).join(" · "),
-      exercises,
-      abs: [],
+      // Le gainage n'est pas un exercice parmi les autres : il ferme la seance,
+      // dans son propre bloc, comme avant le moteur V4.
+      exercises: exercises.filter((e) => e.role !== "core"),
+      abs: exercises.filter((e) => e.role === "core")
+        .map((e) => ({ id: e.id, n: e.n, eq: e.eq, vol: `${e.sets}×${e.reps}` })),
       recommendedMode: tpl.mode,
       circuit: arch === "mixte" || arch === "accessoire",
       v4: true,

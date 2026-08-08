@@ -209,7 +209,7 @@ const resolveDay = ({rawDay, doneDay, beforeStart, past, queueSession}) => {
 const SESSION_TEMPLATES = [...PROGRAM.filter(d=>d.salle).map(d=>({label:d.label,salle:d.salle,muscle:d.muscle,exercises:d.exercises,abs:d.abs,ids:d.ids})), REST_TPL];
 
 // Rotation hebdo - mesocycle hybride (Volume -> Intensite -> Puissance -> Deload)
-const VERSION="2.2.0";
+const VERSION="2.3.0";
 const weekNumber = () => { const dt=new Date(); const d=new Date(Date.UTC(dt.getFullYear(),dt.getMonth(),dt.getDate())); const dn=(d.getUTCDay()+6)%7; d.setUTCDate(d.getUTCDate()-dn+3); const ft=new Date(Date.UTC(d.getUTCFullYear(),0,4)); const fn=(ft.getUTCDay()+6)%7; ft.setUTCDate(ft.getUTCDate()-fn+3); return 1+Math.round((d-ft)/604800000); };
 const PHASES12=[{n:"Accumulation",f:"Volume, base"},{n:"Accumulation",f:"Volume"},{n:"Accumulation",f:"Volume +"},{n:"Intensification",f:"Charges +"},{n:"Intensification",f:"Charges ++"},{n:"Intensification",f:"Lourd"},{n:"Réalisation",f:"Explosif"},{n:"Réalisation",f:"Puissance"},{n:"Réalisation",f:"Pic de force"},{n:"Deload",f:"Récupération"},{n:"Test / PR",f:"Validation"},{n:"Test / PR",f:"Nouveaux maxs"}];
 const programWeek=()=>((weekNumber()-1)%12)+1;
@@ -2409,7 +2409,9 @@ const heroRecords=(sessions)=>{
 
 function HeroSheet({equipment,sessions,onPick,onClose}) {
   const rec=heroRecords(sessions);
-  const list=HEROES.filter(h=>heroFits(h,equipment));
+  // A la main, on autorise aussi les seances a corde, traineau ou piscine :
+  // c'est a toi de voir si tu peux les faire. Elles sont signalees.
+  const list=HEROES.filter(h=>heroFits(h,equipment,true));
   const [q,setQ]=useState("");
   const shown=q?list.filter(h=>h.name.toLowerCase().includes(q.toLowerCase())):list;
   return (
@@ -2446,8 +2448,12 @@ function HeroSheet({equipment,sessions,onPick,onClose}) {
                     background:r?C.accentSoft:C.s2,color:C.ink3,whiteSpace:"nowrap"}}>
                     {r?(r.amrap?`${r.score} tours`:fmtMSS(r.score)):heroSummary(h)}</span>
                 </div>
+                {h.special&&<div style={{fontSize:10,color:C.ink4,marginTop:3}}>
+                  Demande corde, traîneau, piscine ou partenaire</div>}
+                <div style={{display:"none"}}>
+                </div>
                 <div style={{fontSize:11.5,color:C.ink4,marginTop:4,lineHeight:1.45}}>
-                  {h.moves.map(m=>`${m.reps} ${m.n}${m.kg?` ${m.kg} kg`:""}`).join(" · ")}</div>
+                  {h.text}</div>
                 <div style={{fontSize:10.5,color:C.ink4,marginTop:6,fontStyle:"italic"}}>{h.tribute}</div>
               </Tap>
             );
