@@ -185,10 +185,31 @@ const PROGRAM = PROG_DEF.map(d=>({...d,exercises:d.ids.map(([id,sets])=>{const e
 
 // Templates de seances reassignables (les 5 seances + Repos) pour l'editeur de semaine
 const REST_TPL = {label:"Repos",salle:null,muscle:"Recuperation active",exercises:[],abs:[],ids:[]};
+// Une seance manquee n'est pas un jour de repos : elle a ete ratee, et la file
+// l'a deja reportee. On le dit, et on n'affiche aucun exercice.
+const MISSED_TPL = {label:"Séance manquée",salle:null,
+  muscle:"Reportée — elle reprendra sa place dans le programme",
+  exercises:[],abs:[],ids:[],missed:true};
+
+// rawDay      la journee du planning hebdomadaire
+// doneDay     la seance reellement enregistree ce jour-la, s'il y en a une
+// beforeStart la date precede le debut du programme
+// past        journee passee et non faite
+// queueSession() la seance que la file propose pour cette journee
+const resolveDay = ({rawDay, doneDay, beforeStart, past, queueSession}) => {
+  if (doneDay) return doneDay;
+  const day = rawDay && rawDay.day;
+  if (beforeStart) return {...REST_TPL, day};
+  // Jour desactive dans le planning : repos, meme si on est en retard.
+  if (!rawDay || !rawDay.salle) return {...REST_TPL, day};
+  if (past) return {...MISSED_TPL, day};
+  return queueSession();
+};
+
 const SESSION_TEMPLATES = [...PROGRAM.filter(d=>d.salle).map(d=>({label:d.label,salle:d.salle,muscle:d.muscle,exercises:d.exercises,abs:d.abs,ids:d.ids})), REST_TPL];
 
 // Rotation hebdo - mesocycle hybride (Volume -> Intensite -> Puissance -> Deload)
-const VERSION="2.0.1";
+const VERSION="2.0.2";
 const weekNumber = () => { const dt=new Date(); const d=new Date(Date.UTC(dt.getFullYear(),dt.getMonth(),dt.getDate())); const dn=(d.getUTCDay()+6)%7; d.setUTCDate(d.getUTCDate()-dn+3); const ft=new Date(Date.UTC(d.getUTCFullYear(),0,4)); const fn=(ft.getUTCDay()+6)%7; ft.setUTCDate(ft.getUTCDate()-fn+3); return 1+Math.round((d-ft)/604800000); };
 const PHASES12=[{n:"Accumulation",f:"Volume, base"},{n:"Accumulation",f:"Volume"},{n:"Accumulation",f:"Volume +"},{n:"Intensification",f:"Charges +"},{n:"Intensification",f:"Charges ++"},{n:"Intensification",f:"Lourd"},{n:"Réalisation",f:"Explosif"},{n:"Réalisation",f:"Puissance"},{n:"Réalisation",f:"Pic de force"},{n:"Deload",f:"Récupération"},{n:"Test / PR",f:"Validation"},{n:"Test / PR",f:"Nouveaux maxs"}];
 const programWeek=()=>((weekNumber()-1)%12)+1;
@@ -4494,12 +4515,10 @@ export default function SomaApp() {
     if(profile?.equipment?.length) c=adaptEquip(c,profile.equipment);
     return personalizeDay(c,profile,sessionWeek,perf);
   };
-  const day0=doneDay
-    ||(isBeforeProgramStart?{...REST_TPL,day:rawDay0?.day}
-    // Un jour desactive dans le planning reste un jour de repos, meme en retard.
-    // Le retard decale la file, il ne fait pas apparaitre de seance un dimanche.
-    :(rawDay0&&rawDay0.salle&&!isPastUndone)?sessionFromQueue(queueOffset(dayIdx),rawDay0)
-    :rawDay0);
+  const day0=resolveDay({
+    rawDay:rawDay0, doneDay, beforeStart:isBeforeProgramStart, past:isPastUndone,
+    queueSession:()=>sessionFromQueue(queueOffset(dayIdx),rawDay0),
+  });
   // Seance "aujourd'hui" pour la page Accueil : DOIT utiliser la meme logique de sequence que day0 ci-dessus,
   // independamment de l'onglet jour actuellement affiche (dayIdx peut pointer vers un autre jour que aujourd'hui).
   const todaySessionForHome=(()=>{
@@ -5031,6 +5050,7 @@ const NAV=[{id:"home",l:"Accueil"},{id:"seance",l:"Séances"},{id:"stats",l:"Sta
     </div>
   );
 }
+
 
 
 
