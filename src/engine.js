@@ -20,6 +20,7 @@
 // qu'aucune seance ne se repete.
 import { DB } from "./catalog.js";
 import { metaOf } from "./classify.js";
+import { HEROES, heroFits } from "./heroes.js";
 
 // ─── VOCABULAIRE ─────────────────────────────────────────────────────────────
 // Six familles pour le budget. Les patrons fins du classifieur y sont regroupes :
@@ -43,6 +44,9 @@ export const familyOf = (ex) => {
 // Douze seances ne sont pas douze fois la meme intention. L'intensite monte, le
 // volume monte puis retombe, et la douzieme est une decharge.
 const BLOCK = 12;
+// Part visee de chaque type dans un bloc. C'est une intention, pas un calendrier :
+// la seance du jour est celle dont le type est le plus en retard sur sa part.
+const DEFAULT_SHARE = { force: 0.42, metcon: 0.25, accessoire: 0.17, mixte: 0.16, skill: 0 };
 export const phaseOf = (i) => {
   const p = i % BLOCK;
   if (p === BLOCK - 1) return { name: "decharge", int: 0.82, vol: 0.6, deload: true };
@@ -60,8 +64,7 @@ export const GOAL_MODELS = {
   hybride: {
     label: "Hybride",
     // Composition d'un bloc de douze. La douzieme est la decharge.
-    mix: ["force", "metcon", "force", "mixte", "accessoire",
-          "force", "metcon", "force", "mixte", "metcon", "force", "decharge"],
+    share: { force: 0.34, metcon: 0.34, mixte: 0.20, accessoire: 0.12, skill: 0 },
     budget: { hinge: 8, squat: 8, push: 10, pull: 12, carry: 4, core: 6 },
     intensity: { pillar: [0.80, 0.90], accessory: [0.62, 0.74], density: [0.40, 0.55] },
     reps: { pillar: [3, 5], accessory: [8, 12], density: [12, 20] },
@@ -72,9 +75,7 @@ export const GOAL_MODELS = {
   },
   force: {
     label: "Force",
-    mix: ["force", "force", "accessoire", "force",
-          "force", "accessoire", "force", "force",
-          "accessoire", "force", "force", "decharge"],
+    share: { force: 0.62, accessoire: 0.25, mixte: 0.13, metcon: 0, skill: 0 },
     budget: { hinge: 10, squat: 10, push: 12, pull: 12, carry: 2, core: 4 },
     intensity: { pillar: [0.82, 0.92], accessory: [0.68, 0.78], density: [0.50, 0.60] },
     reps: { pillar: [3, 5], accessory: [6, 8], density: [10, 12] },
@@ -85,9 +86,7 @@ export const GOAL_MODELS = {
   },
   hypertrophie: {
     label: "Hypertrophie",
-    mix: ["accessoire", "accessoire", "force", "accessoire", "accessoire",
-          "force", "accessoire", "accessoire", "force", "accessoire",
-          "accessoire", "decharge"],
+    share: { accessoire: 0.55, force: 0.32, mixte: 0.13, metcon: 0, skill: 0 },
     budget: { hinge: 10, squat: 12, push: 16, pull: 16, carry: 2, core: 6 },
     intensity: { pillar: [0.72, 0.82], accessory: [0.62, 0.74], density: [0.50, 0.62] },
     reps: { pillar: [6, 8], accessory: [8, 12], density: [12, 20] },
@@ -98,9 +97,7 @@ export const GOAL_MODELS = {
   },
   seche: {
     label: "Sèche",
-    mix: ["mixte", "metcon", "mixte", "metcon", "accessoire",
-          "mixte", "metcon", "mixte", "metcon", "accessoire",
-          "mixte", "decharge"],
+    share: { mixte: 0.38, metcon: 0.38, accessoire: 0.24, force: 0, skill: 0 },
     budget: { hinge: 8, squat: 10, push: 12, pull: 12, carry: 4, core: 8 },
     intensity: { pillar: [0.68, 0.78], accessory: [0.58, 0.68], density: [0.38, 0.50] },
     reps: { pillar: [8, 10], accessory: [12, 15], density: [15, 20] },
@@ -111,9 +108,7 @@ export const GOAL_MODELS = {
   },
   endurance: {
     label: "Endurance",
-    mix: ["metcon", "metcon", "mixte", "metcon", "metcon",
-          "force", "metcon", "metcon", "mixte", "metcon",
-          "metcon", "decharge"],
+    share: { metcon: 0.58, mixte: 0.25, force: 0.17, accessoire: 0, skill: 0 },
     budget: { hinge: 9, squat: 8, push: 8, pull: 8, carry: 4, core: 8 },
     intensity: { pillar: [0.62, 0.70], accessory: [0.50, 0.60], density: [0.35, 0.48] },
     reps: { pillar: [10, 12], accessory: [15, 20], density: [15, 25] },
@@ -124,9 +119,7 @@ export const GOAL_MODELS = {
   },
   performance: {
     label: "Performance",
-    mix: ["force", "skill", "mixte", "force", "skill",
-          "metcon", "force", "skill", "mixte", "force",
-          "metcon", "decharge"],
+    share: { force: 0.34, skill: 0.25, mixte: 0.25, metcon: 0.16, accessoire: 0 },
     budget: { hinge: 8, squat: 8, push: 10, pull: 10, carry: 4, core: 8 },
     intensity: { pillar: [0.78, 0.88], accessory: [0.60, 0.72], density: [0.42, 0.55] },
     reps: { pillar: [2, 4], accessory: [6, 10], density: [10, 15] },
@@ -152,25 +145,82 @@ const TEMPLATES = {
   skill:      { mode: "classique", slots: [["pillar", 1], ["accessory", 3], ["core", 1]] },
   decharge:   { mode: "classique", slots: [["pillar", 1], ["accessory", 2], ["core", 1]] },
 };
-const FAM_TITLE = {
-  hinge: "Chaîne postérieure", squat: "Jambes", push: "Poussée",
-  pull: "Tirage", carry: "Port", core: "Gainage",
+// Les soixante libelles du catalogue ramenes a dix groupes nommables.
+const GROUP_MAP = [
+  [/pec/i, "Pectoraux"],
+  [/deltoid|épaule|epaule|rear delt|rotateur|scapula|trapèze|trapeze/i, "Épaules"],
+  [/dorsal|dos/i, "Dos"],
+  [/biceps|brachial/i, "Biceps"],
+  [/triceps/i, "Triceps"],
+  [/quad/i, "Quadriceps"],
+  [/ischio/i, "Ischios"],
+  [/fessier/i, "Fessiers"],
+  [/mollet|adducteur|jambe|hanche/i, "Jambes"],
+  [/core|abdo|oblique|lombaire|gainage/i, "Abdominaux"],
+  [/avant-bras|grip|poignet/i, "Avant-bras"],
+];
+const HAUT = ["Pectoraux", "Épaules", "Dos", "Biceps", "Triceps", "Avant-bras"];
+const BAS = ["Quadriceps", "Ischios", "Fessiers", "Jambes"];
+
+const groupsOf = (ex) => {
+  const out = [];
+  String((ex && ex.m) || "").split("·").map((x) => x.trim()).filter(Boolean).forEach((lab) => {
+    for (const [re, g] of GROUP_MAP) { if (re.test(lab)) { if (out.indexOf(g) < 0) out.push(g); return; } }
+  });
+  return out;
 };
-// Chaque type de seance dit ce qu'on y fait :
-//   force       un gros mouvement lourd, puis ses accessoires
-//   mixte       la force d'abord, un bloc chronometre ensuite
-//   metcon      que du bloc chronometre, sans charge lourde
-//   accessoire  pas de mouvement lourd : on rattrape le volume qui manque
-//   skill       le geste technique a vitesse, frais
-//   decharge    fin de bloc, tout est allege pour recuperer
-const sessionTitle = (arch, fam, kind, dur) => {
-  const F = FAM_TITLE[fam] || fam;
-  if (arch === "metcon") return `${kind === "amrap" ? "AMRAP" : "EMOM"} ${dur} min`;
-  if (arch === "mixte") return `Lourd + densité · ${F}`;
-  if (arch === "accessoire") return `Volume · ${F}`;
-  if (arch === "skill") return `Puissance · ${F}`;
-  if (arch === "decharge") return `Décharge · ${F}`;
-  return `Lourd · ${F}`;
+
+// Zone de la seance : on compte les series par groupe, on garde ceux qui portent
+// l'essentiel du travail, et on bascule vers la region des qu'il y en a trois.
+const zoneOf = (all) => {
+  const w = {};
+  const exercises = all.filter((e) => e.role !== "core") .length ? all.filter((e) => e.role !== "core") : all;
+  exercises.forEach((e) => {
+    const gs = groupsOf(e);
+    const n = (Number(e.sets) || 1) / (gs.length || 1);
+    gs.forEach((g) => { w[g] = (w[g] || 0) + n; });
+  });
+  const tot = Object.values(w).reduce((a, b) => a + b, 0);
+  if (!tot) return "Full Body";
+  // Groupes qui comptent vraiment : au moins un sixieme du travail.
+  const main = Object.entries(w).filter(([, v]) => v / tot >= 0.16)
+    .sort((a, b) => b[1] - a[1]).map(([g]) => g);
+  if (!main.length) return "Full Body";
+  if (main.length === 1) return main[0];
+  if (main.length === 2) return `${main[0]} & ${main[1]}`;
+  const haut = main.filter((g) => HAUT.indexOf(g) >= 0).length;
+  const bas = main.filter((g) => BAS.indexOf(g) >= 0).length;
+  if (haut && bas) return "Full Body";
+  return haut ? "Haut du Corps" : "Bas du Corps";
+};
+// Cinq types, cinq intentions. Le format d'un bloc chronometre — AMRAP, EMOM —
+// n'en fait pas partie : c'est une facon de l'executer, pas une facon de
+// s'entrainer. Il vit dans la pastille.
+const TYPE_OF = {
+  force: "Force", mixte: "Force", accessoire: "Volume",
+  metcon: "Conditionnement", skill: "Puissance", decharge: "Décharge",
+};
+const sessionTitle = (arch, zone) => `${TYPE_OF[arch] || "Force"} · ${zone}`;
+
+// Ce que dit la pastille, a droite du titre.
+const sessionBadge = (arch, day) => {
+  if (day.hero) return day.blocks && day.blocks[0] ? day.blocks[0].label : "Hero";
+  if (arch === "metcon") return `${day.recommendedMode === "amrap" ? "AMRAP" : "EMOM"} ${day.totalMin}`;
+  if (arch === "mixte") return "+ conditionnement";
+  if (arch === "accessoire") return `${day.exercises.length} exercices`;
+  if (arch === "decharge") return "allégé";
+  const p = day.exercises.find((e) => e.role === "pillar");
+  return p ? `${p.sets} séries` : `${day.exercises.length} exercices`;
+};
+
+// Forme courte pour la bande de semaine.
+const shortTitle = (arch, zone) => {
+  const T = { Force: "FOR", Volume: "VOL", Conditionnement: "COND", Puissance: "PUI", "Décharge": "DÉCH" };
+  const t = T[TYPE_OF[arch]] || "FOR";
+  if (arch === "decharge") return "DÉCH";
+  const z = zone === "Full Body" ? "FB" : zone === "Haut du Corps" ? "HAUT"
+    : zone === "Bas du Corps" ? "BAS" : zone.split(" & ")[0].slice(0, 3).toUpperCase();
+  return `${t} · ${z}`;
 };
 
 // ─── COUCHE 0 — LE PROFIL DERIVE ─────────────────────────────────────────────
@@ -343,6 +393,29 @@ const pickExercise = (want, role, model, idx, state, ctx) => {
   return best;
 };
 
+// Type de la seance : celui dont la part realisee est la plus en retard sur la
+// part visee, parmi ceux que les contraintes autorisent.
+const chooseArch = (model, i, state, ph) => {
+  if (ph.deload) return "decharge";
+  const share = model.share || DEFAULT_SHARE;
+  const done = state.archCount || {};
+  const seen = Object.values(done).reduce((a, b) => a + b, 0) || 1;
+  const allowed = Object.keys(share).filter((k) => (share[k] || 0) > 0).filter((k) => {
+    // Deux conditionnements de suite se marchent dessus.
+    if (k === "metcon" && state.lastArch === "metcon") return false;
+    // La veille d'un Hero, on n'arrive pas casse par une seance lourde.
+    if (state.heroNext && (k === "force" || k === "mixte")) return false;
+    return true;
+  });
+  const pool = allowed.length ? allowed : Object.keys(share).filter((k) => (share[k] || 0) > 0);
+  let best = pool[0], bestGap = -Infinity;
+  pool.forEach((k) => {
+    const gap = (share[k] || 0) - ((done[k] || 0) / seen);
+    if (gap > bestGap) { bestGap = gap; best = k; }
+  });
+  return best;
+};
+
 // ─── COUCHE 2 — LE BUDGET ────────────────────────────────────────────────────
 // La couche absente jusqu'ici, et celle qui garantit l'equilibre. On pose les
 // series a placer dans la semaine ; chaque seance les CONSOMME ; la derniere
@@ -385,19 +458,25 @@ export const buildProgram = (goal, ctx = {}) => {
   const freq = Math.max(2, Math.min(7, ctx.frequency || 5));
   const budget = weeklyBudget(model, freq);
   const state = { lastSeen: {}, usedToday: new Set(), spent: {}, heavyFam: null,
-                  eqToday: {}, newToday: 0, pillarTurn: 0 };
+                  eqToday: {}, newToday: 0, pillarTurn: 0,
+                  archCount: {}, lastArch: null, heroNext: false, heroesThisWeek: 0,
+                  heroSeen: {}, heroIdx: 0 };
+  // Un a deux Hero par semaine : deux des que la frequence le permet.
+  const heroQuota = ctx.heroQuota != null ? ctx.heroQuota : (freq >= 5 ? 1 : 1);
   const out = [];
 
   for (let i = 0; i < total; i++) {
     const ph = phaseOf(i);
-    const arch = model.mix[i % BLOCK];
+    // ── Le type de la seance se decide, il n'est plus lu dans un tableau. ──
+    const arch = chooseArch(model, i, state, ph);
     const tpl = TEMPLATES[arch] || TEMPLATES.force;
     state.usedToday = new Set();
     state.eqToday = {};
     state.newToday = 0;
 
     // Nouvelle semaine : le budget se remet a zero.
-    if (i % freq === 0) state.spent = {};
+    if (i % freq === 0) { state.spent = {}; state.heroesThisWeek = 0;
+      state.weekNo = Math.floor(i / freq); }
 
     // Famille lourde du jour : rotation reguliere sur les quatre grandes familles
     // plutot que "toujours celle qui a le plus de retard". Prendre systematiquement
@@ -502,6 +581,13 @@ export const buildProgram = (goal, ctx = {}) => {
       for (let t = 0; t < open.length && !added; t++) added = place("accessory", open[t]);
       if (!added) break;
     }
+    // Le Hero de la semaine prochaine se decide ici : la seance qui precede en
+    // tiendra compte et evitera de te casser la veille.
+    state.heroNext = (arch !== "metcon") && (state.heroesThisWeek < heroQuota + 1)
+      && ((i + 1) % freq !== 0);
+
+    state.archCount[arch] = (state.archCount[arch] || 0) + 1;
+    state.lastArch = arch;
     if (["hinge", "squat", "push", "pull"].indexOf(mainFam) >= 0 && arch !== "metcon") {
       state.heavyFam = mainFam;
     } else state.heavyFam = null;
@@ -526,7 +612,7 @@ export const buildProgram = (goal, ctx = {}) => {
 
     const fams = [...new Set(exercises.map((e) => familyOf(e)))];
     const day = {
-      label: sessionTitle(arch, mainFam),
+      label: sessionTitle(arch, zoneOf(exercises)),
       salle: "full",
       muscle: fams.map((f) => FAM_FR[f] || f).join(" · "),
       exercises,
@@ -538,11 +624,54 @@ export const buildProgram = (goal, ctx = {}) => {
       phase: ph.name,
       block: blockOf(i) + 1,
       estMin: estimateMinutes(exercises),
+      short: shortTitle(arch, zoneOf(exercises)),
       budget,
     };
 
     // Un jour de densite se joue en bloc chronometre : on lui donne la meme forme
     // que ce qu'attend le lecteur de circuit.
+    // ── Un Hero remplace le bloc chronometre quand le quota de la semaine le
+    //    permet. Il garde ses charges et ses repetitions : c'est le principe.
+    const heroPool = HEROES.filter((h) => heroFits(h, ctx.equipment)
+      && !(ctx.excluded || []).includes("hero:" + h.id)
+      && (!h.long || i % 12 >= 8));
+    const quotaNow = heroQuota + ((freq >= 5 && (state.weekNo || 0) % 2 === 0) ? 1 : 0);
+    if (arch === "metcon" && state.heroesThisWeek < quotaNow && heroPool.length) {
+      const fresh = heroPool.filter((h) => state.heroSeen[h.id] == null);
+      const pick = (fresh.length ? fresh : heroPool)[
+        (fresh.length ? state.heroIdx : state.heroIdx + 3) % (fresh.length || heroPool.length)];
+      state.heroSeen[pick.id] = i;
+      state.heroIdx++;
+      state.heroesThisWeek++;
+      const hx = pick.moves.map((m, k) => ({
+        id: `hero_${pick.id}_${k}`, n: m.n, m: "Full body", eq: "bw",
+        kg: m.kg || 0, sets: 1, reps: String(m.reps), rest: 0, role: "density", v4: true,
+      }));
+      day.hero = pick.id;
+      day.heroName = pick.name;
+      day.label = `Hero · ${pick.name}`;
+      day.short = "HERO";
+      day.muscle = pick.tribute;
+      day.exercises = hx;
+      day.recommendedMode = pick.kind === "amrap" ? "amrap" : "fortime";
+      day.metcon = true;
+      day.totalMin = pick.cap;
+      day.timeCapMin = pick.cap;
+      day.emomMinutes = pick.cap;
+      day.estMin = pick.cap + 8;
+      day.blocks = [{
+        label: pick.kind === "amrap" ? `AMRAP ${pick.cap}`
+          : pick.kind === "rounds" ? `${pick.rounds} tours`
+          : `Pour le temps · ${pick.cap} min`,
+        kind: pick.kind === "amrap" ? "amrap" : "fortime",
+        durationMin: pick.cap, rounds: pick.rounds || 0, exercises: hx,
+      }];
+      hx.forEach((e) => { e.blockIdx = 0; });
+      day.badge = day.blocks[0].label;
+      out.push(day);
+      continue;
+    }
+
     if (tpl.mode === "emom" || tpl.mode === "amrap") {
       const kind = i % 2 === 0 ? "emom" : "amrap";
       // Le bloc, ce sont les mouvements de densite et le port — pas les
@@ -553,7 +682,7 @@ export const buildProgram = (goal, ctx = {}) => {
       const dur = Math.max(8, Math.min(16,
         kind === "emom" ? blockEx.length * rounds : 12));
       day.recommendedMode = kind;
-      day.label = sessionTitle(arch, mainFam, kind, dur);
+      day.label = sessionTitle(arch, zoneOf(blockEx));
       day.metcon = true;
       day.blocks = [{
         label: (kind === "emom" ? "EMOM " : "AMRAP ") + dur,
@@ -566,6 +695,7 @@ export const buildProgram = (goal, ctx = {}) => {
       day.emomMinutes = dur;
       blockEx.forEach((e) => { e.blockIdx = 0; });
     }
+    day.badge = sessionBadge(arch, day);
     out.push(day);
   }
   return out;

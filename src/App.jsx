@@ -209,7 +209,7 @@ const resolveDay = ({rawDay, doneDay, beforeStart, past, queueSession}) => {
 const SESSION_TEMPLATES = [...PROGRAM.filter(d=>d.salle).map(d=>({label:d.label,salle:d.salle,muscle:d.muscle,exercises:d.exercises,abs:d.abs,ids:d.ids})), REST_TPL];
 
 // Rotation hebdo - mesocycle hybride (Volume -> Intensite -> Puissance -> Deload)
-const VERSION="2.1.0";
+const VERSION="2.2.0";
 const weekNumber = () => { const dt=new Date(); const d=new Date(Date.UTC(dt.getFullYear(),dt.getMonth(),dt.getDate())); const dn=(d.getUTCDay()+6)%7; d.setUTCDate(d.getUTCDate()-dn+3); const ft=new Date(Date.UTC(d.getUTCFullYear(),0,4)); const fn=(ft.getUTCDay()+6)%7; ft.setUTCDate(ft.getUTCDate()-fn+3); return 1+Math.round((d-ft)/604800000); };
 const PHASES12=[{n:"Accumulation",f:"Volume, base"},{n:"Accumulation",f:"Volume"},{n:"Accumulation",f:"Volume +"},{n:"Intensification",f:"Charges +"},{n:"Intensification",f:"Charges ++"},{n:"Intensification",f:"Lourd"},{n:"Réalisation",f:"Explosif"},{n:"Réalisation",f:"Puissance"},{n:"Réalisation",f:"Pic de force"},{n:"Deload",f:"Récupération"},{n:"Test / PR",f:"Validation"},{n:"Test / PR",f:"Nouveaux maxs"}];
 const programWeek=()=>((weekNumber()-1)%12)+1;
@@ -401,6 +401,7 @@ const baseGoal=(g)=>g==="force"?"force":g==="endurance"?"endurance":g==="seche"?
 // On derive ici, une fois pour toutes, trois proprietes par exercice.
 import { noAccent, patternOf, tierOf, progOf, metaOf } from "./classify.js";
 import { v4Session, patternStrength } from "./engine.js";
+import { HEROES, heroFits, heroById, heroSummary } from "./heroes.js";
 
 const REGION={push_h:"haut",push_v:"haut",pull_h:"haut",pull_v:"haut",arm_push:"haut",arm_pull:"haut",squat:"bas",hinge:"bas",core:"core",cardio:"cardio"};
 const ANTAGONIST={push_h:"pull_h",pull_h:"push_h",push_v:"pull_v",pull_v:"push_v",squat:"hinge",hinge:"squat",arm_push:"arm_pull",arm_pull:"arm_push"};
@@ -2387,6 +2388,76 @@ function WeekSummary({sessions,accent,trainingDaysPerWeek}) {
   );
 }
 
+// Records Hero, lus dans les seances taguees. Pour un AMRAP le meilleur score
+// est le plus grand nombre de tours ; pour une seance au temps, le plus court.
+const heroRecords=(sessions)=>{
+  const out={};
+  (sessions||[]).forEach(s=>{
+    const tag=String(s.tag||s.hero||"");
+    if(tag.indexOf("hero:")!==0) return;
+    const id=tag.slice(5); const h=heroById(id); if(!h) return;
+    const amrap=h.kind==="amrap";
+    const score=amrap?(Number(s.totalSets)||0):(Number(s.duration)||0);
+    if(!(score>0)) return;
+    const cur=out[id];
+    const better=!cur||(amrap?score>cur.score:score<cur.score);
+    out[id]={hero:h,score:better?score:cur.score,date:better?s.date:cur.date,
+      tries:(cur?cur.tries:0)+1,amrap};
+  });
+  return out;
+};
+
+function HeroSheet({equipment,sessions,onPick,onClose}) {
+  const rec=heroRecords(sessions);
+  const list=HEROES.filter(h=>heroFits(h,equipment));
+  const [q,setQ]=useState("");
+  const shown=q?list.filter(h=>h.name.toLowerCase().includes(q.toLowerCase())):list;
+  return (
+    <div style={{position:"fixed",inset:0,background:C.bg,zIndex:Z.fullscreen,display:"flex",
+      flexDirection:"column",fontFamily:F,paddingTop:"env(safe-area-inset-top)"}}>
+      <div style={{width:"100%",maxWidth:600,margin:"0 auto",display:"flex",flexDirection:"column",flex:1,minHeight:0}}>
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,padding:"16px 18px"}}>
+          <div style={{minWidth:0}}>
+            <div style={{fontSize:21,fontWeight:600,color:C.ink,letterSpacing:"-.02em"}}>Hero WODs</div>
+            <div style={{fontSize:11.5,color:C.ink4,marginTop:2}}>
+              {list.length} réalisables avec ton matériel · {Object.keys(rec).length} déjà faits</div>
+          </div>
+          <Tap label="Fermer" onTap={onClose} style={{width:40,height:40,borderRadius:12,background:C.s2,
+            display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+            <Icon name="close" size={16} stroke={C.ink3}/></Tap>
+        </div>
+        <div style={{padding:"0 18px 12px"}}>
+          <input value={q} onChange={e=>setQ(e.target.value)} placeholder="Chercher un nom"
+            aria-label="Chercher un Hero"
+            style={{width:"100%",height:44,borderRadius:12,border:`1px solid ${C.s3}`,background:C.bg,
+              color:C.ink,fontSize:16,fontFamily:F,padding:"0 14px",outline:"none",boxSizing:"border-box",
+              userSelect:"text",WebkitUserSelect:"text"}}/>
+        </div>
+        <div style={{flex:1,overflowY:"auto",padding:"0 18px 24px",WebkitOverflowScrolling:"touch"}}>
+          {shown.map(h=>{
+            const r=rec[h.id];
+            return (
+              <Tap key={h.id} label={h.name} onTap={()=>onPick(h)}
+                style={{display:"block",background:C.card,border:`1px solid ${r?C.accent:C.s2}`,
+                  boxShadow:`0 3px 16px ${C.ink5}`,borderRadius:22,padding:"14px 16px",marginBottom:9}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:10}}>
+                  <span style={{fontSize:15,fontWeight:600,color:C.ink}}>{h.name}</span>
+                  <span style={{fontSize:10,fontWeight:600,padding:"4px 10px",borderRadius:999,
+                    background:r?C.accentSoft:C.s2,color:C.ink3,whiteSpace:"nowrap"}}>
+                    {r?(r.amrap?`${r.score} tours`:fmtMSS(r.score)):heroSummary(h)}</span>
+                </div>
+                <div style={{fontSize:11.5,color:C.ink4,marginTop:4,lineHeight:1.45}}>
+                  {h.moves.map(m=>`${m.reps} ${m.n}${m.kg?` ${m.kg} kg`:""}`).join(" · ")}</div>
+                <div style={{fontSize:10.5,color:C.ink4,marginTop:6,fontStyle:"italic"}}>{h.tribute}</div>
+              </Tap>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── STATS TAB ───────────────────────────────────────────────────────────────
 function IntervalTimer({onClose}) {
   const [mode,setMode]=useState("amrap");
@@ -2698,6 +2769,36 @@ function StatsTab({sessions,weights,accent,onOpenPhotos,pinnedPBs,onManagePBs,ac
             ))}
           </div>}
 
+        {(()=>{
+          const rec=heroRecords(sessions);
+          const ids=Object.keys(rec);
+          return(
+            <>
+              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,marginBottom:9,padding:"0 2px"}}>
+                <span style={LBL}>Hero WODs</span>
+                <span style={{fontSize:11.5,color:C.ink4}}>{ids.length} / {HEROES.length}</span>
+              </div>
+              {ids.length===0
+                ?<div style={{...CARD,padding:"24px 17px",textAlign:"center",fontSize:13.5,color:C.ink4,marginBottom:11}}>
+                   Aucun Hero terminé. Ils portent le nom de militaires, policiers et pompiers morts en service.</div>
+                :<div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:9,marginBottom:11}}>
+                  {ids.map(id=>{const r=rec[id];return(
+                    <div key={id} style={{...CARD,padding:"13px 14px",height:86,display:"flex",
+                      flexDirection:"column",justifyContent:"space-between"}}>
+                      <div style={{minWidth:0}}>
+                        <div style={{fontSize:13,fontWeight:600,color:C.ink,whiteSpace:"nowrap",
+                          overflow:"hidden",textOverflow:"ellipsis"}}>{r.hero.name}</div>
+                        <div style={{fontSize:10.5,color:C.ink4,marginTop:1}}>
+                          {r.tries} tentative{r.tries>1?"s":""}</div>
+                      </div>
+                      <div style={{fontSize:21,fontWeight:500,color:C.ink,letterSpacing:"-.03em",
+                        lineHeight:1,fontVariantNumeric:"tabular-nums"}}>
+                        {r.amrap?`${r.score} tours`:fmtMSS(r.score)}</div>
+                    </div>);})}
+                </div>}
+            </>
+          );
+        })()}
         <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,marginBottom:9,padding:"0 2px"}}>
           <span style={LBL}>Apprentissage</span>
           {onManageSkills&&<Tap label="Gérer les apprentissages" onTap={onManageSkills}
@@ -3862,6 +3963,8 @@ export default function SomaApp() {
   const[sessions,setSessions]=useState([]);
   const[excluded,setExcluded]=useState([]);
   const[aiOverride,setAiOverride]=useState(null);
+  const[showHeroes,setShowHeroes]=useState(false);
+  const[heroDay,setHeroDay]=useState(null);
   const[schedule,setSchedule]=useState(PROGRAM);
   const[streak,setStreak]=useState(0);
   const[sessionActive,setSessionActive]=useState(false);
@@ -4032,6 +4135,7 @@ export default function SomaApp() {
         totalKg:Number(s.total_kg||s.totalKg||0),
         totalSets:Number(s.total_sets||s.totalSets||0),
         sessionIndex:Number(s.session_index||s.sessionIndex||0),
+        ...(s.tag?{tag:s.tag}:{}),
         targetKg:s.target_kg!=null?Number(s.target_kg):null,
         targetSets:s.target_sets!=null?Number(s.target_sets):null,
         duration:Number(s.duration_seconds||s.duration||0),
@@ -4302,6 +4406,7 @@ export default function SomaApp() {
     const entry={
       day:day.day,
       dayLabel:aiOverride?.titre||day.label,
+      ...(day.hero?{tag:"hero:"+day.hero}:{}),
       date:sDate,
       exercises:exercisesData,
       totalKg:Math.round(totalKg),
@@ -4350,6 +4455,7 @@ export default function SomaApp() {
         user_id:uid,date:sDate,week:"S"+wk,
         day:day.day,day_label:entry.dayLabel,
         session_type:entry.dayLabel,
+        ...(day.hero?{tag:"hero:"+day.hero}:{}),
         session_index:entry.sessionIndex,
         mode:sessionMode,
         total_kg:Math.round(totalKg),total_sets:totalSets,
@@ -4515,7 +4621,19 @@ export default function SomaApp() {
     if(profile?.equipment?.length) c=adaptEquip(c,profile.equipment);
     return personalizeDay(c,profile,sessionWeek,perf);
   };
-  const day0=resolveDay({
+  const pickHero=(h)=>{
+    const hx=h.moves.map((m,k)=>({id:`hero_${h.id}_${k}`,n:m.n,m:"Full body",eq:"bw",
+      kg:m.kg||0,sets:1,reps:String(m.reps),rest:0,role:"density",v4:true,blockIdx:0}));
+    setHeroDay({label:`Hero · ${h.name}`,salle:"full",muscle:h.tribute,exercises:hx,abs:[],
+      v4:true,hero:h.id,heroName:h.name,metcon:true,
+      recommendedMode:h.kind==="amrap"?"amrap":"fortime",
+      totalMin:h.cap,timeCapMin:h.cap,emomMinutes:h.cap,estMin:h.cap+8,
+      blocks:[{label:h.kind==="amrap"?`AMRAP ${h.cap}`:h.kind==="rounds"?`${h.rounds} tours`
+        :`Pour le temps · ${h.cap} min`,kind:h.kind==="amrap"?"amrap":"fortime",
+        durationMin:h.cap,rounds:h.rounds||0,exercises:hx}]});
+    setShowHeroes(false);
+  };
+  const day0=heroDay||resolveDay({
     rawDay:rawDay0, doneDay, beforeStart:isBeforeProgramStart, past:isPastUndone,
     queueSession:()=>sessionFromQueue(queueOffset(dayIdx),rawDay0),
   });
@@ -4720,9 +4838,15 @@ const NAV=[{id:"home",l:"Accueil"},{id:"seance",l:"Séances"},{id:"stats",l:"Sta
                 <div style={{textAlign:"center",padding:"80px 20px"}}>
                   <div style={{fontSize:34,fontWeight:600,color:C.ink4,letterSpacing:"-.02em",marginBottom:14}}>Récupération</div>
                   <div style={{fontSize:15,color:C.ink4,lineHeight:1.65,maxWidth:300,margin:"0 auto 28px"}}>{dayIdx===3?"Récupération active. Tes fibres consolident.":"Reset total. Synthèse protéique prioritaire."}</div>
-                  <Tap onTap={()=>setShowSettings(true)} style={{display:"inline-flex",padding:"13px 24px",borderRadius:999,border:`1px solid ${C.div}`,background:"transparent"}}>
-                    <span style={{fontSize:15,fontWeight:600,color:C.ink3}}>Générer une séance légère</span>
+                  <Tap label="Choisir un Hero WOD" onTap={()=>setShowHeroes(true)}
+                    style={{display:"inline-flex",padding:"13px 24px",borderRadius:999,background:C.fill}}>
+                    <span style={{fontSize:15,fontWeight:600,color:C.onFill}}>Faire un Hero WOD</span>
                   </Tap>
+                  <div style={{marginTop:12}}>
+                    <Tap onTap={()=>setShowSettings(true)} style={{display:"inline-flex",padding:"13px 24px",borderRadius:999,border:`1px solid ${C.div}`,background:"transparent"}}>
+                      <span style={{fontSize:15,fontWeight:600,color:C.ink3}}>Générer une séance légère</span>
+                    </Tap>
+                  </div>
                 </div>
               ):(
                 <>
@@ -5025,6 +5149,8 @@ const NAV=[{id:"home",l:"Accueil"},{id:"seance",l:"Séances"},{id:"stats",l:"Sta
       {detailEx&&<ExerciseSheet ex={detailEx} fav={favorites.includes(detailEx.id)} onToggleFav={toggleFav} onClose={()=>setDetailEx(null)} sessions={sessions}/>}
       {showFeedback&&<FeedbackSheet onClose={()=>setShowFeedback(false)} onSave={handleFeedbackSave}/>}
       {showSettings&&<SessionSettingsSheet day={day} curMode={effMode} onClose={()=>setShowSettings(false)} onApply={({mode,cons})=>{setModeOverride(mode);setDayCons(cons);setShowSettings(false);}}/>}
+      {showHeroes&&<HeroSheet equipment={profile?.equipment} sessions={sessions}
+        onPick={pickHero} onClose={()=>setShowHeroes(false)}/>}
       {showAI&&<AISheet onClose={()=>setShowAI(false)} onResult={o=>{setAiOverride(o);setShowAI(false);}} excluded={excluded}/>}
       {/* Alertes : jusqu'ici tout echec partait dans la console et l'utilisateur n'en savait rien. */}
       {toasts.length>0&&(
@@ -5050,6 +5176,7 @@ const NAV=[{id:"home",l:"Accueil"},{id:"seance",l:"Séances"},{id:"stats",l:"Sta
     </div>
   );
 }
+
 
 
 
