@@ -26,18 +26,35 @@ const slug = (n) => n.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "")
   .replace(/[^a-z0-9]+/g, "").slice(0, 20);
 
 const parseKg = (t) => { const m = String(t).match(/(\d+(?:\.\d+)?)\s*kg/i); return m ? Number(m[1]) : 0; };
+// La prescription garde son unite : "1000 m", "60s", "17 cal", "21-15-9".
+// La perdre faisait afficher "1000 reps" pour un kilometre de course, et le
+// chronometre ne se declenchait jamais faute de savoir qu'il s'agissait de temps.
 const parseReps = (t) => {
-  const m = String(t).match(/^\s*(\d+(?:-\d+)*)\s/);
+  const str = String(t);
+  let m = str.match(/(\d+(?:[.,]\d+)?)\s*(km|cal|min)\b/i);
+  if (m) return m[1] + " " + m[2].toLowerCase();
+  m = str.match(/(\d+(?:[.,]\d+)?)\s*m\b/i);
+  if (m) return m[1] + " m";
+  m = str.match(/(\d+)\s*s\b/i);
+  if (m) return m[1] + "s";
+  m = str.match(/^\s*(\d+(?:-\d+)+)/);
   if (m) return m[1];
-  const s = String(t).match(/(\d+)\s*(m|km|cal|s)\b/i);
-  return s ? s[0] : "";
+  m = str.match(/^\s*(\d+)/);
+  return m ? m[1] : "1";
 };
 
 export const HEROES = RAW.map(([name, form, cap, text]) => {
   const [kind, rounds] = String(form).split(":");
   const moves = String(text).split("·").map((x) => x.trim()).filter(Boolean)
-    .map((t) => ({ n: t.replace(/^\s*\d+(?:-\d+)*\s*/, "").replace(/\s*\d+(?:\.\d+)?\s*kg/i, "").trim() || t,
-                   reps: parseReps(t) || "1", kg: parseKg(t), raw: t }));
+    .map((t) => {
+      // On retire du NOM le nombre, l'unite et la charge : ils sont deja lus a
+      // part. Sans cela le mouvement s'appelait "m course" ou "cal rameur".
+      const n = String(t)
+        .replace(/^\s*\d+(?:[.,]\d+)?(?:-\d+)*\s*(km|m|cal|min|s)?\b\s*/i, "")
+        .replace(/\s*\d+(?:\.\d+)?\s*kg/i, "")
+        .trim();
+      return { n: n || String(t), reps: parseReps(t) || "1", kg: parseKg(t), raw: t };
+    });
   const eq = [];
   EQ_RULES.forEach(([re, e]) => { if (re.test(text) && eq.indexOf(e) < 0) eq.push(e); });
   if (!eq.length) eq.push("bw");

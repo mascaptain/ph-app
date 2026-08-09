@@ -176,7 +176,11 @@ const FAM_GROUPS = {
 };
 const groupsOf = (ex) => {
   const out = [];
-  String((ex && ex.m) || "").split("·").map((x) => x.trim()).filter(Boolean).forEach((lab) => {
+  // Seul le muscle PRINCIPAL compte — le premier libelle de la fiche. Une
+  // traction porte "Dos · Biceps" : compter le second faisait apparaitre
+  // "Dos & Biceps" dans un titre alors qu'aucun exercice de biceps n'etait
+  // programme.
+  String((ex && ex.m) || "").split("·").map((x) => x.trim()).filter(Boolean).slice(0, 1).forEach((lab) => {
     for (const [re, g] of GROUP_MAP) { if (re.test(lab)) { if (out.indexOf(g) < 0) out.push(g); return; } }
   });
   // "Full body", "Cardio", "Puissance" ne sont pas des groupes musculaires :
@@ -706,7 +710,7 @@ export const buildProgram = (goal, ctx = {}) => {
       day.short = "HERO";
       day.muscle = pick.tribute;
       day.exercises = hx;
-      day.recommendedMode = pick.kind === "amrap" ? "amrap" : "fortime";
+      day.recommendedMode = "amrap";
       day.metcon = true;
       day.totalMin = pick.cap;
       day.timeCapMin = pick.cap;
@@ -716,7 +720,9 @@ export const buildProgram = (goal, ctx = {}) => {
         label: pick.kind === "amrap" ? `AMRAP ${pick.cap}`
           : pick.kind === "rounds" ? `${pick.rounds} tours`
           : `Pour le temps · ${pick.cap} min`,
-        kind: pick.kind === "amrap" ? "amrap" : "fortime",
+        // "fortime" n'existe pas dans le lecteur de bloc : un plafond de temps
+        // se joue comme un AMRAP, avec une horloge.
+        kind: "amrap",
         durationMin: pick.cap, rounds: pick.rounds || 0, exercises: hx,
       }];
       hx.forEach((e) => { e.blockIdx = 0; });

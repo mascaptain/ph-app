@@ -209,7 +209,7 @@ const resolveDay = ({rawDay, doneDay, beforeStart, past, queueSession}) => {
 const SESSION_TEMPLATES = [...PROGRAM.filter(d=>d.salle).map(d=>({label:d.label,salle:d.salle,muscle:d.muscle,exercises:d.exercises,abs:d.abs,ids:d.ids})), REST_TPL];
 
 // Rotation hebdo - mesocycle hybride (Volume -> Intensite -> Puissance -> Deload)
-const VERSION="2.4.1";
+const VERSION="2.5.0";
 const weekNumber = () => { const dt=new Date(); const d=new Date(Date.UTC(dt.getFullYear(),dt.getMonth(),dt.getDate())); const dn=(d.getUTCDay()+6)%7; d.setUTCDate(d.getUTCDate()-dn+3); const ft=new Date(Date.UTC(d.getUTCFullYear(),0,4)); const fn=(ft.getUTCDay()+6)%7; ft.setUTCDate(ft.getUTCDate()-fn+3); return 1+Math.round((d-ft)/604800000); };
 const PHASES12=[{n:"Accumulation",f:"Volume, base"},{n:"Accumulation",f:"Volume"},{n:"Accumulation",f:"Volume +"},{n:"Intensification",f:"Charges +"},{n:"Intensification",f:"Charges ++"},{n:"Intensification",f:"Lourd"},{n:"Réalisation",f:"Explosif"},{n:"Réalisation",f:"Puissance"},{n:"Réalisation",f:"Pic de force"},{n:"Deload",f:"Récupération"},{n:"Test / PR",f:"Validation"},{n:"Test / PR",f:"Nouveaux maxs"}];
 const programWeek=()=>((weekNumber()-1)%12)+1;
@@ -399,7 +399,7 @@ const baseGoal=(g)=>g==="force"?"force":g==="endurance"?"endurance":g==="seche"?
 // s'enchainer : buildCircuits appariait donc les exercices par leur RANG dans la liste,
 // ce qui pouvait mettre un soulevé de terre roumain en superset avec un squat gobelet.
 // On derive ici, une fois pour toutes, trois proprietes par exercice.
-import { noAccent, patternOf, tierOf, progOf, metaOf } from "./classify.js";
+import { noAccent, patternOf, tierOf, progOf, metaOf, unitOf, unitLabel } from "./classify.js";
 import { v4Session, patternStrength } from "./engine.js";
 import { HEROES, heroFits, heroById, heroSummary } from "./heroes.js";
 
@@ -1629,6 +1629,52 @@ function ExerciseRowCollapsed({ex,dayIdx,sDate,log,idx,onOpen,onReplace,doneSess
 }
 
 
+// Chronometre de TRAVAIL — a ne pas confondre avec celui de recuperation. Il
+// vise une heure de fin absolue, comme le repos : un compteur decremente par un
+// intervalle se fige des que l'ecran passe en arriere-plan.
+function WorkTimer({seconds}) {
+  const [left,setLeft]=useState(seconds);
+  const [on,setOn]=useState(false);
+  const endRef=useRef(0), tick=useRef(null);
+  useEffect(()=>()=>clearInterval(tick.current),[]);
+  useEffect(()=>{ if(!on) return;
+    endRef.current=Date.now()+left*1000;
+    tick.current=setInterval(()=>{
+      const l=Math.max(0,Math.round((endRef.current-Date.now())/1000));
+      setLeft(l);
+      if(l<=0){ clearInterval(tick.current); setOn(false); signalRestOver(); }
+    },250);
+    const resync=()=>{ if(!document.hidden&&endRef.current)
+      setLeft(Math.max(0,Math.round((endRef.current-Date.now())/1000))); };
+    document.addEventListener("visibilitychange",resync);
+    return ()=>{ clearInterval(tick.current);
+      document.removeEventListener("visibilitychange",resync); };
+  },[on]);
+  const done=left<=0;
+  return (
+    <div style={{background:C.card,border:`1px solid ${done?C.done:C.s2}`,
+      boxShadow:`0 3px 16px ${C.ink5}`,borderRadius:22,padding:"16px",
+      display:"flex",alignItems:"center",justifyContent:"space-between",gap:12}}>
+      <div>
+        <div style={{fontSize:11.5,color:C.ink4}}>{done?"Terminé":on?"En cours":"Chronomètre"}</div>
+        <div style={{fontSize:34,fontWeight:500,color:C.ink,letterSpacing:"-.03em",lineHeight:1,
+          marginTop:4,fontVariantNumeric:"tabular-nums"}}>{fmtMSS(left)}</div>
+      </div>
+      <div style={{display:"flex",gap:8,flexShrink:0}}>
+        <Tap label={on?"Pause":"Démarrer"} onTap={()=>{ if(done){setLeft(seconds);setOn(true);return;} setOn(o=>!o); }}
+          style={{padding:"12px 20px",borderRadius:14,background:on?C.s2:C.accent,
+            display:"flex",alignItems:"center",justifyContent:"center"}}>
+          <span style={{fontSize:14,fontWeight:600,color:on?C.ink3:C.onAccent}}>
+            {done?"Refaire":on?"Pause":"Démarrer"}</span></Tap>
+        {!on&&!done&&<Tap label="Remettre à zéro" onTap={()=>setLeft(seconds)}
+          style={{padding:"12px 14px",borderRadius:14,border:`1px solid ${C.div}`,
+            display:"flex",alignItems:"center",justifyContent:"center"}}>
+          <Icon name="swap" size={15} stroke={C.ink3}/></Tap>}
+      </div>
+    </div>
+  );
+}
+
 function ExerciseFocus({ex,dayIdx,sDate,log,onLogSet,onClose,onNext,hasNext,idx,count,heading,onDetail,lastPerf,originY}) {
   // Fermeture animee : le composant reste monte le temps de l'animation de sortie, sinon
   // l'ecran disparaissait d'un coup et on perdait le lien avec la liste d'ou l'on venait.
@@ -1661,7 +1707,12 @@ function ExerciseFocus({ex,dayIdx,sDate,log,onLogSet,onClose,onNext,hasNext,idx,
       window.removeEventListener("focus",resync); };
   },[]);
   const [loads,setLoads]=useState(()=>plan.map((s,i)=>{const e=log[`${lk}_s${i}`];return (e&&e.weight!=null)?Number(e.weight):Number(s.w)||0;}));
-  const [reps,setReps]=useState(()=>plan.map((s,i)=>{const e=log[`${lk}_s${i}`];return (e&&e.reps!=null)?Number(e.reps):(repsNum(s.reps)||repsNum(ex.reps)||8);}));
+  // Unite de l'exercice : repetitions, secondes, metres ou calories. Elle change
+  // ce qu'on affiche ET ce qu'on propose de regler.
+  const U=unitOf(ex.reps!=null?ex.reps:(plan[0]&&plan[0].reps));
+  const isTime=U.unit==="sec";
+  const isMeasure=U.unit==="m"||U.unit==="cal";
+  const [reps,setReps]=useState(()=>plan.map((s,i)=>{const e=log[`${lk}_s${i}`];return (e&&e.reps!=null)?Number(e.reps):(unitOf(s.reps).value||U.value||8);}));
   // RPE ressenti pour CET exercice, demande une fois toutes les series faites.
   const [rpeVal,setRpeVal]=useState(()=>{const e=log[`${lk}_rpe`];return e&&e.rpe?Number(e.rpe):null;});
   const [resting,setResting]=useState(0);
@@ -1841,7 +1892,8 @@ function ExerciseFocus({ex,dayIdx,sDate,log,onLogSet,onClose,onNext,hasNext,idx,
               <div style={{fontSize:64,fontWeight:600,color:C.ink,letterSpacing:"-.04em",lineHeight:1,fontVariantNumeric:"tabular-nums"}}>
                 {curLoad>0?curLoad:"PdC"}{curLoad>0&&<span style={{fontSize:21,fontWeight:600,color:C.ink3}}> kg</span>}
               </div>
-              <div style={{fontSize:15,color:C.ink3,marginTop:8,fontVariantNumeric:"tabular-nums"}}>× {curReps} reps{ex.rpe?` · RPE ${ex.rpe}`:""}</div>
+              <div style={{fontSize:15,color:C.ink3,marginTop:8,fontVariantNumeric:"tabular-nums"}}>
+                {isTime||isMeasure?unitLabel(U.unit,curReps):`× ${curReps} reps`}{ex.rpe?` · RPE ${ex.rpe}`:""}</div>
             </div>
             {/* Ajustement avant validation : la charge reelle differe souvent du prescrit,
                 et c'est la seule facon d'enregistrer une vraie montee en charge. */}
@@ -1850,10 +1902,14 @@ function ExerciseFocus({ex,dayIdx,sDate,log,onLogSet,onClose,onNext,hasNext,idx,
               <span style={{fontSize:11.5,fontWeight:600,color:C.ink4,textTransform:"uppercase",letterSpacing:".1em",width:56,textAlign:"center"}}>Charge</span>
               {step("+",()=>setLoads(l=>l.map((v,i)=>i!==cur?v:(fixedLoad?kbStep(v,1):Math.round((v+2.5)*10)/10))))}
               <div style={{width:14}}/>
-              {step("−",()=>setReps(r=>r.map((v,i)=>i===cur?Math.max(1,v-1):v)))}
-              <span style={{fontSize:11.5,fontWeight:600,color:C.ink4,textTransform:"uppercase",letterSpacing:".1em",width:56,textAlign:"center"}}>Reps</span>
-              {step("+",()=>setReps(r=>r.map((v,i)=>i===cur?v+1:v)))}
+              {step("−",()=>setReps(r=>r.map((v,i)=>i===cur?Math.max(1,v-(isTime?5:1)):v)))}
+              <span style={{fontSize:11.5,fontWeight:600,color:C.ink4,textTransform:"uppercase",letterSpacing:".1em",width:56,textAlign:"center"}}>
+                {isTime?"Durée":isMeasure?(U.unit==="m"?"Mètres":"Cal"):"Reps"}</span>
+              {step("+",()=>setReps(r=>r.map((v,i)=>i===cur?v+(isTime?5:1):v)))}
             </div>
+            {/* Un exercice au temps se chronometre. Sans cela, une planche de
+                soixante secondes s'annoncait "60 reps" et rien ne la mesurait. */}
+            {isTime&&<WorkTimer key={`wt${cur}`} seconds={curReps}/>}
             {prevIdx<0&&lastPerf&&lastPerf.kg>0&&(
               <div style={{background:C.card,border:`1px solid ${C.s2}`,boxShadow:`0 3px 16px ${C.ink5}`,
                 borderRadius:22,padding:"16px",display:"flex",justifyContent:"space-between",alignItems:"center",gap:10}}>
@@ -4932,7 +4988,7 @@ const NAV=[{id:"home",l:"Accueil"},{id:"seance",l:"Séances"},{id:"stats",l:"Sta
                           preparation mangeaient un tiers de l'ecran. */}
                       <div style={{fontSize:14,fontWeight:500,color:wDone?C.ink4:C.ink,marginTop:6,
                         lineHeight:1.5,textDecoration:wDone?"line-through":"none"}}>
-                        {warmExos.map(e=>`${e.n} ${e.reps}`).join(" · ")}
+                        {warmExos.map(e=>e.n).join(" · ")}
                       </div>
                     </Tap>);
                   })()}
@@ -5103,8 +5159,9 @@ const NAV=[{id:"home",l:"Accueil"},{id:"seance",l:"Séances"},{id:"stats",l:"Sta
                       ))}
                       <div style={{display:"flex",gap:8,marginTop:11}}>
                         <Tap label="Démarrer le Hero" onTap={()=>setSupBlock({label:heroExtra.hero.name,
-                          kind:heroExtra.block.kind==="amrap"?"amrap":"circuit",exercises:heroExtra.exercises,
-                          restSec:0,tours:heroExtra.block.rounds||1,no:1,total:1})}
+                          kind:"amrap",exercises:heroExtra.exercises,defMin:heroExtra.hero.cap,
+                          durationMin:heroExtra.hero.cap,restSec:0,
+                          tours:heroExtra.block.rounds||1,no:1,total:1})}
                           style={{flex:1,padding:"12px",borderRadius:14,background:C.accent,
                             display:"flex",alignItems:"center",justifyContent:"center"}}>
                           <span style={{fontSize:14,fontWeight:600,color:C.onAccent}}>Démarrer</span></Tap>
@@ -5178,7 +5235,7 @@ const NAV=[{id:"home",l:"Accueil"},{id:"seance",l:"Séances"},{id:"stats",l:"Sta
             }
           }}/>);
       })()}
-      {supBlock&&<CircuitPlayer mode={supBlock.kind} exos={supBlock.exercises} blocks={[supBlock]} blockNo={supBlock.no} blockCount={supBlock.total} onClose={()=>setSupBlock(null)} onAllDone={()=>{}} log={log} onLogSet={saveLog} sDate={sDate}/>}
+      {supBlock&&<CircuitPlayer mode={supBlock.kind} exos={supBlock.exercises} blocks={[supBlock]} defMin={supBlock.defMin} blockNo={supBlock.no} blockCount={supBlock.total} onClose={()=>setSupBlock(null)} onAllDone={()=>{}} log={log} onLogSet={saveLog} sDate={sDate}/>}
       {showCircuit&&sessionMode!=="classique"&&exos.length>0&&(
         <CircuitPlayer mode={sessionMode} exos={exos} blocks={day.blocks} defMin={sessionMode==="amrap"?(day.timeCapMin||12):(day.emomMinutes||Math.max(exos.length,8))} onClose={()=>setShowCircuit(false)} onAllDone={()=>{clock.stop();setShowFeedback(true);}} startBlock={circuitStart} log={log} onLogSet={saveLog} sDate={sDate}/>
       )}

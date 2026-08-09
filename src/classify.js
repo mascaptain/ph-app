@@ -66,4 +66,26 @@ const metaOf=(ex)=>{
   return meta;
 };
 
-export { noAccent, PATTERN_RULES, patternOf, COMPOUND, tierOf, progOf, metaOf };
+// Unite d'une prescription. "60s" est une duree, "1000 m" une distance,
+// "17 cal" un effort mesure par la machine, "12" des repetitions. Les confondre
+// donne "1000 reps" pour un kilometre de course.
+const unitOf = (reps) => {
+  const t = String(reps == null ? "" : reps).trim();
+  let m = t.match(/^(\d+(?:\.\d+)?)\s*s(ec)?\b/i);
+  if (m) return { unit: "sec", value: Number(m[1]) };
+  m = t.match(/^(\d+(?:\.\d+)?)\s*min\b/i);
+  if (m) return { unit: "sec", value: Number(m[1]) * 60 };
+  m = t.match(/^(\d+(?:\.\d+)?)\s*(m|km)\b/i);
+  if (m) return { unit: "m", value: Number(m[1]) * (m[2].toLowerCase() === "km" ? 1000 : 1) };
+  m = t.match(/^(\d+(?:\.\d+)?)\s*cal\b/i);
+  if (m) return { unit: "cal", value: Number(m[1]) };
+  m = t.match(/^(\d+)/);
+  return { unit: "reps", value: m ? Number(m[1]) : 0 };
+};
+// On ne convertit en minutes qu'a partir de deux minutes pleines : "60s" reste
+// "60 s", qui est ce qui est prescrit.
+const unitLabel = (u, v) => u === "sec" ? (v >= 120 && v % 60 === 0 ? `${v / 60} min` : `${v} s`)
+  : u === "m" ? (v >= 1000 ? `${v / 1000} km` : `${v} m`)
+  : u === "cal" ? `${v} cal` : `${v} reps`;
+
+export { unitOf, unitLabel, noAccent, PATTERN_RULES, patternOf, COMPOUND, tierOf, progOf, metaOf };
