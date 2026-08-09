@@ -4980,6 +4980,18 @@ const NAV=[{id:"home",l:"Accueil"},{id:"seance",l:"Séances"},{id:"stats",l:"Sta
                         {autoRotate&&<div style={{fontSize:11.5,color:C.ink4,marginTop:6}}>{ph12.f} · phase {phaseOf(pw).k}</div>}
                       </div>);})()}
                   </div>
+                  {Array.isArray(day.plan)&&day.plan.length>0&&(
+                    <div style={{background:C.s1,border:`1px solid ${C.s2}`,borderRadius:16,padding:"13px 15px",marginBottom:14}}>
+                      <div style={{fontSize:11.5,fontWeight:600,color:C.ink4,textTransform:"uppercase",letterSpacing:".08em",marginBottom:7}}>Plan de séance</div>
+                      {day.plan.map((line,i)=><div key={line} style={{fontSize:13.5,color:C.ink2,padding:i?"7px 0 0":"0",marginTop:i?7:0,borderTop:i?`1px solid ${C.s2}`:"none"}}>{line}</div>)}
+                    </div>
+                  )}
+                  {isPostponedToday&&(
+                    <div style={{background:C.alertSoft,border:`1px solid ${C.alert}`,borderRadius:14,padding:"12px 14px",marginBottom:14}}>
+                      <div style={{fontSize:13.5,fontWeight:600,color:C.ink}}>Séance reportée après indisponibilité</div>
+                      <div style={{fontSize:12,color:C.ink3,marginTop:3}}>{injuryReports.find(r=>r&&r.to===tabDate&&!r.completed_at)?.zones?.join(" · ")||"Zone non précisée"}</div>
+                    </div>
+                  )}
                   {!sessionActive?(
                     <div style={{display:"flex",gap:10,marginBottom:24}}>
                       {isDayDone?(
