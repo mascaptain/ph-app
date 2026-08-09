@@ -209,7 +209,7 @@ const resolveDay = ({rawDay, doneDay, beforeStart, past, queueSession}) => {
 const SESSION_TEMPLATES = [...PROGRAM.filter(d=>d.salle).map(d=>({label:d.label,salle:d.salle,muscle:d.muscle,exercises:d.exercises,abs:d.abs,ids:d.ids})), REST_TPL];
 
 // Rotation hebdo - mesocycle hybride (Volume -> Intensite -> Puissance -> Deload)
-const VERSION="2.4.0";
+const VERSION="2.4.1";
 const weekNumber = () => { const dt=new Date(); const d=new Date(Date.UTC(dt.getFullYear(),dt.getMonth(),dt.getDate())); const dn=(d.getUTCDay()+6)%7; d.setUTCDate(d.getUTCDate()-dn+3); const ft=new Date(Date.UTC(d.getUTCFullYear(),0,4)); const fn=(ft.getUTCDay()+6)%7; ft.setUTCDate(ft.getUTCDate()-fn+3); return 1+Math.round((d-ft)/604800000); };
 const PHASES12=[{n:"Accumulation",f:"Volume, base"},{n:"Accumulation",f:"Volume"},{n:"Accumulation",f:"Volume +"},{n:"Intensification",f:"Charges +"},{n:"Intensification",f:"Charges ++"},{n:"Intensification",f:"Lourd"},{n:"Réalisation",f:"Explosif"},{n:"Réalisation",f:"Puissance"},{n:"Réalisation",f:"Pic de force"},{n:"Deload",f:"Récupération"},{n:"Test / PR",f:"Validation"},{n:"Test / PR",f:"Nouveaux maxs"}];
 const programWeek=()=>((weekNumber()-1)%12)+1;
@@ -3972,7 +3972,7 @@ export default function SomaApp() {
   const[excluded,setExcluded]=useState([]);
   const[aiOverride,setAiOverride]=useState(null);
   const[showHeroes,setShowHeroes]=useState(false);
-  const[heroDay,setHeroDay]=useState(null);
+  const[heroExtra,setHeroExtra]=useState(null);
   const[schedule,setSchedule]=useState(PROGRAM);
   const[streak,setStreak]=useState(0);
   const[sessionActive,setSessionActive]=useState(false);
@@ -4632,16 +4632,15 @@ export default function SomaApp() {
   const pickHero=(h)=>{
     const hx=h.moves.map((m,k)=>({id:`hero_${h.id}_${k}`,n:m.n,m:"Full body",eq:"bw",
       kg:m.kg||0,sets:1,reps:String(m.reps),rest:0,role:"density",v4:true,blockIdx:0}));
-    setHeroDay({label:`Hero · ${h.name}`,salle:"full",muscle:h.tribute,exercises:hx,abs:[],
-      v4:true,hero:h.id,heroName:h.name,metcon:true,
-      recommendedMode:h.kind==="amrap"?"amrap":"fortime",
-      totalMin:h.cap,timeCapMin:h.cap,emomMinutes:h.cap,estMin:h.cap+8,
-      blocks:[{label:h.kind==="amrap"?`AMRAP ${h.cap}`:h.kind==="rounds"?`${h.rounds} tours`
+    // Un bloc de PLUS, pas une journee de remplacement : la seance du jour reste
+    // affichee et le Hero vient s'ajouter en dessous.
+    setHeroExtra({hero:h,exercises:hx,
+      block:{label:h.kind==="amrap"?`AMRAP ${h.cap}`:h.kind==="rounds"?`${h.rounds} tours`
         :`Pour le temps · ${h.cap} min`,kind:h.kind==="amrap"?"amrap":"fortime",
-        durationMin:h.cap,rounds:h.rounds||0,exercises:hx}]});
+        durationMin:h.cap,rounds:h.rounds||0,exercises:hx}});
     setShowHeroes(false);
   };
-  const day0=heroDay||resolveDay({
+  const day0=resolveDay({
     rawDay:rawDay0, doneDay, beforeStart:isBeforeProgramStart, past:isPastUndone,
     queueSession:()=>sessionFromQueue(queueOffset(dayIdx),rawDay0),
   });
@@ -4709,7 +4708,7 @@ export default function SomaApp() {
     blockOf[idx]={no:bi+1,total:mainBlocks.length,pos:k+1,len:blk.items.length};}));
   const warmExos=day?.salle?warmupExos(day.salle):[];
   const absAsExos=absExos.map(absExo);
-  const skillPairs=(day?.salle&&(profile?.active_skills||[]).length&&sessionIndex%2===0)
+  const skillPairs=(day?.salle&&(profile?.active_skills||[]).length)
     ?(profile.active_skills.map(as=>{const sk=SKILLS_CATALOG.find(x=>x.id===as.skillId);
         if(!sk) return null; const st=sk.steps[as.stepIndex]||sk.steps[sk.steps.length-1];
         return {as,sk,step:st,ex:skillExo(sk,st)};}).filter(Boolean)):[];
@@ -4814,7 +4813,7 @@ const NAV=[{id:"home",l:"Accueil"},{id:"seance",l:"Séances"},{id:"stats",l:"Sta
             const wasPlanned=!!(d&&d.salle);
             const isMissed=isPastDay&&wasPlanned&&!dayFullyDone&&(!profile?.program_start||dStrDate>=profile.program_start);
             return(
-              <Tap key={i} label={d.day} onTap={()=>{setDayIdx(i);setAiOverride(null);setDayCons(null);setModeOverride(null);setCircuitStart(0);setSupBlock(null);}} style={{flex:"1 1 0",minWidth:42,padding:"9px 4px",textAlign:"center",borderRadius:22,background:isSel?C.accentSoft:"transparent",border:`1px solid ${isSel?C.accent:"transparent"}`,transition:`all 220ms ${EO}`}}>
+              <Tap key={i} label={d.day} onTap={()=>{setDayIdx(i);setAiOverride(null);setDayCons(null);setModeOverride(null);setCircuitStart(0);setSupBlock(null);setHeroExtra(null);}} style={{flex:"1 1 0",minWidth:42,padding:"9px 4px",textAlign:"center",borderRadius:22,background:isSel?C.accentSoft:"transparent",border:`1px solid ${isSel?C.accent:"transparent"}`,transition:`all 220ms ${EO}`}}>
                 <div style={{fontSize:10,fontWeight:600,color:isSel?C.ink2:C.ink4,letterSpacing:".06em",marginBottom:4}}>{d.day}</div>
                 {isToday&&!dayFullyDone&&<div style={{width:6,height:6,borderRadius:"50%",background:C.accent,margin:"0 auto 4px"}}/>}
 
@@ -4919,21 +4918,23 @@ const NAV=[{id:"home",l:"Accueil"},{id:"seance",l:"Séances"},{id:"stats",l:"Sta
                   {warmExos.length>0&&(()=>{
                     const wDone=auxDone(warmExos);
                     return(
-                    <div style={{background:C.bg,border:`1px solid ${wDone?C.done:C.s2}`,borderRadius:22,
-                      padding:"16px",marginBottom:10,boxShadow:`0 3px 16px ${C.ink5}`,
-                      transition:`border-color 260ms ${EO}`}}>
-                      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,marginBottom:4}}>
+                    <Tap label="Échauffement" onTap={()=>{if(!locked)setFocusIdx(WARM_OFF);}}
+                      style={{display:"block",background:C.card,border:`1px solid ${wDone?C.done:C.s2}`,
+                        borderRadius:24,padding:"14px 16px",marginBottom:11,
+                        boxShadow:`0 3px 16px ${C.ink5}`,transition:`border-color 260ms ${EO}`}}>
+                      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10}}>
                         <span style={{fontSize:11.5,fontWeight:500,color:C.ink4}}>Bloc échauffement</span>
-                        <span style={{fontSize:10,fontWeight:600,padding:"4px 11px",borderRadius:999,whiteSpace:"nowrap",
+                        <span style={{fontSize:10.5,fontWeight:600,padding:"4px 11px",borderRadius:999,whiteSpace:"nowrap",
                           background:wDone?C.doneSoft:C.s2,color:wDone?C.done:C.ink3}}>
                           {wDone?"terminé":`${Math.round(WARMUP_SEC/60)} min`}</span>
                       </div>
-                      {warmExos.map((ex,k)=>(
-                        <ExerciseRowCollapsed key={ex.id} ex={ex} idx={k} first={k===0} barColor={C.s4}
-                          dayIdx={dayIdx} sDate={sDate} log={log} doneSession={doneSession}
-                          onOpen={()=>{if(!locked)setFocusIdx(WARM_OFF+k);}} onOriginY={setFocusOrigin}/>
-                      ))}
-                    </div>);
+                      {/* Une seule ligne : cinq lignes ouvrables pour cinq minutes de
+                          preparation mangeaient un tiers de l'ecran. */}
+                      <div style={{fontSize:14,fontWeight:500,color:wDone?C.ink4:C.ink,marginTop:6,
+                        lineHeight:1.5,textDecoration:wDone?"line-through":"none"}}>
+                        {warmExos.map(e=>`${e.n} ${e.reps}`).join(" · ")}
+                      </div>
+                    </Tap>);
                   })()}
                   {/* L'apprentissage etait un encart a part : titre, objectif en texte et
                       deux boutons de verdict. Il devient un bloc de seance — la ligne s'ouvre
@@ -5078,6 +5079,42 @@ const NAV=[{id:"home",l:"Accueil"},{id:"seance",l:"Séances"},{id:"stats",l:"Sta
                       ))}
                     </div>);
                   })()}
+                  {/* Le Hero ajoute a la main : un bloc de plus, en fin de seance. */}
+                  {heroExtra&&(
+                    <div style={{background:C.card,border:`1px solid ${C.accent}`,borderRadius:24,
+                      padding:"14px 16px",marginBottom:11,boxShadow:`0 3px 16px ${C.ink5}`}}>
+                      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,marginBottom:4}}>
+                        <span style={{fontSize:11.5,fontWeight:500,color:C.ink4}}>
+                          Hero · {heroExtra.hero.name}</span>
+                        <span style={{fontSize:10.5,fontWeight:600,padding:"4px 11px",borderRadius:999,
+                          background:C.accentSoft,color:C.ink3,whiteSpace:"nowrap"}}>{heroExtra.block.label}</span>
+                      </div>
+                      <div style={{fontSize:11.5,color:C.ink4,marginBottom:9,fontStyle:"italic"}}>
+                        {heroExtra.hero.tribute}</div>
+                      {heroExtra.exercises.map((e,k)=>(
+                        <div key={e.id} style={{display:"flex",alignItems:"center",gap:11,padding:"9px 0",
+                          borderTop:k?`1px solid ${C.s2}`:"none"}}>
+                          <span style={{width:4,height:26,borderRadius:2,flexShrink:0,background:C.accent}}/>
+                          <span style={{flex:1,minWidth:0,fontSize:14,fontWeight:500,color:C.ink,
+                            whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{e.n}</span>
+                          <span style={{fontSize:13,color:C.ink3,flexShrink:0,fontVariantNumeric:"tabular-nums"}}>
+                            {e.reps}{e.kg>0?` · ${e.kg} kg`:""}</span>
+                        </div>
+                      ))}
+                      <div style={{display:"flex",gap:8,marginTop:11}}>
+                        <Tap label="Démarrer le Hero" onTap={()=>setSupBlock({label:heroExtra.hero.name,
+                          kind:heroExtra.block.kind==="amrap"?"amrap":"circuit",exercises:heroExtra.exercises,
+                          restSec:0,tours:heroExtra.block.rounds||1,no:1,total:1})}
+                          style={{flex:1,padding:"12px",borderRadius:14,background:C.accent,
+                            display:"flex",alignItems:"center",justifyContent:"center"}}>
+                          <span style={{fontSize:14,fontWeight:600,color:C.onAccent}}>Démarrer</span></Tap>
+                        <Tap label="Retirer le Hero" onTap={()=>setHeroExtra(null)}
+                          style={{padding:"12px 16px",borderRadius:14,border:`1px solid ${C.div}`,
+                            display:"flex",alignItems:"center",justifyContent:"center"}}>
+                          <span style={{fontSize:13,fontWeight:600,color:C.ink3}}>Retirer</span></Tap>
+                      </div>
+                    </div>
+                  )}
                   {!sessionActive&&!locked&&(
                     <Tap onTap={()=>setShowFeedback(true)} style={{marginTop:28,marginBottom:16,padding:"16px",borderRadius:12,background:C.accent,display:"flex",alignItems:"center",justifyContent:"center"}}>
                       <span style={{fontSize:15,fontWeight:600,color:C.onAccent}}>Fin de séance</span>
