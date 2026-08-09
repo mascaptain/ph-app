@@ -5060,7 +5060,7 @@ const NAV=[{id:"home",l:"Accueil"},{id:"seance",l:"Séances"},{id:"stats",l:"Sta
                     <div style={{minWidth:0}}>
                       <div style={{fontSize:14,fontWeight:600,color:C.ink}}>Ajouter un Hero WOD</div>
                       <div style={{fontSize:11.5,color:C.ink4,marginTop:2}}>
-                        250 séances au nom de ceux qui ne sont pas rentrés</div>
+                        250 séances de référence, à faire quand tu veux</div>
                     </div>
                     <span style={{fontSize:13,color:C.ink4,flexShrink:0}}>›</span>
                   </Tap>
