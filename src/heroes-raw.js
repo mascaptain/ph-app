@@ -208,7 +208,7 @@ export const RAW = [
 ["Servais","fortime",60,"2400 m course · 8 tours de 19 tractions, 19 pompes, 19 burpees · 400 m sandbag carry · 1600 m farmer carry"],
 ["Severin","fortime",50,"50 tractions strictes · 100 pompes relâchées · 5 km course"],
 ["Sham","rounds:7",20,"11 soulevés de terre 102kg · 100 m sprint"],
-["Shawn","inter",50,"Intervalles de 5 min de course, 50 squats et 50 pompes entre chaque, 8 km au total"],
+["Shawn","inter",50,"5 min course · 50 squats · 50 pompes · répéter jusqu'à 8 km au total"],
 ["Ship","rounds:9",30,"7 squat cleans 84kg · 8 burpee box jumps"],
 ["Sisson","amrap",20,"1 montée de corde · 5 burpees · 200 m course"],
 ["Small","rounds:3",45,"1000 m rameur · 50 burpees · 50 box jumps · 800 m course"],

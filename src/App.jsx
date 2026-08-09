@@ -209,7 +209,7 @@ const resolveDay = ({rawDay, doneDay, beforeStart, past, queueSession}) => {
 const SESSION_TEMPLATES = [...PROGRAM.filter(d=>d.salle).map(d=>({label:d.label,salle:d.salle,muscle:d.muscle,exercises:d.exercises,abs:d.abs,ids:d.ids})), REST_TPL];
 
 // Rotation hebdo - mesocycle hybride (Volume -> Intensite -> Puissance -> Deload)
-const VERSION="2.5.0";
+const VERSION="2.5.1";
 const weekNumber = () => { const dt=new Date(); const d=new Date(Date.UTC(dt.getFullYear(),dt.getMonth(),dt.getDate())); const dn=(d.getUTCDay()+6)%7; d.setUTCDate(d.getUTCDate()-dn+3); const ft=new Date(Date.UTC(d.getUTCFullYear(),0,4)); const fn=(ft.getUTCDay()+6)%7; ft.setUTCDate(ft.getUTCDate()-fn+3); return 1+Math.round((d-ft)/604800000); };
 const PHASES12=[{n:"Accumulation",f:"Volume, base"},{n:"Accumulation",f:"Volume"},{n:"Accumulation",f:"Volume +"},{n:"Intensification",f:"Charges +"},{n:"Intensification",f:"Charges ++"},{n:"Intensification",f:"Lourd"},{n:"Réalisation",f:"Explosif"},{n:"Réalisation",f:"Puissance"},{n:"Réalisation",f:"Pic de force"},{n:"Deload",f:"Récupération"},{n:"Test / PR",f:"Validation"},{n:"Test / PR",f:"Nouveaux maxs"}];
 const programWeek=()=>((weekNumber()-1)%12)+1;
@@ -4974,7 +4974,12 @@ const NAV=[{id:"home",l:"Accueil"},{id:"seance",l:"Séances"},{id:"stats",l:"Sta
                   {warmExos.length>0&&(()=>{
                     const wDone=auxDone(warmExos);
                     return(
-                    <Tap label="Échauffement" onTap={()=>{if(!locked)setFocusIdx(WARM_OFF);}}
+                    <Tap label="Échauffement" onTap={()=>{if(locked)return;
+                      // Cinq mouvements d'une minute : c'est un EMOM de cinq minutes,
+                      // pas cinq exercices a ouvrir l'un apres l'autre.
+                      setSupBlock({label:"Échauffement",kind:"emom",exercises:warmExos,
+                        defMin:Math.round(WARMUP_SEC/60),durationMin:Math.round(WARMUP_SEC/60),
+                        restSec:0,tours:1,no:1,total:1});}}
                       style={{display:"block",background:C.card,border:`1px solid ${wDone?C.done:C.s2}`,
                         borderRadius:24,padding:"14px 16px",marginBottom:11,
                         boxShadow:`0 3px 16px ${C.ink5}`,transition:`border-color 260ms ${EO}`}}>
