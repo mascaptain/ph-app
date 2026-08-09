@@ -209,7 +209,7 @@ const resolveDay = ({rawDay, doneDay, beforeStart, past, queueSession}) => {
 const SESSION_TEMPLATES = [...PROGRAM.filter(d=>d.salle).map(d=>({label:d.label,salle:d.salle,muscle:d.muscle,exercises:d.exercises,abs:d.abs,ids:d.ids})), REST_TPL];
 
 // Rotation hebdo - mesocycle hybride (Volume -> Intensite -> Puissance -> Deload)
-const VERSION="2.5.1";
+const VERSION="5.1.0";
 const weekNumber = () => { const dt=new Date(); const d=new Date(Date.UTC(dt.getFullYear(),dt.getMonth(),dt.getDate())); const dn=(d.getUTCDay()+6)%7; d.setUTCDate(d.getUTCDate()-dn+3); const ft=new Date(Date.UTC(d.getUTCFullYear(),0,4)); const fn=(ft.getUTCDay()+6)%7; ft.setUTCDate(ft.getUTCDate()-fn+3); return 1+Math.round((d-ft)/604800000); };
 const PHASES12=[{n:"Accumulation",f:"Volume, base"},{n:"Accumulation",f:"Volume"},{n:"Accumulation",f:"Volume +"},{n:"Intensification",f:"Charges +"},{n:"Intensification",f:"Charges ++"},{n:"Intensification",f:"Lourd"},{n:"Réalisation",f:"Explosif"},{n:"Réalisation",f:"Puissance"},{n:"Réalisation",f:"Pic de force"},{n:"Deload",f:"Récupération"},{n:"Test / PR",f:"Validation"},{n:"Test / PR",f:"Nouveaux maxs"}];
 const programWeek=()=>((weekNumber()-1)%12)+1;
@@ -363,7 +363,7 @@ const restFor=(ex,goal,ph)=>{
 
 const personalizeDay=(day,profile,week,perf)=>{
   if(!day||!day.salle) return day;
-  if(day.v4) return day;
+  if(day.v4||day.v5) return day;
   const scale=engineScale(profile);
   const ph=phaseOf(week);
   const intensity=ph.i;
@@ -401,6 +401,7 @@ const baseGoal=(g)=>g==="force"?"force":g==="endurance"?"endurance":g==="seche"?
 // On derive ici, une fois pour toutes, trois proprietes par exercice.
 import { noAccent, patternOf, tierOf, progOf, metaOf, unitOf, unitLabel } from "./classify.js";
 import { v4Session, patternStrength } from "./engine.js";
+import { v5Session } from "./engine-v5.js";
 import { HEROES, heroFits, heroById, heroSummary } from "./heroes.js";
 
 const REGION={push_h:"haut",push_v:"haut",pull_h:"haut",pull_v:"haut",arm_push:"haut",arm_pull:"haut",squat:"bas",hinge:"bas",core:"core",cardio:"cardio"};
@@ -508,7 +509,7 @@ const buildMetcon=(day,mode,profile,week,seed,perf)=>{ if(!day||!day.salle) retu
 const applyMode=(day,mode,profile,week,seed,perf)=>{ if(!day||!day.salle) return day;
   // Le moteur V4 a deja ordonne la seance — lourd, accessoires, bloc chronometre,
   // finisseur. orderDay retriait par etage et defaisait ce travail.
-  if(day&&day.v4) return day; if(mode==="amrap"||mode==="emom") return buildMetcon(day,mode,profile,week,seed,perf); return day.circuit?buildCircuits(orderDay(day),profile):orderDay(day); };
+  if(day&&(day.v4||day.v5)) return day; if(mode==="amrap"||mode==="emom") return buildMetcon(day,mode,profile,week,seed,perf); return day.circuit?buildCircuits(orderDay(day),profile):orderDay(day); };
 const primaryMuscle = (m) => String(m||"").split("·")[0].trim().toLowerCase();
 const altPool = (ex) => DB.filter(e=>e.id!==ex.id && e.eq===ex.eq && primaryMuscle(e.m)===primaryMuscle(ex.m));
 const rotateDay = (day,w) => {
@@ -540,7 +541,7 @@ const adaptGoal = (day, goal) => {
 const adaptEquip = (day, equip) => {
   // Le moteur V4 a deja filtre sur le materiel disponible, et la charge de chaque
   // exercice a ete calculee pour LUI : substituer ici casserait la prescription.
-  if (day && day.v4) return day;
+  if (day && (day.v4||day.v5)) return day;
   if(!day || !day.salle || !equip || !equip.length) return day;
   const exercises=(day.exercises||[]).map(ex=>{
     if(equip.includes(ex.eq)) return ex;
@@ -1313,6 +1314,25 @@ function SessionSettingsSheet({day,curMode,onClose,onApply}) {
       <Tap onTap={apply} style={{marginTop:14,height:52,borderRadius:12,background:C.fill,display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{fontSize:15,fontWeight:600,color:C.onFill}}>Appliquer à cette séance</span></Tap>
     </div>
   </div>);
+}
+function InjuryReportSheet({onClose,onReport}) {
+  const[zones,setZones]=useState([]);
+  const[note,setNote]=useState("");
+  const ZONES=[["épaule","Épaule"],["coude","Coude"],["poignet","Poignet"],["dos","Dos"],["hanche","Hanche"],["genou","Genou"],["cheville","Cheville"]];
+  const toggle=(id)=>setZones(prev=>prev.includes(id)?prev.filter(x=>x!==id):[...prev,id]);
+  return <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.4)",zIndex:Z.fullscreen,display:"flex",alignItems:"flex-end",justifyContent:"center",fontFamily:F}} onClick={onClose}>
+    <div onClick={e=>e.stopPropagation()} style={{width:"100%",maxWidth:600,background:C.bg,borderTopLeftRadius:22,borderTopRightRadius:22,padding:"20px 20px calc(20px + env(safe-area-inset-bottom))"}}>
+      <div style={{fontSize:21,fontWeight:600,color:C.ink}}>Indisponible ou blessé</div>
+      <div style={{fontSize:12.5,color:C.ink4,lineHeight:1.5,marginTop:5}}>La séance n’est pas comptée comme faite. Elle est automatiquement proposée demain, même si demain était un jour de repos.</div>
+      <div style={{fontSize:11.5,fontWeight:600,color:C.ink4,textTransform:"uppercase",letterSpacing:".08em",marginTop:20,marginBottom:9}}>Zone à protéger</div>
+      <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>{ZONES.map(([id,label])=><Tap key={id} onTap={()=>toggle(id)} style={{padding:"10px 13px",borderRadius:12,border:`1px solid ${zones.includes(id)?C.accent:C.div}`,background:zones.includes(id)?C.accentSoft:C.s1}}><span style={{fontSize:14,fontWeight:600,color:C.ink2}}>{label}</span></Tap>)}</div>
+      <textarea value={note} onChange={e=>setNote(e.target.value)} placeholder="Note optionnelle : douleur, repos prescrit…" style={{width:"100%",boxSizing:"border-box",minHeight:76,resize:"vertical",marginTop:16,padding:12,borderRadius:12,border:`1px solid ${C.div}`,background:C.s1,color:C.ink,fontFamily:F,fontSize:14}}/>
+      <div style={{display:"flex",gap:10,marginTop:16}}>
+        <Tap onTap={onClose} style={{flex:1,padding:15,borderRadius:12,background:C.s2,textAlign:"center"}}><span style={{fontSize:14,fontWeight:600,color:C.ink2}}>Annuler</span></Tap>
+        <Tap onTap={()=>onReport({zones,note:note.trim()})} style={{flex:2,padding:15,borderRadius:12,background:C.fill,textAlign:"center"}}><span style={{fontSize:14,fontWeight:600,color:C.onFill}}>Reporter à demain</span></Tap>
+      </div>
+    </div>
+  </div>;
 }
 function CircuitPlayer({mode,exos,onClose,defMin,blocks,onAllDone,startBlock,log,onLogSet,sDate,blockNo,blockCount}) {
   const BLK=(blocks&&blocks.length)?blocks:[{label:mode==="amrap"?"AMRAP":"EMOM",kind:mode,exercises:exos||[],durationMin:defMin||(mode==="amrap"?12:Math.max((exos||[]).length,8))}];
@@ -3903,9 +3923,9 @@ const buildGoalSession=(goal,sessionIndex,equipment)=>{
 };
 const HYBRID_MODES={"Push Force":{mode:"classique",circuit:true},"KB Power":{mode:"emom",circuit:false},"Pull & Legs":{mode:"classique",circuit:true},"KB Endurance":{mode:"amrap",circuit:false},"Full Power":{mode:"classique",circuit:true}};
 const pendingSessionFor=(goal,sessionIndex,equipment,ctx)=>{
-  // Moteur V4. L'ancien chemin subsiste en repli : si le V4 ne rend rien pour une
-  // raison quelconque, on ne se retrouve pas sans seance.
-  const v4=v4Session(goal||"hybride",sessionIndex,{
+  // V5 pour l'objectif hybride : semaine prescrite (force haut/bas, Hero,
+  // kettlebell en blocs et base aerobie), puis seulement choix des exercices.
+  const v5=goal==="hybride"?v5Session(sessionIndex,{
     equipment:(equipment&&equipment.length)?equipment:["bar","db","kb","mc","cd","bw"],
     frequency:(ctx&&ctx.frequency)||5,
     rms:(ctx&&ctx.rms)||{},
@@ -3914,6 +3934,13 @@ const pendingSessionFor=(goal,sessionIndex,equipment,ctx)=>{
     scale:(ctx&&ctx.scale)||1,
     excluded:(ctx&&ctx.excluded)||[],
     total:(ctx&&ctx.total)||60,
+  }):null;
+  if(v5) return v5;
+  // Les autres objectifs gardent temporairement le moteur V4.
+  const v4=v4Session(goal||"hybride",sessionIndex,{
+    equipment:(equipment&&equipment.length)?equipment:["bar","db","kb","mc","cd","bw"],
+    frequency:(ctx&&ctx.frequency)||5,rms:(ctx&&ctx.rms)||{},perf:(ctx&&ctx.perf)||{},
+    strength:(ctx&&ctx.strength)||{},scale:(ctx&&ctx.scale)||1,excluded:(ctx&&ctx.excluded)||[],total:(ctx&&ctx.total)||60,
   });
   if(v4) return v4;
   const generated=buildGoalSession(goal,sessionIndex,equipment);
@@ -3924,25 +3951,20 @@ const pendingSessionFor=(goal,sessionIndex,equipment,ctx)=>{
   return {...tpl,recommendedMode:hm.mode,circuit:hm.circuit};
 };
 
+// Le calendrier ne contient plus de seances. Il indique seulement les CRENEAUX
+// d'entrainement. La file V5 est l'unique autorite qui nomme et construit la
+// seance : conserver des exercices dans profiles.schedule faisait ressurgir une
+// ancienne semaine V4 apres une mise a jour du moteur.
+const v5Slot = (day) => ({day,label:"Créneau hybride",salle:"full",muscle:"Séance générée par le moteur V5",exercises:[],abs:[],v5:true,slot:true});
 const generateSchedule = (freq) => {
   const trainIdx = FREQ_DAYS[freq] || FREQ_DAYS[4];
-  const train = PROGRAM.filter(d=>d.salle);
-  let ti=0;
-  return DAY_LBL.map((lbl,i)=>{
-    if(trainIdx.includes(i)){ const tpl=train[ti%train.length]; ti++; return {label:tpl.label,salle:tpl.salle,muscle:tpl.muscle,exercises:tpl.exercises,abs:tpl.abs,ids:tpl.ids,day:lbl}; }
-    return {...REST_TPL,day:lbl};
-  });
+  return DAY_LBL.map((lbl,i)=>trainIdx.includes(i)?v5Slot(lbl):({...REST_TPL,day:lbl}));
 };
-
 const generateScheduleDays = (dayIdxArr) => {
   const trainIdx = (dayIdxArr&&dayIdxArr.length)?[...dayIdxArr].sort((a,b)=>a-b):FREQ_DAYS[4];
-  const train = PROGRAM.filter(d=>d.salle);
-  let ti=0;
-  return DAY_LBL.map((lbl,i)=>{
-    if(trainIdx.includes(i)){ const tpl=train[ti%train.length]; ti++; return {label:tpl.label,salle:tpl.salle,muscle:tpl.muscle,exercises:tpl.exercises,abs:tpl.abs,ids:tpl.ids,day:lbl}; }
-    return {...REST_TPL,day:lbl};
-  });
+  return DAY_LBL.map((lbl,i)=>trainIdx.includes(i)?v5Slot(lbl):({...REST_TPL,day:lbl}));
 };
+const isLegacySchedule = (items=[]) => items.some((d)=>d&&d.salle&&(!d.v5||!d.slot));
 
 function OnboardingScreen({user,onDone,onClose}) {
   const [step,setStep]=useState(0);
@@ -4029,6 +4051,11 @@ export default function SomaApp() {
   const[aiOverride,setAiOverride]=useState(null);
   const[showHeroes,setShowHeroes]=useState(false);
   const[heroExtra,setHeroExtra]=useState(null);
+  // Un Hero planifie peut etre remplace sans devenir un bloc supplementaire.
+  // La cle est l'index de file : ce choix ne fuit jamais vers le Hero de la
+  // semaine suivante.
+  const[heroOverride,setHeroOverride]=useState(null);
+  const[heroPickerMode,setHeroPickerMode]=useState("append");
   const[schedule,setSchedule]=useState(PROGRAM);
   const[streak,setStreak]=useState(0);
   const[sessionActive,setSessionActive]=useState(false);
@@ -4047,6 +4074,7 @@ export default function SomaApp() {
   const[supBlock,setSupBlock]=useState(null);
   const[circuitStart,setCircuitStart]=useState(0);
   const[showSettings,setShowSettings]=useState(false);
+  const[showInjuryReport,setShowInjuryReport]=useState(false);
   const[dayCons,setDayCons]=useState(null);
   const[modeOverride,setModeOverride]=useState(null);
   const[showRestFull,setShowRestFull]=useState(false);
@@ -4171,10 +4199,30 @@ export default function SomaApp() {
         supabase.from("active_session").select("*").eq("user_id",uid).maybeSingle(),
         supabase.from("weigh_ins").select("date,weight_kg").eq("user_id",uid).order("date",{ascending:true}),
       ]);
-      setProfile(prof||null);
       setWeighIns(wis||[]);
-      if(prof){
-        if(Array.isArray(prof.schedule)&&prof.schedule.length) setSchedule(prof.schedule);
+      let resolvedProfile=prof||null;
+      if(resolvedProfile){
+        // Migration V5 : un ancien profil stockait les exercices V4 dans le
+        // calendrier. On conserve les jours choisis mais on remplace ce contenu
+        // par des creneaux neutres, afin que la prochaine seance vienne toujours
+        // de la file V5 et jamais d'un objet obsolète en base.
+        if(Array.isArray(resolvedProfile.schedule)&&resolvedProfile.schedule.length){
+          const legacySchedule=isLegacySchedule(resolvedProfile.schedule);
+          const nextSchedule=legacySchedule
+            ?generateScheduleDays(resolvedProfile.schedule.map((d,i)=>d&&d.salle?i:null).filter(Number.isInteger))
+            :resolvedProfile.schedule;
+          if(nextSchedule!==resolvedProfile.schedule){
+            // Les seances deja enregistrees restent dans l'historique, mais ne
+            // constituent pas les premieres seances du nouveau programme : elles
+            // etaient produites par V4. Reprendre leur compteur placerait V5 au
+            // milieu d'une semaine sans que ses cinq premieres seances existent.
+            const programReset=legacySchedule?{program_start:todayKey(),session_index:0}:{};
+            resolvedProfile={...resolvedProfile,schedule:nextSchedule,...programReset};
+            await supabase.from("profiles").update({schedule:nextSchedule,...programReset,updated_at:new Date().toISOString()}).eq("id",uid);
+          }
+          setSchedule(nextSchedule);
+        }
+        const prof=resolvedProfile;
         if(Array.isArray(prof.excluded)) setExcluded(prof.excluded);
         if(Array.isArray(prof.favorites)) setFavorites(prof.favorites);
         if(Array.isArray(prof.supersets)) setSupersets(prof.supersets);
@@ -4182,6 +4230,7 @@ export default function SomaApp() {
         if(prof.accent) setAccent(prof.accent);
         if(typeof prof.auto_rotate==="boolean") setAutoRotate(prof.auto_rotate);
       }
+      setProfile(resolvedProfile);
       // Seance en cours : le log des series cochees et le chrono reprennent ou qu'on soit,
       // mais uniquement si elle concerne aujourd'hui (sinon c'est un reste a jeter).
       if(act&&act.date===todayKey()){
@@ -4360,7 +4409,7 @@ export default function SomaApp() {
     else if(updates.frequency){ const days=FREQ_DAYS[updates.frequency]||FREQ_DAYS[4]; const sched=generateScheduleDays(days); setSchedule(sched); persist(user?.id,{schedule:sched}); next.total_sessions=PROGRAM_SESSIONS; }
     setProfile(next);
     persist(user?.id,{profile:next});
-    return (async()=>{ try{ const{error}=await supabase.from("profiles").upsert({id:user?.id,goal:next.goal,level:next.level,equipment:next.equipment,frequency:next.frequency,weight_kg:next.weight_kg,sex:next.sex,height_cm:next.height_cm,age:next.age,program_start:next.program_start,rms:next.rms,avatar:next.avatar,photos:next.photos,session_index:next.session_index,total_sessions:next.total_sessions,pinned_pbs:next.pinned_pbs,active_skills:next.active_skills,updated_at:new Date().toISOString()},{onConflict:"id"}); if(error)console.error("profile save",error.message); return {error}; }catch(e){ console.error("profile save",e); return {error:e}; } })();
+    return (async()=>{ try{ const{error}=await supabase.from("profiles").upsert({id:user?.id,goal:next.goal,level:next.level,equipment:next.equipment,frequency:next.frequency,weight_kg:next.weight_kg,sex:next.sex,height_cm:next.height_cm,age:next.age,program_start:next.program_start,rms:next.rms,avatar:next.avatar,photos:next.photos,session_index:next.session_index,total_sessions:next.total_sessions,pinned_pbs:next.pinned_pbs,active_skills:next.active_skills,injury_reports:next.injury_reports||[],updated_at:new Date().toISOString()},{onConflict:"id"}); if(error)console.error("profile save",error.message); return {error}; }catch(e){ console.error("profile save",e); return {error:e}; } })();
   },[persist,user,profile]);
   useEffect(()=>{updateConfigRef.current=updateConfig;},[updateConfig]);
   useEffect(()=>{profileRef.current=profile;},[profile]);
@@ -4503,6 +4552,11 @@ export default function SomaApp() {
       computeStreak(next);
       return next;
     });
+    // Le report est consommé uniquement quand la séance a réellement été terminée.
+    // Annuler ou ouvrir l'écran le lendemain ne doit jamais le faire disparaître.
+    if(injuryReports.some(r=>r&&r.to===sDate&&!r.completed_at)){
+      updateConfig({injury_reports:injuryReports.filter(r=>!(r&&r.to===sDate&&!r.completed_at))});
+    }
     // 3. Fermer popup immédiatement
     // reset (et pas stop) : "stop" laissait le compteur a sa valeur, si bien que la seance
     // suivante demarrait avec le temps de la precedente et que le bouton Demarrer,
@@ -4601,6 +4655,12 @@ export default function SomaApp() {
   const isViewingToday=dayIdx===todayIdx();
   const rawDay0=viewSchedule[dayIdx]||PROGRAM[dayIdx];
   const tabDate=programDate(dayIdx);
+  const injuryReports=Array.isArray(profile?.injury_reports)?profile.injury_reports:[];
+  // Un report force la presentation de la prochaine seance sur le lendemain,
+  // y compris si le calendrier declarait un repos. La file conserve ainsi l'ordre
+  // du programme sans empiler deux seances le meme jour.
+  const isPostponedToday=injuryReports.some(r=>r&&r.to===tabDate&&!r.completed_at);
+  const rawDayForQueue=isPostponedToday?{...(rawDay0||{}),salle:"full"}:rawDay0;
   const isDayDone=sessions.some(s=>s.date===tabDate);
   const doneSession=isDayDone?sessions.find(s=>s.date===tabDate):null;
   const isBeforeProgramStart=!!(profile?.program_start&&tabDate<profile.program_start);
@@ -4688,18 +4748,31 @@ export default function SomaApp() {
   const pickHero=(h)=>{
     const hx=h.moves.map((m,k)=>({id:`hero_${h.id}_${k}`,n:m.n,m:"Full body",eq:"bw",
       kg:m.kg||0,sets:1,reps:String(m.reps),rest:0,role:"density",v4:true,blockIdx:0}));
+    const block={label:h.kind==="amrap"?`AMRAP ${h.cap}`:h.kind==="rounds"?`${h.rounds} tours`
+      :`Pour le temps · ${h.cap} min`,kind:h.kind==="amrap"?"amrap":"fortime",
+      durationMin:h.cap,rounds:h.rounds||0,exercises:hx};
+    if(heroPickerMode==="replace"){
+      // Remplacement du Hero programme : ni second WOD, ni ajout cache sous
+      // la seance. Ce choix est lie a cette position precise dans la file.
+      setHeroOverride({key:sessionIndex+queueOffset(dayIdx),day:{
+        label:`Hero · ${h.name}`,short:"HERO",muscle:h.tribute,salle:"full",exercises:hx,abs:[],
+        recommendedMode:h.kind==="amrap"?"amrap":"classique",metcon:true,totalMin:h.cap,timeCapMin:h.cap,
+        emomMinutes:h.cap,badge:block.label,hero:h.id,heroName:h.name,archetype:"hero",v5:true,blocks:[block],
+      }});
+      setHeroExtra(null);setHeroPickerMode("append");setShowHeroes(false);return;
+    }
     // Un bloc de PLUS, pas une journee de remplacement : la seance du jour reste
     // affichee et le Hero vient s'ajouter en dessous.
-    setHeroExtra({hero:h,exercises:hx,
-      block:{label:h.kind==="amrap"?`AMRAP ${h.cap}`:h.kind==="rounds"?`${h.rounds} tours`
-        :`Pour le temps · ${h.cap} min`,kind:h.kind==="amrap"?"amrap":"fortime",
-        durationMin:h.cap,rounds:h.rounds||0,exercises:hx}});
+    setHeroExtra({hero:h,exercises:hx,block});
     setShowHeroes(false);
   };
-  const day0=resolveDay({
-    rawDay:rawDay0, doneDay, beforeStart:isBeforeProgramStart, past:isPastUndone,
-    queueSession:()=>sessionFromQueue(queueOffset(dayIdx),rawDay0),
+  const queuedDay=resolveDay({
+    rawDay:rawDayForQueue, doneDay, beforeStart:isBeforeProgramStart, past:isPastUndone&&!isPostponedToday,
+    queueSession:()=>sessionFromQueue(queueOffset(dayIdx),rawDayForQueue),
   });
+  const currentQueueKey=sessionIndex+queueOffset(dayIdx);
+  const day0=heroOverride&&heroOverride.key===currentQueueKey&&queuedDay?.archetype==="hero"
+    ?{...queuedDay,...heroOverride.day,day:queuedDay.day}:queuedDay;
   // Seance "aujourd'hui" pour la page Accueil : DOIT utiliser la meme logique de sequence que day0 ci-dessus,
   // independamment de l'onglet jour actuellement affiche (dayIdx peut pointer vers un autre jour que aujourd'hui).
   const todaySessionForHome=(()=>{
@@ -4709,8 +4782,10 @@ export default function SomaApp() {
     const trBeforeStart=!!(profile?.program_start&&trDate<profile.program_start);
     if(trBeforeStart) return {...REST_TPL,day:trRaw?.day};
     // Meme regle que l'onglet Seance : un jour desactive n'a pas de seance.
-    if(!trRaw?.salle||programDone||!pendingTemplate) return trRaw;
-    let c={...pendingTemplate,day:trRaw.day};
+    const postponed=injuryReports.some(r=>r&&r.to===trDate&&!r.completed_at);
+    const trDay=postponed?{...trRaw,salle:"full"}:trRaw;
+    if(!trDay?.salle||programDone||!pendingTemplate) return trDay;
+    let c={...pendingTemplate,day:trDay.day};
     if(profile?.equipment?.length) c=adaptEquip(c,profile.equipment);
     c=personalizeDay(c,profile,sessionWeek,perf);
     return c;
@@ -4721,6 +4796,14 @@ export default function SomaApp() {
   // exercices tires au sort) par-dessus une seance deja faite.
   const day=isDayDone?day0:applyMode(day0,effMode,profile,sessionWeek,dayIdx,perf);
   const sDate=tabDate;
+  const reportInjury=(detail)=>{
+    const date=new Date(`${sDate}T00:00:00`); date.setDate(date.getDate()+1);
+    const to=localDateKey(date);
+    const report={from:sDate,to,zones:detail.zones||[],note:detail.note||"",created_at:new Date().toISOString()};
+    updateConfig({injury_reports:[...injuryReports.filter(r=>r&&r.from!==sDate),report]});
+    setShowInjuryReport(false);
+    notify(`Séance reportée au ${fmtDateShort(to)}.`);
+  };
   const isPastMissed=!!(day?.salle&&!isDayDone&&new Date(sDate+"T00:00:00")<new Date(new Date().toDateString()));
   const locked=isDayDone||isPastMissed;
   const isRest=!day?.salle;
@@ -4931,6 +5014,26 @@ const NAV=[{id:"home",l:"Accueil"},{id:"seance",l:"Séances"},{id:"stats",l:"Sta
                         {autoRotate&&<div style={{fontSize:11.5,color:C.ink4,marginTop:6}}>{ph12.f} · phase {phaseOf(pw).k}</div>}
                       </div>);})()}
                   </div>
+                  {Array.isArray(day.plan)&&day.plan.length>0&&(
+                    <div style={{background:C.s1,border:`1px solid ${C.s2}`,borderRadius:16,padding:"13px 15px",marginBottom:14}}>
+                      <div style={{fontSize:11.5,fontWeight:600,color:C.ink4,textTransform:"uppercase",letterSpacing:".08em",marginBottom:7}}>Plan de séance</div>
+                      {day.plan.map((line,i)=><div key={line} style={{fontSize:13.5,color:C.ink2,padding:i?"7px 0 0":"0",marginTop:i?7:0,borderTop:i?`1px solid ${C.s2}`:"none"}}>{line}</div>)}
+                    </div>
+                  )}
+                  {day.archetype==="hero"&&!locked&&(
+                    <Tap label="Changer le Hero" onTap={()=>{setHeroPickerMode("replace");setShowHeroes(true);}}
+                      style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"12px 14px",marginBottom:14,
+                        borderRadius:14,background:C.s1,border:`1px solid ${C.s2}`}}>
+                      <span style={{fontSize:13.5,fontWeight:600,color:C.ink}}>Changer le Hero</span>
+                      <span style={{fontSize:12,color:C.ink4}}>Choisir un autre benchmark ›</span>
+                    </Tap>
+                  )}
+                  {isPostponedToday&&(
+                    <div style={{background:C.alertSoft,border:`1px solid ${C.alert}`,borderRadius:14,padding:"12px 14px",marginBottom:14}}>
+                      <div style={{fontSize:13.5,fontWeight:600,color:C.ink}}>Séance reportée après indisponibilité</div>
+                      <div style={{fontSize:12,color:C.ink3,marginTop:3}}>{injuryReports.find(r=>r&&r.to===tabDate&&!r.completed_at)?.zones?.join(" · ")||"Zone non précisée"}</div>
+                    </div>
+                  )}
                   {!sessionActive?(
                     <div style={{display:"flex",gap:10,marginBottom:24}}>
                       {isDayDone?(
@@ -4967,6 +5070,11 @@ const NAV=[{id:"home",l:"Accueil"},{id:"seance",l:"Séances"},{id:"stats",l:"Sta
                         <span style={{fontSize:12.5,fontWeight:600,color:C.ink3}}>Réglages</span>
                       </Tap>
                     </div>
+                  )}
+                  {!isDayDone&&!sessionActive&&isViewingToday&&(
+                    <Tap onTap={()=>setShowInjuryReport(true)} style={{width:"100%",marginTop:-14,marginBottom:18,padding:"12px 14px",borderRadius:12,background:C.s1,border:`1px solid ${C.div}`,display:"flex",justifyContent:"center"}}>
+                      <span style={{fontSize:12.5,fontWeight:600,color:C.ink3}}>Indisponible ou blessé · reporter la séance</span>
+                    </Tap>
                   )}
                   {/* L'echauffement etait une liste de texte : meme carte, mais on ne
                       pouvait rien y faire. Il devient un bloc d'exercices comme les autres,
@@ -5274,8 +5382,9 @@ const NAV=[{id:"home",l:"Accueil"},{id:"seance",l:"Séances"},{id:"stats",l:"Sta
       {detailEx&&<ExerciseSheet ex={detailEx} fav={favorites.includes(detailEx.id)} onToggleFav={toggleFav} onClose={()=>setDetailEx(null)} sessions={sessions}/>}
       {showFeedback&&<FeedbackSheet onClose={()=>setShowFeedback(false)} onSave={handleFeedbackSave}/>}
       {showSettings&&<SessionSettingsSheet day={day} curMode={effMode} onClose={()=>setShowSettings(false)} onApply={({mode,cons})=>{setModeOverride(mode);setDayCons(cons);setShowSettings(false);}}/>}
+      {showInjuryReport&&<InjuryReportSheet onClose={()=>setShowInjuryReport(false)} onReport={reportInjury}/>}
       {showHeroes&&<HeroSheet equipment={profile?.equipment} sessions={sessions}
-        onPick={pickHero} onClose={()=>setShowHeroes(false)}/>}
+        onPick={pickHero} onClose={()=>{setHeroPickerMode("append");setShowHeroes(false);}}/>}
       {showAI&&<AISheet onClose={()=>setShowAI(false)} onResult={o=>{setAiOverride(o);setShowAI(false);}} excluded={excluded}/>}
       {/* Alertes : jusqu'ici tout echec partait dans la console et l'utilisateur n'en savait rien. */}
       {toasts.length>0&&(
@@ -5294,7 +5403,7 @@ const NAV=[{id:"home",l:"Accueil"},{id:"seance",l:"Séances"},{id:"stats",l:"Sta
       {showReport&&<SessionReport session={showReport} sessions={sessions} trainingDaysPerWeek={trainingDaysPerWeek} photoUrl={photoUrls[showReport.date]} onClose={()=>setShowReport(null)} onDelete={deleteSession}/>}
       {showSched&&<ScheduleEditor schedule={schedule}
         onChange={ns=>{setSchedule(ns);persist(user?.id,{schedule:ns});}}
-        onReset={()=>{setSchedule(PROGRAM);persist(user?.id,{schedule:PROGRAM});}}
+        onReset={()=>{const ns=generateSchedule(profile?.frequency||4);setSchedule(ns);persist(user?.id,{schedule:ns});}}
         autoRotate={autoRotate}
         onToggleAuto={()=>setAutoRotate(v=>{const nv=!v;persist(user?.id,{autoRotate:nv});return nv;})}
         onClose={()=>setShowSched(false)}/>}
