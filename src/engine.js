@@ -69,7 +69,9 @@ export const GOAL_MODELS = {
     intensity: { pillar: [0.80, 0.90], accessory: [0.62, 0.74], density: [0.40, 0.55] },
     reps: { pillar: [3, 5], accessory: [8, 12], density: [12, 20] },
     rest: { pillar: 150, accessory: 75, density: 45 },
-    pillars: ["bb04", "bb03", "bb01", "bw01", "kb01"],
+    pillars: ["bb04", "bb03", "bb01", "bw01"],
+    kbPillars: ["kb01", "kb03", "kb08"],   // swing, clean, gobelet squat
+    kbDays: 2,                              // seances entierement kettlebell par semaine
     eqBias: ["bar", "kb", "bw", "db", "mc", "cd"],
     minutes: 52,
   },
@@ -103,6 +105,8 @@ export const GOAL_MODELS = {
     reps: { pillar: [8, 10], accessory: [12, 15], density: [15, 20] },
     rest: { pillar: 90, accessory: 45, density: 30 },
     pillars: ["kb08", "bw01", "kb01", "bw04"],
+    kbPillars: ["kb01", "kb08"],
+    kbDays: 2,
     eqBias: ["kb", "bw", "cd", "db", "mc", "bar"],
     minutes: 45,
   },
@@ -114,6 +118,8 @@ export const GOAL_MODELS = {
     reps: { pillar: [10, 12], accessory: [15, 20], density: [15, 25] },
     rest: { pillar: 90, accessory: 40, density: 25 },
     pillars: ["kb01", "bw05", "bw01", "kb08"],
+    kbPillars: ["kb01", "kb05", "kb08"],
+    kbDays: 2,
     eqBias: ["kb", "bw", "cd", "db", "mc", "bar"],
     minutes: 42,
   },
@@ -125,6 +131,8 @@ export const GOAL_MODELS = {
     reps: { pillar: [2, 4], accessory: [6, 10], density: [10, 15] },
     rest: { pillar: 180, accessory: 100, density: 60 },
     pillars: ["kb03", "kb06", "bb03", "bb02", "bw01"],
+    kbPillars: ["kb03", "kb06"],
+    kbDays: 1,
     eqBias: ["kb", "bar", "bw", "db", "mc", "cd"],
     minutes: 50,
   },
@@ -368,12 +376,15 @@ const pickExercise = (want, role, model, idx, state, ctx) => {
 
     // Une serie droite chargee ne se fait pas a la cloche : la kettlebell est
     // reservee aux blocs chronometres et aux ports.
-    if (ex.eq === "kb" && !KB_ROLES[role]) continue;
+    if (ex.eq === "kb" && !KB_ROLES[role] && !state.kbDay) continue;
 
     if (role === "accessory" && PREHAB_RE.test(ex.n)) continue;
     // Sur un creneau d'accessoire, une charge vaut mieux qu'un mouvement a vide :
     // c'est la que se construit le volume qui compte.
     let sc = (ROLE_TIERS[role] || {})[meta.tier] || 0;
+    // Jour kettlebell : la cloche passe devant, tout le reste recule.
+    if (state.kbDay && ex.eq === "kb") sc += 90;
+    if (state.kbDay && ex.eq !== "kb" && role !== "core") sc -= 70;
     if (role === "accessory" && Number(ex.kg) > 0) sc += 18;
 
     // Une seance ne doit pas devenir un cours de kettlebell parce que le catalogue
@@ -481,23 +492,34 @@ export const buildProgram = (goal, ctx = {}) => {
   const state = { lastSeen: {}, usedToday: new Set(), spent: {}, heavyFam: null,
                   eqToday: {}, newToday: 0, pillarTurn: 0,
                   archCount: {}, lastArch: null, heroNext: false, heroesThisWeek: 0,
-                  heroSeen: {}, heroIdx: 0 };
+                  heroSeen: {}, heroIdx: 0, kbDay: false, kbThisWeek: 0 };
   // Un a deux Hero par semaine : deux des que la frequence le permet.
   const heroQuota = ctx.heroQuota != null ? ctx.heroQuota : (freq >= 5 ? 1 : 1);
   const out = [];
 
   for (let i = 0; i < total; i++) {
+    // Nouvelle semaine : tous les compteurs hebdomadaires repartent de zero,
+    // AVANT le choix du type de seance qui les consulte.
+    if (i % freq === 0) { state.spent = {}; state.heroesThisWeek = 0; state.kbThisWeek = 0;
+      state.weekNo = Math.floor(i / freq); }
     const ph = phaseOf(i);
     // ── Le type de la seance se decide, il n'est plus lu dans un tableau. ──
     const arch = chooseArch(model, i, state, ph);
+    // Jour kettlebell : deux par semaine, sur un conditionnement ou une force.
+    // On ne le pose ni sur une decharge ni sur un Hero, qui ont leur propre
+    // contenu.
+    state.kbDay = (model.kbDays > 0) && (state.kbThisWeek < model.kbDays)
+      && (arch === "metcon" || arch === "force" || arch === "mixte") && !ph.deload;
+    // Dernier jour de la semaine sans aucune seance kettlebell : on la place ici.
+    // Sinon une semaine ou les Hero ont pris tous les conditionnements n'en a
+    // aucune, et la cloche disparait sept jours durant.
+    if (!ph.deload && (model.kbDays > 0) && (state.kbThisWeek || 0) === 0
+        && (i % freq === freq - 1) && arch !== "decharge") state.kbDay = true;
     const tpl = TEMPLATES[arch] || TEMPLATES.force;
     state.usedToday = new Set();
     state.eqToday = {};
     state.newToday = 0;
 
-    // Nouvelle semaine : le budget se remet a zero.
-    if (i % freq === 0) { state.spent = {}; state.heroesThisWeek = 0;
-      state.weekNo = Math.floor(i / freq); }
 
     // Famille lourde du jour : rotation reguliere sur les quatre grandes familles
     // plutot que "toujours celle qui a le plus de retard". Prendre systematiquement
@@ -536,7 +558,9 @@ export const buildProgram = (goal, ctx = {}) => {
         // Rotation entre les piliers de la famille. Les piliers a la cloche sont
         // ecartes des seances classiques : le swing progresse dans les blocs de
         // densite, ou il a sa place.
-        const ps = pillarsOf(model, want, ctx).filter((e) => e.eq !== "kb");
+        const ps = state.kbDay
+          ? (model.kbPillars || []).map((id) => DB.find((e) => e.id === id)).filter(Boolean)
+          : pillarsOf(model, want, ctx).filter((e) => e.eq !== "kb");
         if (ps.length) ex = ps[Math.floor(i / BIG.length) % ps.length];
       }
       if (!ex) ex = pickExercise(want, role, model, i, state, ctx);
@@ -607,6 +631,7 @@ export const buildProgram = (goal, ctx = {}) => {
     state.heroNext = (arch !== "metcon") && (state.heroesThisWeek < heroQuota + 1)
       && ((i + 1) % freq !== 0);
 
+    if (state.kbDay) state.kbThisWeek = (state.kbThisWeek || 0) + 1;
     state.archCount[arch] = (state.archCount[arch] || 0) + 1;
     state.lastArch = arch;
     if (["hinge", "squat", "push", "pull"].indexOf(mainFam) >= 0 && arch !== "metcon") {
@@ -635,7 +660,7 @@ export const buildProgram = (goal, ctx = {}) => {
 
     const fams = [...new Set(exercises.map((e) => familyOf(e)))];
     const day = {
-      label: sessionTitle(arch, zoneOf(exercises)),
+      label: sessionTitle(arch, state.kbDay ? "Kettlebell" : zoneOf(exercises)),
       salle: "full",
       muscle: fams.map((f) => FAM_FR[f] || f).join(" · "),
       // Le gainage n'est pas un exercice parmi les autres : il ferme la seance,
@@ -650,7 +675,7 @@ export const buildProgram = (goal, ctx = {}) => {
       phase: ph.name,
       block: blockOf(i) + 1,
       estMin: estimateMinutes(exercises),
-      short: shortTitle(arch, zoneOf(exercises)),
+      short: shortTitle(arch, state.kbDay ? "Kettlebell" : zoneOf(exercises)),
       budget,
     };
 
@@ -660,12 +685,14 @@ export const buildProgram = (goal, ctx = {}) => {
     //    permet. Il garde ses charges et ses repetitions : c'est le principe.
     const heroPool = HEROES.filter((h) => heroFits(h, ctx.equipment)
       && !(ctx.excluded || []).includes("hero:" + h.id)
+      && h.cap <= 60
       && (!h.long || i % 12 >= 8));
     const quotaNow = heroQuota + ((freq >= 5 && (state.weekNo || 0) % 2 === 0) ? 1 : 0);
     if (arch === "metcon" && state.heroesThisWeek < quotaNow && heroPool.length) {
       const fresh = heroPool.filter((h) => state.heroSeen[h.id] == null);
       const pick = (fresh.length ? fresh : heroPool)[
         (fresh.length ? state.heroIdx : state.heroIdx + 3) % (fresh.length || heroPool.length)];
+      state.kbDay = false;
       state.heroSeen[pick.id] = i;
       state.heroIdx++;
       state.heroesThisWeek++;
@@ -708,7 +735,7 @@ export const buildProgram = (goal, ctx = {}) => {
       const dur = Math.max(8, Math.min(16,
         kind === "emom" ? blockEx.length * rounds : 12));
       day.recommendedMode = kind;
-      day.label = sessionTitle(arch, zoneOf(blockEx));
+      day.label = sessionTitle(arch, state.kbDay ? "Kettlebell" : zoneOf(blockEx));
       day.metcon = true;
       day.blocks = [{
         label: (kind === "emom" ? "EMOM " : "AMRAP ") + dur,
