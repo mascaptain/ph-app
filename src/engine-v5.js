@@ -105,9 +105,17 @@ const kbDay = (variant, ctx) => {
 const heroDay = (ctx, week) => {
   const equipment = ctx.equipment || [], zones = ctx.injuryZones || [];
   // Un Hero automatique est un benchmark court et faisable, jamais un WOD long
-  // ou incompatible avec une douleur déclarée.
-  const pool = HEROES.filter((h) => heroFits(h, equipment) && h.cap >= 12 && h.cap <= 35
-    && h.kind === "amrap" && h.moves.every((move) => isSafe({ n: move.n }, zones)));
+  // ou incompatible avec une douleur déclarée. Le catalogue brut est trop large
+  // pour une programmation automatique : certains Hero répètent un mouvement ou
+  // demandent une charge/installation que leur fiche résume mal. La sélection
+  // automatique se limite donc aux benchmarks hybrides lisibles et réalisables;
+  // le catalogue complet reste disponible au choix manuel.
+  const HYBRID_HERO_IDS = new Set(["danny", "havana", "jack", "jennifer", "laura", "mcghee", "rah oi", "rahoi", "rankel", "ricky", "tk", "viola"]);
+  const pool = HEROES.filter((h) => HYBRID_HERO_IDS.has(String(h.id).toLowerCase())
+    && heroFits(h, equipment) && h.cap >= 12 && h.cap <= 35 && h.kind === "amrap"
+    && h.moves.length >= 3 && h.moves.length <= 4
+    && new Set(h.moves.map((move) => String(move.n).toLowerCase())).size === h.moves.length
+    && h.moves.every((move) => isSafe({ n: move.n }, zones)));
   const hero = pool.length ? pool[week % pool.length] : null;
   if (!hero) return kbDay("capacity", ctx);
   const exercises = hero.moves.map((m, i) => ({ id: `hero_${hero.id}_${i}`, n: m.n, m: "Full body", eq: "bw", kg: m.kg || 0,

@@ -3951,25 +3951,20 @@ const pendingSessionFor=(goal,sessionIndex,equipment,ctx)=>{
   return {...tpl,recommendedMode:hm.mode,circuit:hm.circuit};
 };
 
+// Le calendrier ne contient plus de seances. Il indique seulement les CRENEAUX
+// d'entrainement. La file V5 est l'unique autorite qui nomme et construit la
+// seance : conserver des exercices dans profiles.schedule faisait ressurgir une
+// ancienne semaine V4 apres une mise a jour du moteur.
+const v5Slot = (day) => ({day,label:"Créneau hybride",salle:"full",muscle:"Séance générée par le moteur V5",exercises:[],abs:[],v5:true,slot:true});
 const generateSchedule = (freq) => {
   const trainIdx = FREQ_DAYS[freq] || FREQ_DAYS[4];
-  const train = PROGRAM.filter(d=>d.salle);
-  let ti=0;
-  return DAY_LBL.map((lbl,i)=>{
-    if(trainIdx.includes(i)){ const tpl=train[ti%train.length]; ti++; return {label:tpl.label,salle:tpl.salle,muscle:tpl.muscle,exercises:tpl.exercises,abs:tpl.abs,ids:tpl.ids,day:lbl}; }
-    return {...REST_TPL,day:lbl};
-  });
+  return DAY_LBL.map((lbl,i)=>trainIdx.includes(i)?v5Slot(lbl):({...REST_TPL,day:lbl}));
 };
-
 const generateScheduleDays = (dayIdxArr) => {
   const trainIdx = (dayIdxArr&&dayIdxArr.length)?[...dayIdxArr].sort((a,b)=>a-b):FREQ_DAYS[4];
-  const train = PROGRAM.filter(d=>d.salle);
-  let ti=0;
-  return DAY_LBL.map((lbl,i)=>{
-    if(trainIdx.includes(i)){ const tpl=train[ti%train.length]; ti++; return {label:tpl.label,salle:tpl.salle,muscle:tpl.muscle,exercises:tpl.exercises,abs:tpl.abs,ids:tpl.ids,day:lbl}; }
-    return {...REST_TPL,day:lbl};
-  });
+  return DAY_LBL.map((lbl,i)=>trainIdx.includes(i)?v5Slot(lbl):({...REST_TPL,day:lbl}));
 };
+const isLegacySchedule = (items=[]) => items.some((d)=>d&&d.salle&&(!d.v5||!d.slot));
 
 function OnboardingScreen({user,onDone,onClose}) {
   const [step,setStep]=useState(0);
@@ -4199,10 +4194,24 @@ export default function SomaApp() {
         supabase.from("active_session").select("*").eq("user_id",uid).maybeSingle(),
         supabase.from("weigh_ins").select("date,weight_kg").eq("user_id",uid).order("date",{ascending:true}),
       ]);
-      setProfile(prof||null);
       setWeighIns(wis||[]);
-      if(prof){
-        if(Array.isArray(prof.schedule)&&prof.schedule.length) setSchedule(prof.schedule);
+      let resolvedProfile=prof||null;
+      if(resolvedProfile){
+        // Migration V5 : un ancien profil stockait les exercices V4 dans le
+        // calendrier. On conserve les jours choisis mais on remplace ce contenu
+        // par des creneaux neutres, afin que la prochaine seance vienne toujours
+        // de la file V5 et jamais d'un objet obsolète en base.
+        if(Array.isArray(resolvedProfile.schedule)&&resolvedProfile.schedule.length){
+          const nextSchedule=isLegacySchedule(resolvedProfile.schedule)
+            ?generateScheduleDays(resolvedProfile.schedule.map((d,i)=>d&&d.salle?i:null).filter(Number.isInteger))
+            :resolvedProfile.schedule;
+          if(nextSchedule!==resolvedProfile.schedule){
+            resolvedProfile={...resolvedProfile,schedule:nextSchedule};
+            await supabase.from("profiles").update({schedule:nextSchedule,updated_at:new Date().toISOString()}).eq("id",uid);
+          }
+          setSchedule(nextSchedule);
+        }
+        const prof=resolvedProfile;
         if(Array.isArray(prof.excluded)) setExcluded(prof.excluded);
         if(Array.isArray(prof.favorites)) setFavorites(prof.favorites);
         if(Array.isArray(prof.supersets)) setSupersets(prof.supersets);
@@ -4210,6 +4219,7 @@ export default function SomaApp() {
         if(prof.accent) setAccent(prof.accent);
         if(typeof prof.auto_rotate==="boolean") setAutoRotate(prof.auto_rotate);
       }
+      setProfile(resolvedProfile);
       // Seance en cours : le log des series cochees et le chrono reprennent ou qu'on soit,
       // mais uniquement si elle concerne aujourd'hui (sinon c'est un reste a jeter).
       if(act&&act.date===todayKey()){
@@ -5361,7 +5371,7 @@ const NAV=[{id:"home",l:"Accueil"},{id:"seance",l:"Séances"},{id:"stats",l:"Sta
       {showReport&&<SessionReport session={showReport} sessions={sessions} trainingDaysPerWeek={trainingDaysPerWeek} photoUrl={photoUrls[showReport.date]} onClose={()=>setShowReport(null)} onDelete={deleteSession}/>}
       {showSched&&<ScheduleEditor schedule={schedule}
         onChange={ns=>{setSchedule(ns);persist(user?.id,{schedule:ns});}}
-        onReset={()=>{setSchedule(PROGRAM);persist(user?.id,{schedule:PROGRAM});}}
+        onReset={()=>{const ns=generateSchedule(profile?.frequency||4);setSchedule(ns);persist(user?.id,{schedule:ns});}}
         autoRotate={autoRotate}
         onToggleAuto={()=>setAutoRotate(v=>{const nv=!v;persist(user?.id,{autoRotate:nv});return nv;})}
         onClose={()=>setShowSched(false)}/>}
