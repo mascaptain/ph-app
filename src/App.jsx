@@ -4202,12 +4202,18 @@ export default function SomaApp() {
         // par des creneaux neutres, afin que la prochaine seance vienne toujours
         // de la file V5 et jamais d'un objet obsolète en base.
         if(Array.isArray(resolvedProfile.schedule)&&resolvedProfile.schedule.length){
-          const nextSchedule=isLegacySchedule(resolvedProfile.schedule)
+          const legacySchedule=isLegacySchedule(resolvedProfile.schedule);
+          const nextSchedule=legacySchedule
             ?generateScheduleDays(resolvedProfile.schedule.map((d,i)=>d&&d.salle?i:null).filter(Number.isInteger))
             :resolvedProfile.schedule;
           if(nextSchedule!==resolvedProfile.schedule){
-            resolvedProfile={...resolvedProfile,schedule:nextSchedule};
-            await supabase.from("profiles").update({schedule:nextSchedule,updated_at:new Date().toISOString()}).eq("id",uid);
+            // Les seances deja enregistrees restent dans l'historique, mais ne
+            // constituent pas les premieres seances du nouveau programme : elles
+            // etaient produites par V4. Reprendre leur compteur placerait V5 au
+            // milieu d'une semaine sans que ses cinq premieres seances existent.
+            const programReset=legacySchedule?{program_start:todayKey(),session_index:0}:{};
+            resolvedProfile={...resolvedProfile,schedule:nextSchedule,...programReset};
+            await supabase.from("profiles").update({schedule:nextSchedule,...programReset,updated_at:new Date().toISOString()}).eq("id",uid);
           }
           setSchedule(nextSchedule);
         }
