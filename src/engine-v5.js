@@ -40,6 +40,28 @@ const prescribed = (ex, sets, reps, role, ctx, intensity = 1) => {
   return { ...ex, kg, sets, reps: String(reps), rest: role === "pillar" ? 180 : 75, role, v5: true };
 };
 
+// Le temps est un contrat du moteur, pas une promesse dans l'interface. Chaque
+// seance hybride inclut les 5 min d'echauffement rendues par l'app et un bloc
+// gainage court. Le contenu principal doit completer le budget de 45 min.
+const WARMUP_MIN = 5;
+const CORE_MIN = 6;
+const MIN_SESSION_MIN = 45;
+const coreFinish = (week = 0) => week % 2
+  ? [{ id: "bw10", n: "Relevé de jambes suspendu", vol: "3×10" }, { id: "ab02", n: "Russian Twist", vol: "3×16" }]
+  : [{ id: "ab03", n: "Hollow Body Hold", vol: "3×30s" }, { id: "bw09", n: "L-Sit", vol: "3×20s" }];
+const timed = (ex, minutes, label, ctx) => ex ? {
+  ...prescribed(ex, 1, `${minutes} min`, "aerobic", ctx, .5), n: label, rest: 0,
+} : null;
+const complete = (day, workMin, week = 0) => {
+  const totalMin = workMin + WARMUP_MIN + CORE_MIN;
+  // A future edit cannot silently produce a session shorter than the contract.
+  if (totalMin < MIN_SESSION_MIN) throw new Error(`V5 invariant: duration too short (${totalMin} min)`);
+  return {
+    ...day, abs: coreFinish(week), warmupMin: WARMUP_MIN, coreMin: CORE_MIN,
+    workMin, totalMin, minSessionMin: MIN_SESSION_MIN,
+  };
+};
+
 const strengthDay = (kind, ctx, week) => {
   const equipment = ctx.equipment || [], zones = ctx.injuryZones || [], excluded = ctx.excluded || [];
   const upper = kind === "upper";
@@ -67,10 +89,10 @@ const strengthDay = (kind, ctx, week) => {
     const legs = firstAvailable(["mc07", "mc08", "db11", "mc04"], equipment, zones, excluded);
     if (legs) work.push(prescribed(legs, 3, 12, "accessory", ctx, .64));
   }
-  return { label: spec.label, short: upper ? "FOR · HAUT" : "FOR · BAS", muscle: spec.muscle,
-    salle: "full", exercises: work.filter(Boolean), abs: [], recommendedMode: "classique",
+  return complete({ label: spec.label, short: upper ? "FOR · HAUT" : "FOR · BAS", muscle: spec.muscle,
+    salle: "full", warmupFocus: upper ? "haut" : "bas", exercises: work.filter(Boolean), abs: [], recommendedMode: "classique",
     badge: upper ? "Développé couché" : "Squat / hinge", archetype: upper ? "strength_upper" : "strength_lower",
-    phase: ctx.deload ? "decharge" : "construction", v5: true };
+    phase: ctx.deload ? "decharge" : "construction", v5: true }, 36, week);
 };
 
 const kbDay = (variant, ctx) => {
@@ -86,20 +108,25 @@ const kbDay = (variant, ctx) => {
   const capacity = variant === "power"
     ? build(["kb01", "kb11", "kb10"], [15, 10, "30m"])
     : build(["kb12", "kb11", "kb10"], [12, 10, "30m"]);
+  const finisher = variant === "power"
+    ? build(["kb12", "kb05", "kb01"], [10, 6, 12])
+    : build(["kb03", "kb08", "kb11"], [6, 10, 10]);
   const blocks = variant === "power"
     ? [{ label: "Bloc 1 · Technique sous cadence", kind: "emom", durationMin: 12, rounds: 4, exercises: technical },
-       { label: "Bloc 2 · Capacité de travail", kind: "amrap", durationMin: 10, rounds: 0, exercises: capacity }]
+       { label: "Bloc 2 · Capacité de travail", kind: "amrap", durationMin: 10, rounds: 0, exercises: capacity },
+       { label: "Bloc 3 · Finisseur", kind: "amrap", durationMin: 10, rounds: 0, exercises: finisher }]
     : [{ label: "Bloc 1 · Volume continu", kind: "amrap", durationMin: 12, rounds: 0, exercises: technical },
-       { label: "Bloc 2 · Puissance répétée", kind: "emom", durationMin: 9, rounds: 3, exercises: capacity }];
+       { label: "Bloc 2 · Puissance répétée", kind: "emom", durationMin: 9, rounds: 3, exercises: capacity },
+       { label: "Bloc 3 · Finisseur", kind: "amrap", durationMin: 11, rounds: 0, exercises: finisher }];
   blocks.forEach((block, blockIdx) => block.exercises.forEach((ex) => { ex.blockIdx = blockIdx; }));
   const moves = blocks.flatMap((block) => block.exercises);
   const durationMin = blocks.reduce((sum, block) => sum + block.durationMin, 0) + 2;
-  return {
+  return complete({
     label: variant === "power" ? "Kettlebell · Puissance-endurance" : "Kettlebell · Capacité de travail",
-    short: "KB", muscle: "Kettlebell uniquement", salle: "full", exercises: moves,
+    short: "KB", muscle: "Kettlebell uniquement", salle: "full", warmupFocus: "bas", exercises: moves,
     abs: [], recommendedMode: "emom", metcon: true, totalMin: durationMin, timeCapMin: durationMin,
-    emomMinutes: 12, badge: "2 blocs", archetype: "kettlebell", v5: true, blocks,
-  };
+    emomMinutes: 12, badge: "3 blocs", archetype: "kettlebell", v5: true, blocks,
+  }, durationMin, 0);
 };
 
 const heroDay = (ctx, week) => {
@@ -118,24 +145,41 @@ const heroDay = (ctx, week) => {
     && h.moves.every((move) => isSafe({ n: move.n }, zones)));
   const hero = pool.length ? pool[week % pool.length] : null;
   if (!hero) return kbDay("capacity", ctx);
-  const exercises = hero.moves.map((m, i) => ({ id: `hero_${hero.id}_${i}`, n: m.n, m: "Full body", eq: "bw", kg: m.kg || 0,
-    sets: 1, reps: String(m.reps), rest: 0, role: "density", v5: true, blockIdx: 0 }));
-  const label = hero.kind === "amrap" ? `AMRAP ${hero.cap}` : `${hero.rounds} tours`;
-  return { label: `Hero · ${hero.name}`, short: "HERO", muscle: hero.tribute, salle: "full", exercises, abs: [],
-    recommendedMode: "amrap", metcon: true, totalMin: hero.cap, timeCapMin: hero.cap, emomMinutes: hero.cap,
-    badge: label, hero: hero.id, heroName: hero.name, archetype: "hero", v5: true,
-    blocks: [{ label, kind: "amrap", durationMin: hero.cap, rounds: hero.rounds || 0, exercises }] };
+  const support = pool.length > 1 ? pool[(week + 1) % pool.length] : hero;
+  const toBlock = (entry, blockIdx) => {
+    const exercises = entry.moves.map((m, i) => ({ id: `hero_${entry.id}_${blockIdx}_${i}`, n: m.n, m: "Full body", eq: "bw", kg: m.kg || 0,
+      sets: 1, reps: String(m.reps), rest: 0, role: "density", v5: true, blockIdx }));
+    return { label: `Hero ${blockIdx + 1} · ${entry.name} · AMRAP ${entry.cap}`, kind: "amrap", durationMin: entry.cap, rounds: 0, exercises };
+  };
+  const picks = [hero, support];
+  // Deux Hero sont la base. Lorsque deux benchmarks courts ne couvrent pas le
+  // budget de travail requis, un troisieme est ajoute automatiquement.
+  for (let offset = 2; picks.reduce((sum, entry) => sum + entry.cap, 0) < 34 && offset < pool.length; offset += 1) {
+    picks.push(pool[(week + offset) % pool.length]);
+  }
+  const blocks = picks.map(toBlock);
+  const exercises = blocks.flatMap((block) => block.exercises);
+  const workMin = blocks.reduce((sum, block) => sum + block.durationMin, 0);
+  return complete({ label: `Hero · ${hero.name}`, short: "HERO", muscle: hero.tribute, salle: "full", warmupFocus: "full", exercises, abs: [],
+    recommendedMode: "amrap", metcon: true, timeCapMin: workMin, emomMinutes: workMin,
+    badge: `${blocks.length} Hero`, hero: hero.id, heroName: hero.name, archetype: "hero", v5: true, blocks }, workMin, week);
 };
 
 const aerobicDay = (ctx) => {
   const equipment = ctx.equipment || [], zones = ctx.injuryZones || [], excluded = ctx.excluded || [];
-  const ex = firstAvailable(["cd02", "cd03", "cd04"], equipment, zones, excluded);
-  // Une sortie facile est un entraînement continu, pas un faux exercice isolé.
-  // Le plan est affiché dans la séance ; l'unique ligne sert de chronomètre et de log.
-  const work = ex ? [{ ...prescribed(ex, 1, "45 min", "aerobic", ctx, .5), n: `${ex.n.split(" ")[0]} · Zone 2 continue`, rest: 0 }] : [];
-  return { label: "Endurance · Base aérobie", short: "END · Z2", muscle: "Effort continu facile · respiration contrôlée",
-    salle: "full", exercises: work, abs: [], recommendedMode: "classique", badge: "Zone 2", archetype: "aerobic", v5: true,
-    plan: ["10 min de mise en route très facile", "30 min continus en Zone 2 · conversation possible", "5 min de retour au calme"] };
+  const choices = ["x110", "x122", "x111"].map((id) => firstAvailable([id], equipment, zones, excluded));
+  const fallback = firstAvailable(["cd02", "cd04"], equipment, zones, excluded);
+  const [rower, run, bike] = choices.map((ex) => ex || fallback);
+  // Trois portions executables et chronometrables : on ne masque plus une
+  // seance de 45 min derriere une unique ligne « rameur ».
+  const work = [
+    timed(rower, 15, "Rameur · Zone 2", ctx),
+    timed(run, 15, "Course facile · Zone 2", ctx),
+    timed(bike, 15, "Assault Bike · Zone 2", ctx),
+  ].filter(Boolean);
+  return complete({ label: "Endurance · Base aérobie", short: "END · Z2", muscle: "Effort continu facile · respiration contrôlée",
+    salle: "full", warmupFocus: "bas", exercises: work, abs: [], recommendedMode: "classique", badge: "Zone 2", archetype: "aerobic", v5: true,
+    plan: ["15 min rameur facile · Zone 2", "15 min course facile · Zone 2", "15 min Assault Bike · Zone 2"] }, 45);
 };
 
 // ─── CONTRATS DU MOTEUR ─────────────────────────────────────────────────────
@@ -150,6 +194,8 @@ const names = (day) => (day.exercises || []).map((ex) => ex.n).join(" · ");
 const validateDay = (day, ctx) => {
   if (!day || !day.label || !day.archetype) fail("séance incomplète");
   const exercises = day.exercises || [];
+  if (!(day.totalMin >= MIN_SESSION_MIN) || day.minSessionMin !== MIN_SESSION_MIN) fail(`session under ${MIN_SESSION_MIN} min`);
+  if (!Array.isArray(day.abs) || day.abs.length < 2) fail("session without core finisher");
   if (/abdominaux|gainage|core/i.test(day.label)) fail(`titre core interdit (${day.label})`);
   if (day.archetype === "strength_upper") {
     if (!exercises.some((ex) => /développé couché|bench/i.test(ex.n))) fail("force haut sans développé couché");
@@ -169,11 +215,11 @@ const validateDay = (day, ctx) => {
     if (day.blocks.some((block) => !block.exercises.length || block.durationMin < 8)) fail("bloc kettlebell trop court ou vide");
   }
   if (day.archetype === "aerobic") {
-    if (!Array.isArray(day.plan) || day.plan.length !== 3) fail("endurance sans échauffement, continu et retour au calme");
-    if (exercises.length !== 1 || !/\b45 min\b/.test(exercises[0].reps) || metaOf(exercises[0]).pattern !== "cardio") fail("endurance non continue ou non chronométrée");
+    if (!Array.isArray(day.plan) || day.plan.length !== 3) fail("endurance sans trois portions réelles");
+    if (exercises.length !== 3 || exercises.some((ex) => !/\b15 min\b/.test(ex.reps) || metaOf(ex).pattern !== "cardio")) fail("endurance without three timed cardio blocks");
   }
   if (day.archetype === "hero") {
-    if (!day.hero || !day.blocks || day.blocks.length !== 1 || day.totalMin > 35) fail("Hero hors cadre hybrid");
+    if (!day.hero || !day.blocks || day.blocks.length < 2 || day.blocks.some((block) => block.kind !== "amrap" || block.durationMin < 12)) fail("Hero without two AMRAP blocks");
   }
   return true;
 };
