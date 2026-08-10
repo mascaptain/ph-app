@@ -209,7 +209,7 @@ const resolveDay = ({rawDay, doneDay, beforeStart, past, queueSession}) => {
 const SESSION_TEMPLATES = [...PROGRAM.filter(d=>d.salle).map(d=>({label:d.label,salle:d.salle,muscle:d.muscle,exercises:d.exercises,abs:d.abs,ids:d.ids})), REST_TPL];
 
 // Rotation hebdo - mesocycle hybride (Volume -> Intensite -> Puissance -> Deload)
-const VERSION="5.1.0";
+const VERSION="5.2.0";
 const weekNumber = () => { const dt=new Date(); const d=new Date(Date.UTC(dt.getFullYear(),dt.getMonth(),dt.getDate())); const dn=(d.getUTCDay()+6)%7; d.setUTCDate(d.getUTCDate()-dn+3); const ft=new Date(Date.UTC(d.getUTCFullYear(),0,4)); const fn=(ft.getUTCDay()+6)%7; ft.setUTCDate(ft.getUTCDate()-fn+3); return 1+Math.round((d-ft)/604800000); };
 const PHASES12=[{n:"Accumulation",f:"Volume, base"},{n:"Accumulation",f:"Volume"},{n:"Accumulation",f:"Volume +"},{n:"Intensification",f:"Charges +"},{n:"Intensification",f:"Charges ++"},{n:"Intensification",f:"Lourd"},{n:"Réalisation",f:"Explosif"},{n:"Réalisation",f:"Puissance"},{n:"Réalisation",f:"Pic de force"},{n:"Deload",f:"Récupération"},{n:"Test / PR",f:"Validation"},{n:"Test / PR",f:"Nouveaux maxs"}];
 const programWeek=()=>((weekNumber()-1)%12)+1;
@@ -4752,12 +4752,16 @@ export default function SomaApp() {
       :`Pour le temps · ${h.cap} min`,kind:h.kind==="amrap"?"amrap":"fortime",
       durationMin:h.cap,rounds:h.rounds||0,exercises:hx};
     if(heroPickerMode==="replace"){
-      // Remplacement du Hero programme : ni second WOD, ni ajout cache sous
-      // la seance. Ce choix est lie a cette position precise dans la file.
+      // Le Hero choisi remplace le premier benchmark, sans casser le second
+      // bloc et la duree minimale imposes par le moteur.
+      const support=(queuedDay?.blocks||[]).slice(1);
+      const blocks=[block,...support];
+      const workMin=blocks.reduce((sum,b)=>sum+(Number(b.durationMin)||0),0);
       setHeroOverride({key:sessionIndex+queueOffset(dayIdx),day:{
-        label:`Hero · ${h.name}`,short:"HERO",muscle:h.tribute,salle:"full",exercises:hx,abs:[],
-        recommendedMode:h.kind==="amrap"?"amrap":"classique",metcon:true,totalMin:h.cap,timeCapMin:h.cap,
-        emomMinutes:h.cap,badge:block.label,hero:h.id,heroName:h.name,archetype:"hero",v5:true,blocks:[block],
+        label:`Hero · ${h.name}`,short:"HERO",muscle:h.tribute,salle:"full",warmupFocus:"full",exercises:blocks.flatMap(b=>b.exercises),
+        abs:[{id:"ab03",n:"Hollow Body Hold",vol:"3×30s"},{id:"bw09",n:"L-Sit",vol:"3×20s"}],warmupMin:5,coreMin:6,
+        recommendedMode:h.kind==="amrap"?"amrap":"classique",metcon:true,totalMin:workMin+11,minSessionMin:45,timeCapMin:workMin,
+        emomMinutes:workMin,badge:"2 Hero",hero:h.id,heroName:h.name,archetype:"hero",v5:true,blocks,
       }});
       setHeroExtra(null);setHeroPickerMode("append");setShowHeroes(false);return;
     }
@@ -4845,7 +4849,7 @@ export default function SomaApp() {
   const blockOf={};
   mainBlocks.forEach((blk,bi)=>blk.items.forEach(({idx},k)=>{
     blockOf[idx]={no:bi+1,total:mainBlocks.length,pos:k+1,len:blk.items.length};}));
-  const warmExos=day?.salle?warmupExos(day.salle):[];
+  const warmExos=day?.salle?warmupExos(day.warmupFocus||day.salle):[];
   const absAsExos=absExos.map(absExo);
   const skillPairs=(day?.salle&&(profile?.active_skills||[]).length)
     ?(profile.active_skills.map(as=>{const sk=SKILLS_CATALOG.find(x=>x.id===as.skillId);
