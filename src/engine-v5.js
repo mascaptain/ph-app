@@ -37,7 +37,8 @@ const prescribed = (ex, sets, reps, role, ctx, intensity = 1) => {
     else kg *= ctx.scale || 1;
     kg = round(ex.eq, kg * (ctx.deload ? .85 : 1));
   }
-  return { ...ex, kg, sets, reps: String(reps), rest: role === "pillar" ? 180 : 75, role, v5: true };
+  // Densite hybride : pas de repos de trois minutes, meme sur le pilier.
+  return { ...ex, kg, sets, reps: String(reps), rest: role === "pillar" ? 120 : 60, role, v5: true };
 };
 
 // Le temps est un contrat du moteur, pas une promesse dans l'interface. Chaque
@@ -112,20 +113,20 @@ const kbDay = (variant, ctx) => {
     ? build(["kb12", "kb05", "kb01"], [10, 6, 12])
     : build(["kb03", "kb08", "kb11"], [6, 10, 10]);
   const blocks = variant === "power"
-    ? [{ label: "Bloc 1 · Technique sous cadence", kind: "emom", durationMin: 12, rounds: 4, exercises: technical },
-       { label: "Bloc 2 · Capacité de travail", kind: "amrap", durationMin: 10, rounds: 0, exercises: capacity },
-       { label: "Bloc 3 · Finisseur", kind: "amrap", durationMin: 10, rounds: 0, exercises: finisher }]
-    : [{ label: "Bloc 1 · Volume continu", kind: "amrap", durationMin: 12, rounds: 0, exercises: technical },
-       { label: "Bloc 2 · Puissance répétée", kind: "emom", durationMin: 9, rounds: 3, exercises: capacity },
-       { label: "Bloc 3 · Finisseur", kind: "amrap", durationMin: 11, rounds: 0, exercises: finisher }];
+    ? [{ label: "Bloc 1 · Technique sous cadence", kind: "emom", durationMin: 15, rounds: 5, exercises: technical },
+       { label: "Bloc 2 · Capacité de travail", kind: "amrap", durationMin: 15, rounds: 0, exercises: capacity },
+       { label: "Bloc 3 · Finisseur", kind: "amrap", durationMin: 15, rounds: 0, exercises: finisher }]
+    : [{ label: "Bloc 1 · Volume continu", kind: "amrap", durationMin: 15, rounds: 0, exercises: technical },
+       { label: "Bloc 2 · Puissance répétée", kind: "emom", durationMin: 15, rounds: 5, exercises: capacity },
+       { label: "Bloc 3 · Finisseur", kind: "amrap", durationMin: 15, rounds: 0, exercises: finisher }];
   blocks.forEach((block, blockIdx) => block.exercises.forEach((ex) => { ex.blockIdx = blockIdx; }));
   const moves = blocks.flatMap((block) => block.exercises);
-  const durationMin = blocks.reduce((sum, block) => sum + block.durationMin, 0) + 2;
+  const durationMin = blocks.reduce((sum, block) => sum + block.durationMin, 0);
   return complete({
     label: variant === "power" ? "Kettlebell · Puissance-endurance" : "Kettlebell · Capacité de travail",
     short: "KB", muscle: "Kettlebell uniquement", salle: "full", warmupFocus: "bas", exercises: moves,
     abs: [], recommendedMode: "emom", metcon: true, totalMin: durationMin, timeCapMin: durationMin,
-    emomMinutes: 12, badge: "3 blocs", archetype: "kettlebell", v5: true, blocks,
+    emomMinutes: 15, badge: "3 blocs", archetype: "kettlebell", v5: true, blocks,
   }, durationMin, 0);
 };
 
@@ -165,21 +166,40 @@ const heroDay = (ctx, week) => {
     badge: `${blocks.length} Hero`, hero: hero.id, heroName: hero.name, archetype: "hero", v5: true, blocks }, workMin, week);
 };
 
-const aerobicDay = (ctx) => {
+const conditioningDay = (ctx, week) => {
   const equipment = ctx.equipment || [], zones = ctx.injuryZones || [], excluded = ctx.excluded || [];
-  const choices = ["x110", "x122", "x111"].map((id) => firstAvailable([id], equipment, zones, excluded));
-  const fallback = firstAvailable(["cd02", "cd04"], equipment, zones, excluded);
-  const [rower, run, bike] = choices.map((ex) => ex || fallback);
-  // Trois portions executables et chronometrables : on ne masque plus une
-  // seance de 45 min derriere une unique ligne « rameur ».
-  const work = [
-    timed(rower, 15, "Rameur · Zone 2", ctx),
-    timed(run, 15, "Course facile · Zone 2", ctx),
-    timed(bike, 15, "Assault Bike · Zone 2", ctx),
-  ].filter(Boolean);
-  return complete({ label: "Endurance · Base aérobie", short: "END · Z2", muscle: "Effort continu facile · respiration contrôlée",
-    salle: "full", warmupFocus: "bas", exercises: work, abs: [], recommendedMode: "classique", badge: "Zone 2", archetype: "aerobic", v5: true,
-    plan: ["15 min rameur facile · Zone 2", "15 min course facile · Zone 2", "15 min Assault Bike · Zone 2"] }, 45);
+  const build = (slots) => slots.map(({ ids, reps }) => {
+    const ex = firstAvailable(ids, equipment, zones, excluded);
+    return ex ? prescribed(ex, 1, reps, "density", ctx, .58) : null;
+  }).filter(Boolean);
+  // Rotation de patterns et d'outils : le conditionnement hybride n'est ni une
+  // sortie cardio, ni une copie de la seance kettlebell.
+  const variants = [
+    [
+      { label: "Bloc 1 · Puissance sous fatigue", kind: "emom", slots: [{ ids: ["x111", "cd05"], reps: "40s" }, { ids: ["kb08", "db17"], reps: "10" }, { ids: ["bw05", "cd06"], reps: "12" }] },
+      { label: "Bloc 2 · Moteur et jambes", kind: "amrap", slots: [{ ids: ["x110", "cd02"], reps: "250m" }, { ids: ["db11", "db15"], reps: "10" }, { ids: ["bw01", "mc01"], reps: "8" }] },
+      { label: "Bloc 3 · Charge portee et tronc", kind: "amrap", slots: [{ ids: ["kb10", "kb17"], reps: "40m" }, { ids: ["cd06", "bw05"], reps: "10" }, { ids: ["db06", "kb11"], reps: "10" }] },
+    ],
+    [
+      { label: "Bloc 1 · Cadence et charniere", kind: "amrap", slots: [{ ids: ["cd04", "x111"], reps: "45s" }, { ids: ["kb01", "kb12"], reps: "15" }, { ids: ["bw05", "bw07"], reps: "12" }] },
+      { label: "Bloc 2 · Full body controle", kind: "emom", slots: [{ ids: ["x122", "cd01"], reps: "40s" }, { ids: ["db17", "kb08"], reps: "10" }, { ids: ["db06", "mc02"], reps: "10" }] },
+      { label: "Bloc 3 · Capacite athletique", kind: "amrap", slots: [{ ids: ["cd07", "db15"], reps: "8" }, { ids: ["kb17", "kb10"], reps: "30m" }, { ids: ["cd05", "cd06"], reps: "12" }] },
+    ],
+    [
+      { label: "Bloc 1 · Explosivite repetee", kind: "emom", slots: [{ ids: ["cd05", "x111"], reps: "40s" }, { ids: ["kb12", "db10"], reps: "12" }, { ids: ["db14", "kb05"], reps: "10" }] },
+      { label: "Bloc 2 · Travail total", kind: "amrap", slots: [{ ids: ["cd02", "x110"], reps: "250m" }, { ids: ["db17", "kb08"], reps: "12" }, { ids: ["bw05", "bw04"], reps: "12" }] },
+      { label: "Bloc 3 · Locomotion et tirage", kind: "amrap", slots: [{ ids: ["kb17", "kb10"], reps: "40m" }, { ids: ["cd06", "cd04"], reps: "12" }, { ids: ["db06", "kb11"], reps: "10" }] },
+    ],
+  ];
+  const blocks = variants[week % variants.length].map((spec, blockIdx) => {
+    const exercises = build(spec.slots);
+    exercises.forEach((ex) => { ex.blockIdx = blockIdx; });
+    return { label: spec.label, kind: spec.kind, durationMin: 15, rounds: spec.kind === "emom" ? 5 : 0, exercises };
+  });
+  const exercises = blocks.flatMap((block) => block.exercises);
+  return complete({ label: "Conditionnement · Hybride", short: "COND · HYB", muscle: "Cardio · Charge · Poids du corps",
+    salle: "full", warmupFocus: "full", exercises, abs: [], recommendedMode: "amrap", metcon: true,
+    timeCapMin: 45, emomMinutes: 15, badge: "3 blocs", archetype: "conditioning", v5: true, blocks }, 45, week);
 };
 
 // ─── CONTRATS DU MOTEUR ─────────────────────────────────────────────────────
@@ -214,9 +234,11 @@ const validateDay = (day, ctx) => {
     if (exercises.length < 5 || exercises.some((ex) => ex.eq !== "kb")) fail(`kettlebell non pure: ${names(day)}`);
     if (day.blocks.some((block) => !block.exercises.length || block.durationMin < 8)) fail("bloc kettlebell trop court ou vide");
   }
-  if (day.archetype === "aerobic") {
-    if (!Array.isArray(day.plan) || day.plan.length !== 3) fail("endurance sans trois portions réelles");
-    if (exercises.length !== 3 || exercises.some((ex) => !/\b15 min\b/.test(ex.reps) || metaOf(ex).pattern !== "cardio")) fail("endurance without three timed cardio blocks");
+  if (day.archetype === "conditioning") {
+    if (!Array.isArray(day.blocks) || day.blocks.length !== 3 || day.blocks.some((block) => block.durationMin !== 15 || block.exercises.length !== 3)) fail("conditionnement sans trois blocs de quinze minutes");
+    const formats = new Set(day.blocks.map((block) => block.kind));
+    if (!formats.has("emom") || !formats.has("amrap")) fail("conditionnement sans EMOM et AMRAP");
+    if (new Set(exercises.map((ex) => ex.eq)).size < 2) fail("conditionnement sans variété de matériel");
   }
   if (day.archetype === "hero") {
     if (!day.hero || !day.blocks || day.blocks.length < 2 || day.blocks.some((block) => block.kind !== "amrap" || block.durationMin < 12)) fail("Hero without two AMRAP blocks");
@@ -233,7 +255,7 @@ export const validateV5Program = (program, frequency, ctx = {}) => {
     if (frequency >= 3 && week.filter((day) => day.archetype === "hero").length !== 1) fail(`semaine ${i / size + 1} sans Hero unique`);
     if (frequency >= 3 && week.filter((day) => day.archetype === "kettlebell").length < 1) fail(`semaine ${i / size + 1} sans kettlebell`);
     if (frequency >= 4 && (!week.some((day) => day.archetype === "strength_upper") || !week.some((day) => day.archetype === "strength_lower"))) fail(`semaine ${i / size + 1} sans les deux forces`);
-    if (frequency >= 5 && !week.some((day) => day.archetype === "aerobic")) fail(`semaine ${i / size + 1} sans base aérobie`);
+    if (frequency >= 5 && !week.some((day) => day.archetype === "conditioning")) fail(`semaine ${i / size + 1} sans conditionnement hybride`);
   }
   return true;
 };
@@ -244,9 +266,9 @@ export const buildV5Program = (ctx = {}) => {
   const frequency = Math.max(2, Math.min(7, Number(ctx.frequency) || 5));
   const total = Number(ctx.total) || 60;
   const weekly = frequency === 7
-    ? ["upper", "kb_power", "hero", "lower", "aerobic", "kb_capacity", "aerobic"]
-    : frequency === 6 ? ["upper", "kb_power", "hero", "lower", "aerobic", "kb_capacity"]
-    : frequency === 5 ? ["upper", "kb_power", "hero", "lower", "aerobic"]
+    ? ["upper", "kb_power", "hero", "lower", "conditioning", "kb_capacity", "conditioning"]
+    : frequency === 6 ? ["upper", "kb_power", "hero", "lower", "conditioning", "kb_capacity"]
+    : frequency === 5 ? ["upper", "kb_power", "hero", "lower", "conditioning"]
     : frequency === 4 ? ["upper", "kb_power", "hero", "lower"]
     : frequency === 3 ? ["upper", "kb_power", "hero"]
     : ["upper", "lower"];
@@ -260,7 +282,7 @@ export const buildV5Program = (ctx = {}) => {
     if (step === "kb_power") return kbDay("power", local);
     if (step === "kb_capacity") return kbDay("capacity", local);
     if (step === "hero") return heroDay(local, week);
-    return aerobicDay(local);
+    return conditioningDay(local, week);
   });
   validateV5Program(program, weekly.length, ctx);
   return program;
