@@ -209,7 +209,7 @@ const resolveDay = ({rawDay, doneDay, beforeStart, past, queueSession}) => {
 const SESSION_TEMPLATES = [...PROGRAM.filter(d=>d.salle).map(d=>({label:d.label,salle:d.salle,muscle:d.muscle,exercises:d.exercises,abs:d.abs,ids:d.ids})), REST_TPL];
 
 // Rotation hebdo - mesocycle hybride (Volume -> Intensite -> Puissance -> Deload)
-const VERSION="5.3.1";
+const VERSION="5.4.0";
 const weekNumber = () => { const dt=new Date(); const d=new Date(Date.UTC(dt.getFullYear(),dt.getMonth(),dt.getDate())); const dn=(d.getUTCDay()+6)%7; d.setUTCDate(d.getUTCDate()-dn+3); const ft=new Date(Date.UTC(d.getUTCFullYear(),0,4)); const fn=(ft.getUTCDay()+6)%7; ft.setUTCDate(ft.getUTCDate()-fn+3); return 1+Math.round((d-ft)/604800000); };
 const PHASES12=[{n:"Accumulation",f:"Volume, base"},{n:"Accumulation",f:"Volume"},{n:"Accumulation",f:"Volume +"},{n:"Intensification",f:"Charges +"},{n:"Intensification",f:"Charges ++"},{n:"Intensification",f:"Lourd"},{n:"Réalisation",f:"Explosif"},{n:"Réalisation",f:"Puissance"},{n:"Réalisation",f:"Pic de force"},{n:"Deload",f:"Récupération"},{n:"Test / PR",f:"Validation"},{n:"Test / PR",f:"Nouveaux maxs"}];
 const programWeek=()=>((weekNumber()-1)%12)+1;
@@ -564,11 +564,11 @@ const localDateKey = (date = new Date()) => {
 const todayKey = () => localDateKey();
 // Date réelle du jour de programme dans la semaine courante
 // dayIdx 0=LUN ... 6=DIM
-const programDate = (dIdx) => {
+const programDate = (dIdx,weekOffset=0) => {
   const t = new Date();
   const dow = t.getDay() === 0 ? 6 : t.getDay() - 1; // 0=lun
   const d = new Date(t);
-  d.setDate(t.getDate() + (dIdx - dow));
+  d.setDate(t.getDate() + (dIdx - dow) + weekOffset*7);
   return localDateKey(d);
 };
 const todayIdx = () => { const d=new Date().getDay(); return d===0?6:d-1; };
@@ -1488,7 +1488,7 @@ function CircuitPlayer({mode,exos,onClose,defMin,blocks,onAllDone,startBlock,log
   ):null;
   const Btn=({label,act,bg,fg,flex})=>(
     <Tap onTap={act} style={{flex:flex||1,padding:"16px",borderRadius:12,background:bg||C.accent,display:"flex",alignItems:"center",justifyContent:"center"}}>
-      <span style={{fontSize:15,fontWeight:600,color:fg||C.onAccent}}>{label}</span>
+      <span style={{fontSize:15,fontWeight:600,color:fg||(bg===C.done?C.onDark:C.onAccent)}}>{label}</span>
     </Tap>
   );
   const skipRest=()=>{clearInterval(restRef.current);setResting(0);};
@@ -2045,7 +2045,7 @@ function ExPicker({onSelect,onClose,currentId,excluded}) {
 }
 
 // ─── FEEDBACK SHEET ───────────────────────────────────────────────────────────
-function FeedbackSheet({onClose,onSave}) {
+function FeedbackSheet({onClose,onSave,saving=false}) {
   const[intensity,setIntensity]=useState(3);
   const[energy,setEnergy]=useState(3);
   const[notes,setNotes]=useState("");
@@ -2085,8 +2085,8 @@ function FeedbackSheet({onClose,onSave}) {
         <textarea value={notes} onChange={e=>setNotes(e.target.value)} placeholder="Notes libres..."
           style={{width:"100%",minHeight:60,padding:"16px",borderRadius:12,border:`1px solid ${C.div}`,fontFamily:F,fontSize:15,color:C.ink,background:C.s2,resize:"none",outline:"none",marginBottom:20,boxSizing:"border-box"}}/>
         <div style={{display:"flex",gap:10}}>
-          <button onClick={onClose} style={{...bs,flex:1,background:C.s2,color:C.ink3}}>Annuler</button>
-          <button onClick={()=>onSave({global:intensity,energy,notes,photo})} style={{...bs,flex:2,background:C.accent,color:C.onAccent}}>Enregistrer</button>
+          <button disabled={saving} onClick={onClose} style={{...bs,flex:1,background:C.s2,color:C.ink3,opacity:saving?.55:1}}>Annuler</button>
+          <button disabled={saving} onClick={()=>onSave({global:intensity,energy,notes,photo})} style={{...bs,flex:2,background:C.accent,color:C.onAccent,opacity:saving?.7:1}}>{saving?"Enregistrement…":"Enregistrer"}</button>
         </div>
       </div>
     </div>
@@ -4044,6 +4044,7 @@ export default function SomaApp() {
   const[tab,setTab]=useState("home");
   const[prevTab,setPrevTab]=useState(null);
   const[dayIdx,setDayIdx]=useState(todayIdx());
+  const[weekOffset,setWeekOffset]=useState(0);
   const[log,setLog]=useState({});
   const[weights,setWeights]=useState({});
   const[sessions,setSessions]=useState([]);
@@ -4062,6 +4063,7 @@ export default function SomaApp() {
   const[showSched,setShowSched]=useState(false);
   const[autoRotate,setAutoRotate]=useState(true);
   const[showFeedback,setShowFeedback]=useState(false);
+  const[savingSession,setSavingSession]=useState(false);
   const[showAI,setShowAI]=useState(false);
   const[showPhotos,setShowPhotos]=useState(false);
   const[showTimer,setShowTimer]=useState(false);
@@ -4258,7 +4260,8 @@ export default function SomaApp() {
       if(strData) longestRef.current=Number(strData.longest_streak)||0;
       setSessions(norm);computeStreak(norm);
       if(pbs?.length){const w={};pbs.forEach(pb=>{w[pb.exercise_id||pb.exercise_name]=pb.weight_kg;});setWeights(prev=>{const next={...prev,...w};persist(uid,{weights:next});return next;});}
-      if(strData) setStreak(strData.current_streak||0);
+      // La liste `sessions` est la source de vérité. Un streak peut avoir été écrit
+      // avant une séance qui a échoué à s'enregistrer : ne jamais le réafficher tel quel.
       setSbReady(true);
       setDataReady(true);
       // (l'ecran de bienvenue est du code mort : rendu derriere un if(false&&showWelcome))
@@ -4440,11 +4443,12 @@ export default function SomaApp() {
     setShowPicker(null);setFullScreenEx(null);setFocusIdx(null);setShowCircuit(false);setModeOverride("classique");
   };
 
-  const handleFeedbackSave=(fb)=>{
+  const handleFeedbackSave=async(fb)=>{
+    if(savingSession) return;
     // IMPORTANT: reutilise le "day"/"exos" du rendu principal (pilotes par la sequence session_index),
     // ne JAMAIS recalculer une version independante basee sur le jour de la semaine (bug precedent:
     // divergence entre la seance reellement affichee/jouee et celle enregistree/comptee comme faite).
-    const sDateLocal=programDate(dayIdx);
+    const sDateLocal=tabDate;
     if(fb&&fb.photo){
       const shot=fb.photo; delete fb.photo;
       // La photo de fin de seance part dans Storage ; la base ne garde que son chemin.
@@ -4533,12 +4537,38 @@ export default function SomaApp() {
       mode:sessionMode,
       weights:{...weights,...Object.fromEntries(exercisesData.filter(e=>e.weight>0).map(e=>[e.id,e.weight]))}
     };
+    const uid=user?.id;
+    if(!uid){ notify("Connexion requise pour enregistrer la séance."); return; }
+    // Une séance n'est jamais annoncée comme terminée avant la réponse de Supabase.
+    // L'ancienne file asynchrone vivait uniquement dans l'onglet : quitter après un Hero
+    // faisait disparaître son écriture, alors que le streak avait déjà été compté.
+    setSavingSession(true);
+    try{
+      const {error}=await supabase.from("sessions").upsert({
+        user_id:uid,date:sDate,week:"S"+wk,
+        day:day.day,day_label:entry.dayLabel,
+        session_type:entry.dayLabel,
+        ...(day.hero?{tag:"hero:"+day.hero}:{}),
+        session_index:entry.sessionIndex,
+        mode:sessionMode,
+        total_kg:Math.round(totalKg),total_sets:totalSets,
+        target_kg:targetKg,target_sets:targetSets,
+        duration_seconds:durationSec,score,completed:true,
+        exercises:exercisesData,
+        feedback:fb,
+        notes:fb.notes||""
+      },{onConflict:"user_id,date"}).select("id").single();
+      if(error) throw error;
+    }catch(e){
+      console.error("session save",e);
+      notify("La séance n’a pas été enregistrée. Réessaie sans quitter cette page.");
+      return;
+    }finally{ setSavingSession(false); }
     // La sequence n'a plus besoin d'etre incrementee a la main : elle se deduit
     // du nombre de seances enregistrees, et l'effet de bord ci-dessous remet le
     // compteur stocke en accord. C'est cet increment manuel qui pouvait etre
     // ecrase par une ecriture concurrente et bloquer le programme.
     // 1. (l'ancien cache local des seances a disparu : la table sessions fait foi)
-    const uid=user?.id;
     // 2. State React
     setSessions(prev=>{
       const next=[...prev.filter(s=>s.date!==sDate),entry];
@@ -4565,24 +4595,8 @@ export default function SomaApp() {
     setSessionActive(false);
     setShowFeedback(false);
     setShowReport(entry);
-    // 4. Supabase en arrière-plan
+    // 4. Records en arrière-plan, uniquement après la persistance confirmée de la séance.
     if(uid){
-      // exercises/feedback en JSON natif : JSON.stringify dans une colonne jsonb produisait
-      // une CHAINE de JSON, inexploitable en SQL sans deballage. Le lecteur accepte les deux.
-      enqueue(`session:${sDate}`,"séance",()=>supabase.from("sessions").upsert({
-        user_id:uid,date:sDate,week:"S"+wk,
-        day:day.day,day_label:entry.dayLabel,
-        session_type:entry.dayLabel,
-        ...(day.hero?{tag:"hero:"+day.hero}:{}),
-        session_index:entry.sessionIndex,
-        mode:sessionMode,
-        total_kg:Math.round(totalKg),total_sets:totalSets,
-        target_kg:targetKg,target_sets:targetSets,
-        duration_seconds:durationSec,score,completed:true,
-        exercises:exercisesData,
-        feedback:fb,
-        notes:fb.notes||""
-      },{onConflict:"user_id,date"}));
       // Un record ne se remplace que s'il est BATTU. L'upsert ecrasait sans comparer : la
       // seance du 30/07 avait ainsi detruit trois records (16 -> 10 kg). Et les reps etaient
       // codees a 8 quel que soit le reel, donc tous les 1RM estimes etaient faux.
@@ -4652,9 +4666,9 @@ export default function SomaApp() {
   // semaine on affichait "S12/12" pendant les 24 dernieres seances du programme.
   const sessionWeek=Math.min(PROG_WEEKS,Math.max(1,Math.floor(sessionIndex/SESSIONS_PER_BLOCK)+1));
   const programDone=sessionIndex>=totalSessions;
-  const isViewingToday=dayIdx===todayIdx();
+  const isViewingToday=weekOffset===0&&dayIdx===todayIdx();
   const rawDay0=viewSchedule[dayIdx]||PROGRAM[dayIdx];
-  const tabDate=programDate(dayIdx);
+  const tabDate=programDate(dayIdx,weekOffset);
   const injuryReports=Array.isArray(profile?.injury_reports)?profile.injury_reports:[];
   // Un report force la presentation de la prochaine seance sur le lendemain,
   // y compris si le calendrier declarait un repos. La file conserve ainsi l'ordre
@@ -4725,14 +4739,16 @@ export default function SomaApp() {
   // Combien de creneaux d'entrainement separent aujourd'hui du jour affiche.
   // C'est ce nombre qui decale la file : rater un lundi ne change pas la seance
   // proposee mardi, il la repousse.
-  const queueOffset=(targetIdx)=>{
-    const ti=todayIdx();
-    if(targetIdx<=ti) return 0;
+  const queueOffset=(targetIdx,targetWeekOffset=weekOffset)=>{
+    const ti=todayIdx(), targetAbs=targetWeekOffset*7+targetIdx;
+    if(targetAbs<=ti) return 0;
     let n=0;
-    for(let k=ti;k<targetIdx;k++){
+    for(let abs=ti;abs<targetAbs;abs++){
+      const k=((abs%7)+7)%7;
       const d=viewSchedule[k]||PROGRAM[k];
       // Le creneau d'aujourd'hui ne compte que s'il reste a faire.
-      if(k===ti){ if(d&&d.salle&&!sessions.some(x=>x.date===programDate(k))) n++; }
+      const date=programDate(k,Math.floor(abs/7));
+      if(abs===ti){ if(d&&d.salle&&!sessions.some(x=>x.date===date)) n++; }
       else if(d&&d.salle) n++;
     }
     return n;
@@ -4938,7 +4954,7 @@ const NAV=[{id:"home",l:"Accueil"},{id:"seance",l:"Séances"},{id:"stats",l:"Sta
         <div style={{maxWidth:600,margin:"0 auto",display:"flex",overflowX:"auto",padding:"2px 18px 12px",gap:6,scrollbarWidth:"none",WebkitOverflowScrolling:"touch"}}>
           {viewSchedule.map((d,i)=>{
             const exList=d.exercises||[];
-            const dStrDate=programDate(i);
+            const dStrDate=programDate(i,weekOffset);
             // Meme regle que dans la liste d'exercices : on compte ce qui est enregistre, on ne
             // teste pas des indices deduits d'un nombre de series suppose (4 par defaut).
             const done=exList.filter(e=>{
@@ -4948,7 +4964,7 @@ const NAV=[{id:"home",l:"Accueil"},{id:"seance",l:"Séances"},{id:"stats",l:"Sta
             }).length;
             const pct=exList.length?done/exList.length:0;
             const dayFullyDone=sessions.some(s=>s.date===dStrDate);
-            const isSel=i===dayIdx,isToday=i===todayIdx();
+            const isSel=i===dayIdx,isToday=weekOffset===0&&i===todayIdx();
             // Trois etats distincts etaient confondus : la barre ne montrait qu'une coche
             // pour le fait et un point pour aujourd'hui. Une echeance passee sans seance
             // n'etait signalee nulle part, alors que c'est l'information qui doit alerter.
@@ -4975,13 +4991,18 @@ const NAV=[{id:"home",l:"Accueil"},{id:"seance",l:"Séances"},{id:"stats",l:"Sta
             );
           })}
         </div>
+        <div style={{maxWidth:600,margin:"0 auto",padding:"0 18px 10px",display:"flex",alignItems:"center",justifyContent:"space-between",gap:10}}>
+          <Tap label="Semaine précédente" onTap={()=>{setWeekOffset(o=>o-1);setDayIdx(todayIdx());setAiOverride(null);setModeOverride(null);}} style={{width:38,height:34,borderRadius:10,background:C.s2,display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{fontSize:22,color:C.ink2}}>‹</span></Tap>
+          <Tap label="Revenir à la semaine courante" onTap={()=>{setWeekOffset(0);setDayIdx(todayIdx());setAiOverride(null);setModeOverride(null);}} style={{flex:1,textAlign:"center",padding:"8px",borderRadius:10,background:weekOffset===0?C.accentSoft:C.s1}}><span style={{fontSize:12.5,fontWeight:600,color:C.ink2}}>{weekOffset===0?"Cette semaine":`Semaine ${weekOffset>0?"suivante":"précédente"} · ${fmtDateShort(programDate(0,weekOffset))}`}</span></Tap>
+          <Tap label="Semaine suivante" onTap={()=>{setWeekOffset(o=>o+1);setDayIdx(todayIdx());setAiOverride(null);setModeOverride(null);}} style={{width:38,height:34,borderRadius:10,background:C.s2,display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{fontSize:22,color:C.ink2}}>›</span></Tap>
+        </div>
         </div>
       )}
 
       {/* CONTENT */}
       <div style={{paddingBottom:104}}>
         <TabContent tab={tab} prevTab={prevTab}>
-          {tab==="home"&&<HomeTab profile={profile} streak={streak} sessions={sessions} weights={weights} todaySession={todaySessionForHome} accent={accent} trainingDaysPerWeek={trainingDaysPerWeek} weighIns={weighIns} onStartToday={()=>{setDayIdx(todayIdx());switchTab("seance");}}/>}
+          {tab==="home"&&<HomeTab profile={profile} streak={streak} sessions={sessions} weights={weights} todaySession={todaySessionForHome} accent={accent} trainingDaysPerWeek={trainingDaysPerWeek} weighIns={weighIns} onStartToday={()=>{setWeekOffset(0);setDayIdx(todayIdx());switchTab("seance");}}/>}
           {tab==="seance"&&(
             <div style={{padding:"14px 18px 0",maxWidth:600,margin:"0 auto"}}>
               {isRest?(
@@ -5354,7 +5375,7 @@ const NAV=[{id:"home",l:"Accueil"},{id:"seance",l:"Séances"},{id:"stats",l:"Sta
       })()}
       {supBlock&&<CircuitPlayer mode={supBlock.kind} exos={supBlock.exercises} blocks={[supBlock]} defMin={supBlock.defMin} blockNo={supBlock.no} blockCount={supBlock.total} onClose={()=>setSupBlock(null)} onAllDone={()=>{}} log={log} onLogSet={saveLog} sDate={sDate}/>}
       {showCircuit&&sessionMode!=="classique"&&exos.length>0&&(
-        <CircuitPlayer mode={sessionMode} exos={exos} blocks={day.blocks} defMin={sessionMode==="amrap"?(day.timeCapMin||12):(day.emomMinutes||Math.max(exos.length,8))} onClose={()=>setShowCircuit(false)} onAllDone={()=>{clock.stop();setShowFeedback(true);}} startBlock={circuitStart} log={log} onLogSet={saveLog} sDate={sDate}/>
+        <CircuitPlayer mode={sessionMode} exos={exos} blocks={day.blocks} defMin={sessionMode==="amrap"?(day.timeCapMin||12):(day.emomMinutes||Math.max(exos.length,8))} onClose={()=>setShowCircuit(false)} onAllDone={()=>{clock.stop();handleFeedbackSave({global:3,energy:3,notes:"",autoCompleted:true});}} startBlock={circuitStart} log={log} onLogSet={saveLog} sDate={sDate}/>
       )}
 
       {/* BOTTOM NAV */}
@@ -5384,7 +5405,7 @@ const NAV=[{id:"home",l:"Accueil"},{id:"seance",l:"Séances"},{id:"stats",l:"Sta
       {showRestFull&&<RestFullScreen timer={rest} label={restLabel} onSkip={()=>{rest.stop();setShowRestFull(false);}} onClose={()=>{rest.reset();setShowRestFull(false);}}/>}
       {!showRestFull&&rest.sec>0&&<MiniRest timer={rest} label={restLabel} onExpand={()=>setShowRestFull(true)}/>}
       {detailEx&&<ExerciseSheet ex={detailEx} fav={favorites.includes(detailEx.id)} onToggleFav={toggleFav} onClose={()=>setDetailEx(null)} sessions={sessions}/>}
-      {showFeedback&&<FeedbackSheet onClose={()=>setShowFeedback(false)} onSave={handleFeedbackSave}/>}
+      {showFeedback&&<FeedbackSheet onClose={()=>{if(!savingSession)setShowFeedback(false);}} onSave={handleFeedbackSave} saving={savingSession}/>} 
       {showSettings&&<SessionSettingsSheet day={day} curMode={effMode} onClose={()=>setShowSettings(false)} onApply={({mode,cons})=>{setModeOverride(mode);setDayCons(cons);setShowSettings(false);}}/>}
       {showInjuryReport&&<InjuryReportSheet onClose={()=>setShowInjuryReport(false)} onReport={reportInjury}/>}
       {showHeroes&&<HeroSheet equipment={profile?.equipment} sessions={sessions}
