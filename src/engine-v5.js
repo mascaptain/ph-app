@@ -19,6 +19,10 @@ const isSafe = (ex, zones = []) => ex && !zones.some((zone) => INJURY_RULES[zone
 const has = (ex, equipment, zones, excluded = []) => ex && !excluded.includes(ex.id)
   && (ex.eq === "bw" || !equipment.length || equipment.includes(ex.eq)) && isSafe(ex, zones);
 const firstAvailable = (ids, equipment, zones = [], excluded = []) => ids.map(find).find((ex) => has(ex, equipment, zones, excluded)) || null;
+const rotatingAvailable = (ids, equipment, zones = [], excluded = [], offset = 0) => {
+  const candidates = ids.map(find).filter((ex) => has(ex, equipment, zones, excluded));
+  return candidates.length ? candidates[Math.abs(offset) % candidates.length] : null;
+};
 const round = (eq, kg) => {
   if (!(kg > 0)) return 0;
   if (eq === "kb") return [6, 8, 10, 12, 16, 20, 24, 32].reduce((best, n) => Math.abs(n - kg) < Math.abs(best - kg) ? n : best, 6);
@@ -78,10 +82,14 @@ const strengthDay = (kind, ctx, week) => {
     rows: [["bb07", "db10", "mc05"], ["mc04", "db11", "bb16"], ["mc08", "mc07", "bw12"]],
   };
   const work = [];
+  // Le développé couché reste hebdomadaire ; la variété se fait autour de lui.
+  // En bas du corps, le pilier alterne squat et hinge d'une semaine à l'autre.
   const main = firstAvailable(spec.main, equipment, zones, excluded);
   if (main) work.push(prescribed(main, 5, upper ? 4 : (week % 2 ? 3 : 5), "pillar", ctx, upper ? .82 : .84));
   spec.rows.forEach((ids, i) => {
-    const ex = firstAvailable(ids, equipment, zones, excluded);
+    const ex = upper
+      ? rotatingAvailable(ids, equipment, zones, excluded, week + i)
+      : firstAvailable(ids, equipment, zones, excluded);
     if (ex) work.push(prescribed(ex, upper && i < 2 ? 4 : 3, i < 2 ? 8 : 10, "accessory", ctx, .7));
   });
   // Une séance jambes reste jambes : aucun rappel de bench, de pecs ou de bras.
@@ -93,25 +101,26 @@ const strengthDay = (kind, ctx, week) => {
   return complete({ label: spec.label, short: upper ? "FOR · HAUT" : "FOR · BAS", muscle: spec.muscle,
     salle: "full", warmupFocus: upper ? "haut" : "bas", exercises: work.filter(Boolean), abs: [], recommendedMode: "classique",
     badge: upper ? "Développé couché" : "Squat / hinge", archetype: upper ? "strength_upper" : "strength_lower",
-    phase: ctx.deload ? "decharge" : "construction", v5: true }, 36, week);
+    phase: ctx.deload ? "decharge" : "construction", variantKey: `${upper ? "upper" : "lower"}-${week % 3}`, v5: true }, 36, week);
 };
 
-const kbDay = (variant, ctx) => {
+const kbDay = (variant, ctx, week = 0) => {
   const equipment = ctx.equipment || [], zones = ctx.injuryZones || [], excluded = ctx.excluded || [];
   const build = (ids, reps) => ids.map(find).filter((ex) => has(ex, equipment, zones, excluded))
     .map((ex, i) => prescribed(ex, 1, reps[i], "density", ctx, .65));
   // Deux intentions, deux blocs. Une séance KB n'est jamais un unique EMOM
   // uniforme : on construit d'abord la qualité technique, puis la capacité à
   // répéter les gestes sous fatigue. Les six mouvements sont tous à la cloche.
+  const powerA = week % 2 === 0;
   const technical = variant === "power"
-    ? build(["kb03", "kb08", "kb05"], [6, 8, 6])
-    : build(["kb01", "kb04", "kb08"], [12, 6, 10]);
+    ? build(powerA ? ["kb03", "kb08", "kb05"] : ["kb04", "kb12", "kb05"], powerA ? [6, 8, 6] : [6, 10, 8])
+    : build(powerA ? ["kb01", "kb04", "kb08"] : ["kb12", "kb03", "kb08"], powerA ? [12, 6, 10] : [10, 6, 10]);
   const capacity = variant === "power"
-    ? build(["kb01", "kb11", "kb10"], [15, 10, "30m"])
-    : build(["kb12", "kb11", "kb10"], [12, 10, "30m"]);
+    ? build(powerA ? ["kb01", "kb11", "kb10"] : ["kb12", "kb10", "kb11"], powerA ? [15, 10, "30m"] : [12, "40m", 12])
+    : build(powerA ? ["kb12", "kb11", "kb10"] : ["kb01", "kb10", "kb11"], powerA ? [12, 10, "30m"] : [15, "40m", 12]);
   const finisher = variant === "power"
-    ? build(["kb12", "kb05", "kb01"], [10, 6, 12])
-    : build(["kb03", "kb08", "kb11"], [6, 10, 10]);
+    ? build(powerA ? ["kb12", "kb05", "kb01"] : ["kb03", "kb08", "kb01"], powerA ? [10, 6, 12] : [6, 12, 15])
+    : build(powerA ? ["kb03", "kb08", "kb11"] : ["kb04", "kb05", "kb12"], powerA ? [6, 10, 10] : [6, 8, 12]);
   const blocks = variant === "power"
     ? [{ label: "Bloc 1 · Technique sous cadence", kind: "emom", durationMin: 15, rounds: 5, exercises: technical },
        { label: "Bloc 2 · Capacité de travail", kind: "amrap", durationMin: 15, rounds: 0, exercises: capacity },
@@ -126,8 +135,8 @@ const kbDay = (variant, ctx) => {
     label: variant === "power" ? "Kettlebell · Puissance-endurance" : "Kettlebell · Capacité de travail",
     short: "KB", muscle: "Kettlebell uniquement", salle: "full", warmupFocus: "bas", exercises: moves,
     abs: [], recommendedMode: "emom", metcon: true, totalMin: durationMin, timeCapMin: durationMin,
-    emomMinutes: 15, badge: "3 blocs", archetype: "kettlebell", v5: true, blocks,
-  }, durationMin, 0);
+    emomMinutes: 15, badge: "3 blocs", archetype: "kettlebell", variantKey: `${variant}-${week % 2}`, v5: true, blocks,
+  }, durationMin, week);
 };
 
 const heroDay = (ctx, week) => {
@@ -145,7 +154,7 @@ const heroDay = (ctx, week) => {
     && new Set(h.moves.map((move) => String(move.n).toLowerCase())).size === h.moves.length
     && h.moves.every((move) => isSafe({ n: move.n }, zones)));
   const hero = pool.length ? pool[week % pool.length] : null;
-  if (!hero) return kbDay("capacity", ctx);
+  if (!hero) return kbDay("capacity", ctx, week);
   const support = pool.length > 1 ? pool[(week + 1) % pool.length] : hero;
   const toBlock = (entry, blockIdx) => {
     const exercises = entry.moves.map((m, i) => ({ id: `hero_${entry.id}_${blockIdx}_${i}`, n: m.n, m: "Full body", eq: "bw", kg: m.kg || 0,
@@ -279,8 +288,8 @@ export const buildV5Program = (ctx = {}) => {
     const local = { ...ctx, deload };
     if (step === "upper") return strengthDay("upper", local, week);
     if (step === "lower") return strengthDay("lower", local, week);
-    if (step === "kb_power") return kbDay("power", local);
-    if (step === "kb_capacity") return kbDay("capacity", local);
+    if (step === "kb_power") return kbDay("power", local, week);
+    if (step === "kb_capacity") return kbDay("capacity", local, week);
     if (step === "hero") return heroDay(local, week);
     return conditioningDay(local, week);
   });

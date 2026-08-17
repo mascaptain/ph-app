@@ -209,7 +209,7 @@ const resolveDay = ({rawDay, doneDay, beforeStart, past, queueSession}) => {
 const SESSION_TEMPLATES = [...PROGRAM.filter(d=>d.salle).map(d=>({label:d.label,salle:d.salle,muscle:d.muscle,exercises:d.exercises,abs:d.abs,ids:d.ids})), REST_TPL];
 
 // Rotation hebdo - mesocycle hybride (Volume -> Intensite -> Puissance -> Deload)
-const VERSION="5.4.0";
+const VERSION="5.4.1";
 const weekNumber = () => { const dt=new Date(); const d=new Date(Date.UTC(dt.getFullYear(),dt.getMonth(),dt.getDate())); const dn=(d.getUTCDay()+6)%7; d.setUTCDate(d.getUTCDate()-dn+3); const ft=new Date(Date.UTC(d.getUTCFullYear(),0,4)); const fn=(ft.getUTCDay()+6)%7; ft.setUTCDate(ft.getUTCDate()-fn+3); return 1+Math.round((d-ft)/604800000); };
 const PHASES12=[{n:"Accumulation",f:"Volume, base"},{n:"Accumulation",f:"Volume"},{n:"Accumulation",f:"Volume +"},{n:"Intensification",f:"Charges +"},{n:"Intensification",f:"Charges ++"},{n:"Intensification",f:"Lourd"},{n:"Réalisation",f:"Explosif"},{n:"Réalisation",f:"Puissance"},{n:"Réalisation",f:"Pic de force"},{n:"Deload",f:"Récupération"},{n:"Test / PR",f:"Validation"},{n:"Test / PR",f:"Nouveaux maxs"}];
 const programWeek=()=>((weekNumber()-1)%12)+1;
@@ -2097,7 +2097,7 @@ function FeedbackSheet({onClose,onSave,saving=false}) {
 function SessionReport({session,sessions,trainingDaysPerWeek,photoUrl,onClose,onDelete}) {
   if(!session) return null;
   const{totalKg=0,totalSets=0,duration=0,exercises=[],date="",dayLabel="",feedback,sessionIndex=0}=session;
-  const score=computeScore(totalKg,totalSets,feedback,targetOf(session));
+  const score=Number.isFinite(Number(session.score))?Number(session.score):computeScore(totalKg,totalSets,feedback,targetOf(session));
   const photo=photoUrl||null;
   const animScore=useCountUp(score,1200);
   const animKg=useCountUp(Math.round(totalKg/1000*10)/10*10,1400);
@@ -2707,7 +2707,7 @@ function StatsTab({sessions,weights,accent,onOpenPhotos,pinnedPBs,onManagePBs,ac
   const progStart=profile&&profile.program_start;
   const inProg=progStart?sessions.filter(x=>x&&x.date>=progStart):sessions;
   const total=inProg.length,totalKg=inProg.reduce((a,s)=>a+(s.totalKg||0),0);
-  const avgScore=total?Math.round(inProg.reduce((a,s)=>a+computeScore(s.totalKg,s.totalSets,s.feedback,targetOf(s)),0)/total):0;
+  const avgScore=total?Math.round(inProg.reduce((a,s)=>a+(Number.isFinite(Number(s.score))?Number(s.score):computeScore(s.totalKg,s.totalSets,s.feedback,targetOf(s))),0)/total):0;
   const pbs=useMemo(()=>computePBs(sessions),[sessions]);
   const pinnedSet=new Set(pinnedPBs||[]);
   const displayedPBs=(pinnedPBs&&pinnedPBs.length)?pbs.filter(pb=>pinnedSet.has(pb.id)):pbs.slice(0,4);
