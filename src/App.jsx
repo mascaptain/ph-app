@@ -209,7 +209,7 @@ const resolveDay = ({rawDay, doneDay, beforeStart, past, queueSession}) => {
 const SESSION_TEMPLATES = [...PROGRAM.filter(d=>d.salle).map(d=>({label:d.label,salle:d.salle,muscle:d.muscle,exercises:d.exercises,abs:d.abs,ids:d.ids})), REST_TPL];
 
 // Rotation hebdo - mesocycle hybride (Volume -> Intensite -> Puissance -> Deload)
-const VERSION="5.4.1";
+const VERSION="5.5.0";
 const weekNumber = () => { const dt=new Date(); const d=new Date(Date.UTC(dt.getFullYear(),dt.getMonth(),dt.getDate())); const dn=(d.getUTCDay()+6)%7; d.setUTCDate(d.getUTCDate()-dn+3); const ft=new Date(Date.UTC(d.getUTCFullYear(),0,4)); const fn=(ft.getUTCDay()+6)%7; ft.setUTCDate(ft.getUTCDate()-fn+3); return 1+Math.round((d-ft)/604800000); };
 const PHASES12=[{n:"Accumulation",f:"Volume, base"},{n:"Accumulation",f:"Volume"},{n:"Accumulation",f:"Volume +"},{n:"Intensification",f:"Charges +"},{n:"Intensification",f:"Charges ++"},{n:"Intensification",f:"Lourd"},{n:"Réalisation",f:"Explosif"},{n:"Réalisation",f:"Puissance"},{n:"Réalisation",f:"Pic de force"},{n:"Deload",f:"Récupération"},{n:"Test / PR",f:"Validation"},{n:"Test / PR",f:"Nouveaux maxs"}];
 const programWeek=()=>((weekNumber()-1)%12)+1;
@@ -4214,13 +4214,11 @@ export default function SomaApp() {
             ?generateScheduleDays(resolvedProfile.schedule.map((d,i)=>d&&d.salle?i:null).filter(Number.isInteger))
             :resolvedProfile.schedule;
           if(nextSchedule!==resolvedProfile.schedule){
-            // Les seances deja enregistrees restent dans l'historique, mais ne
-            // constituent pas les premieres seances du nouveau programme : elles
-            // etaient produites par V4. Reprendre leur compteur placerait V5 au
-            // milieu d'une semaine sans que ses cinq premieres seances existent.
-            const programReset=legacySchedule?{program_start:todayKey(),session_index:0}:{};
-            resolvedProfile={...resolvedProfile,schedule:nextSchedule,...programReset};
-            await supabase.from("profiles").update({schedule:nextSchedule,...programReset,updated_at:new Date().toISOString()}).eq("id",uid);
+            // Migrer le calendrier ne doit jamais réinitialiser le programme ni
+            // effacer le matériel choisi : l'historique reste le référentiel de
+            // progression. L'ancien reset est à l'origine du retour à 0/60.
+            resolvedProfile={...resolvedProfile,schedule:nextSchedule};
+            await supabase.from("profiles").update({schedule:nextSchedule,updated_at:new Date().toISOString()}).eq("id",uid);
           }
           setSchedule(nextSchedule);
         }
@@ -5405,7 +5403,7 @@ const NAV=[{id:"home",l:"Accueil"},{id:"seance",l:"Séances"},{id:"stats",l:"Sta
       {showRestFull&&<RestFullScreen timer={rest} label={restLabel} onSkip={()=>{rest.stop();setShowRestFull(false);}} onClose={()=>{rest.reset();setShowRestFull(false);}}/>}
       {!showRestFull&&rest.sec>0&&<MiniRest timer={rest} label={restLabel} onExpand={()=>setShowRestFull(true)}/>}
       {detailEx&&<ExerciseSheet ex={detailEx} fav={favorites.includes(detailEx.id)} onToggleFav={toggleFav} onClose={()=>setDetailEx(null)} sessions={sessions}/>}
-      {showFeedback&&<FeedbackSheet onClose={()=>{if(!savingSession)setShowFeedback(false);}} onSave={handleFeedbackSave} saving={savingSession}/>} 
+      {showFeedback&&<FeedbackSheet onClose={()=>{if(!savingSession)setShowFeedback(false);}} onSave={handleFeedbackSave} saving={savingSession}/>}
       {showSettings&&<SessionSettingsSheet day={day} curMode={effMode} onClose={()=>setShowSettings(false)} onApply={({mode,cons})=>{setModeOverride(mode);setDayCons(cons);setShowSettings(false);}}/>}
       {showInjuryReport&&<InjuryReportSheet onClose={()=>setShowInjuryReport(false)} onReport={reportInjury}/>}
       {showHeroes&&<HeroSheet equipment={profile?.equipment} sessions={sessions}
