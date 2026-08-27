@@ -209,7 +209,7 @@ const resolveDay = ({rawDay, doneDay, beforeStart, past, queueSession}) => {
 const SESSION_TEMPLATES = [...PROGRAM.filter(d=>d.salle).map(d=>({label:d.label,salle:d.salle,muscle:d.muscle,exercises:d.exercises,abs:d.abs,ids:d.ids})), REST_TPL];
 
 // Rotation hebdo - mesocycle hybride (Volume -> Intensite -> Puissance -> Deload)
-const VERSION="5.5.0";
+const VERSION="5.5.1";
 const weekNumber = () => { const dt=new Date(); const d=new Date(Date.UTC(dt.getFullYear(),dt.getMonth(),dt.getDate())); const dn=(d.getUTCDay()+6)%7; d.setUTCDate(d.getUTCDate()-dn+3); const ft=new Date(Date.UTC(d.getUTCFullYear(),0,4)); const fn=(ft.getUTCDay()+6)%7; ft.setUTCDate(ft.getUTCDate()-fn+3); return 1+Math.round((d-ft)/604800000); };
 const PHASES12=[{n:"Accumulation",f:"Volume, base"},{n:"Accumulation",f:"Volume"},{n:"Accumulation",f:"Volume +"},{n:"Intensification",f:"Charges +"},{n:"Intensification",f:"Charges ++"},{n:"Intensification",f:"Lourd"},{n:"Réalisation",f:"Explosif"},{n:"Réalisation",f:"Puissance"},{n:"Réalisation",f:"Pic de force"},{n:"Deload",f:"Récupération"},{n:"Test / PR",f:"Validation"},{n:"Test / PR",f:"Nouveaux maxs"}];
 const programWeek=()=>((weekNumber()-1)%12)+1;
@@ -4582,8 +4582,8 @@ export default function SomaApp() {
     });
     // Le report est consommé uniquement quand la séance a réellement été terminée.
     // Annuler ou ouvrir l'écran le lendemain ne doit jamais le faire disparaître.
-    if(injuryReports.some(r=>r&&r.to===sDate&&!r.completed_at)){
-      updateConfig({injury_reports:injuryReports.filter(r=>!(r&&r.to===sDate&&!r.completed_at))});
+    if(injuryReports.some(r=>r&&!r.completed_at&&r.to&&r.to<=sDate)){
+      updateConfig({injury_reports:injuryReports.filter(r=>!(r&&!r.completed_at&&r.to&&r.to<=sDate))});
     }
     // 3. Fermer popup immédiatement
     // reset (et pas stop) : "stop" laissait le compteur a sa valeur, si bien que la seance
@@ -4668,13 +4668,14 @@ export default function SomaApp() {
   const rawDay0=viewSchedule[dayIdx]||PROGRAM[dayIdx];
   const tabDate=programDate(dayIdx,weekOffset);
   const injuryReports=Array.isArray(profile?.injury_reports)?profile.injury_reports:[];
-  // Un report force la presentation de la prochaine seance sur le lendemain,
-  // y compris si le calendrier declarait un repos. La file conserve ainsi l'ordre
-  // du programme sans empiler deux seances le meme jour.
-  const isPostponedToday=injuryReports.some(r=>r&&r.to===tabDate&&!r.completed_at);
-  const rawDayForQueue=isPostponedToday?{...(rawDay0||{}),salle:"full"}:rawDay0;
   const isDayDone=sessions.some(s=>s.date===tabDate);
   const doneSession=isDayDone?sessions.find(s=>s.date===tabDate):null;
+  // Un report reste actif jusqu'à ce que la séance soit réellement terminée. La
+  // précédente règle ne couvrait que le lendemain exact : si celui-ci était lui
+  // aussi manqué, la séance finissait figée dans la semaine passée.
+  const activePostponement=injuryReports.find(r=>r&&!r.completed_at&&r.to&&r.to<=tabDate);
+  const isPostponedToday=!!activePostponement&&!isDayDone&&tabDate>=todayKey();
+  const rawDayForQueue=isPostponedToday?{...(rawDay0||{}),salle:"full"}:rawDay0;
   const isBeforeProgramStart=!!(profile?.program_start&&tabDate<profile.program_start);
   const isPastUndone=tabDate<todayKey()&&!isDayDone;
   // Le programme est une SEQUENCE de 60 seances, pas un calendrier. Une seance non faite
@@ -4746,7 +4747,7 @@ export default function SomaApp() {
       const d=viewSchedule[k]||PROGRAM[k];
       // Le creneau d'aujourd'hui ne compte que s'il reste a faire.
       const date=programDate(k,Math.floor(abs/7));
-      if(abs===ti){ if(d&&d.salle&&!sessions.some(x=>x.date===date)) n++; }
+      if(abs===ti){ if((d&&d.salle||isPostponedToday)&&!sessions.some(x=>x.date===date)) n++; }
       else if(d&&d.salle) n++;
     }
     return n;
@@ -4800,7 +4801,7 @@ export default function SomaApp() {
     const trBeforeStart=!!(profile?.program_start&&trDate<profile.program_start);
     if(trBeforeStart) return {...REST_TPL,day:trRaw?.day};
     // Meme regle que l'onglet Seance : un jour desactive n'a pas de seance.
-    const postponed=injuryReports.some(r=>r&&r.to===trDate&&!r.completed_at);
+    const postponed=injuryReports.some(r=>r&&!r.completed_at&&r.to&&r.to<=trDate)&&!sessions.some(s=>s.date===trDate);
     const trDay=postponed?{...trRaw,salle:"full"}:trRaw;
     if(!trDay?.salle||programDone||!pendingTemplate) return trDay;
     let c={...pendingTemplate,day:trDay.day};
