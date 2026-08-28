@@ -209,7 +209,7 @@ const resolveDay = ({rawDay, doneDay, beforeStart, past, queueSession}) => {
 const SESSION_TEMPLATES = [...PROGRAM.filter(d=>d.salle).map(d=>({label:d.label,salle:d.salle,muscle:d.muscle,exercises:d.exercises,abs:d.abs,ids:d.ids})), REST_TPL];
 
 // Rotation hebdo - mesocycle hybride (Volume -> Intensite -> Puissance -> Deload)
-const VERSION="5.5.1";
+const VERSION="5.5.2";
 const weekNumber = () => { const dt=new Date(); const d=new Date(Date.UTC(dt.getFullYear(),dt.getMonth(),dt.getDate())); const dn=(d.getUTCDay()+6)%7; d.setUTCDate(d.getUTCDate()-dn+3); const ft=new Date(Date.UTC(d.getUTCFullYear(),0,4)); const fn=(ft.getUTCDay()+6)%7; ft.setUTCDate(ft.getUTCDate()-fn+3); return 1+Math.round((d-ft)/604800000); };
 const PHASES12=[{n:"Accumulation",f:"Volume, base"},{n:"Accumulation",f:"Volume"},{n:"Accumulation",f:"Volume +"},{n:"Intensification",f:"Charges +"},{n:"Intensification",f:"Charges ++"},{n:"Intensification",f:"Lourd"},{n:"Réalisation",f:"Explosif"},{n:"Réalisation",f:"Puissance"},{n:"Réalisation",f:"Pic de force"},{n:"Deload",f:"Récupération"},{n:"Test / PR",f:"Validation"},{n:"Test / PR",f:"Nouveaux maxs"}];
 const programWeek=()=>((weekNumber()-1)%12)+1;
@@ -654,7 +654,16 @@ const audioCtx=()=>{
     return SOUND.ctx;
   }catch(_e){ return null; }
 };
-const unlockAudio=()=>{ const c=audioCtx(); if(c&&c.state==="suspended") c.resume(); };
+// Le démarrage d'un circuit est le geste utilisateur fiable qui autorise l'audio
+// sur iOS/Android. On attend réellement la reprise avant de déclencher un son ;
+// auparavant une note très brève pouvait se terminer alors que le contexte venait
+// seulement de sortir de "suspended".
+const unlockAudio=async()=>{
+  const c=audioCtx();
+  if(!c) return null;
+  try{ if(c.state==="suspended") await c.resume(); }catch(_e){}
+  return c.state==="running"?c:null;
+};
 
 const tone=(f,t0,d,g,type)=>{
   const c=audioCtx(); if(!c) return;
@@ -682,10 +691,13 @@ const SFX={
 };
 
 const play=(name,arg)=>{ if(!SOUND.enabled) return;
-  // Une reprise ratee laissait le contexte suspendu pour toute la seance :
-  // on la retente a chaque son plutot qu'une seule fois au demarrage.
-  try{ const c=audioCtx(); if(c&&c.state==="suspended") c.resume(); }catch(_e){}
-  try{ if(SFX[name]) SFX[name](arg); }catch(_e){} };
+  const fire=()=>{ try{ if(SFX[name]) SFX[name](arg); }catch(_e){} };
+  const c=audioCtx(); if(!c) return;
+  // Hors geste utilisateur on ne peut pas forcer iOS à autoriser le contexte,
+  // mais quand une reprise est encore possible on joue APRES sa résolution.
+  if(c.state==="suspended"){ c.resume().then(()=>{if(c.state==="running") fire();}).catch(()=>{}); return; }
+  if(c.state==="running") fire();
+};
 const buzz=(ms)=>{ if(!SOUND.vibrate) return; try{ navigator.vibrate&&navigator.vibrate(ms); }catch(_e){} };
 // Fin de repos : son + vibration, pour le cas ou le telephone est en poche ou en silencieux.
 const signalRestOver=()=>{ play("cloche"); buzz([90,60,90]); };
@@ -1382,16 +1394,27 @@ function CircuitPlayer({mode,exos,onClose,defMin,blocks,onAllDone,startBlock,log
   // qui s'y trouvaient (bip ET enregistrement d'occurrence) etaient joues deux fois sous
   // React StrictMode, ce qui pouvait compter une minute EMOM en double.
   const elRef=useRef(0);
+  const startedAtRef=useRef(null);
   const startTimer=()=>{
     if(running||total<=0)return;
+    // Le timer de circuit doit suivre l'horloge réelle, pas le nombre de ticks.
+    // Ainsi une minute EMOM passe bien à l'exercice suivant même si le navigateur
+    // ralentit un intervalle (écran verrouillé, économie d'énergie, arrière-plan).
+    unlockAudio(); play("top"); buzz(30);
     setRunning(true); elRef.current=elapsed; lastMin.current=Math.floor(elapsed/60);
+    startedAtRef.current=Date.now()-elapsed*1000;
     const tt=total,isEmom=kind==="emom";
     ref.current=setInterval(()=>{
-      const n=elRef.current+1; elRef.current=n;
+      const n=Math.min(tt,Math.floor((Date.now()-(startedAtRef.current||Date.now()))/1000));
+      if(n<=elRef.current) return;
+      elRef.current=n;
       if(isEmom){
         const cm=Math.floor(n/60);
         if(cm!==lastMin.current&&n<tt){
-          logOccurrence(cexos.length?cexos[lastMin.current%cexos.length]:null);
+          // Si le navigateur a sauté plusieurs ticks, on conserve chaque minute
+          // écoulée dans le log au lieu d'en perdre une arbitrairement.
+          for(let minute=lastMin.current;minute<cm;minute++)
+            logOccurrence(cexos.length?cexos[minute%cexos.length]:null);
           lastMin.current=cm; play("top"); buzz(60);
         }
       }
@@ -1404,7 +1427,7 @@ function CircuitPlayer({mode,exos,onClose,defMin,blocks,onAllDone,startBlock,log
     },1000);
   };
   const pause=()=>{clearInterval(ref.current);setRunning(false);};
-  const reset=()=>{clearInterval(ref.current);setRunning(false);setElapsed(0);elRef.current=0;setRounds(0);lastMin.current=0;};
+  const reset=()=>{clearInterval(ref.current);setRunning(false);setElapsed(0);elRef.current=0;startedAtRef.current=null;setRounds(0);lastMin.current=0;};
   const remaining=Math.max(0,total-elapsed);
   const done=total>0&&elapsed>=total;
   const curMin=Math.min(durMin,Math.floor(elapsed/60)+1);
@@ -5374,7 +5397,7 @@ const NAV=[{id:"home",l:"Accueil"},{id:"seance",l:"Séances"},{id:"stats",l:"Sta
       })()}
       {supBlock&&<CircuitPlayer mode={supBlock.kind} exos={supBlock.exercises} blocks={[supBlock]} defMin={supBlock.defMin} blockNo={supBlock.no} blockCount={supBlock.total} onClose={()=>setSupBlock(null)} onAllDone={()=>{}} log={log} onLogSet={saveLog} sDate={sDate}/>}
       {showCircuit&&sessionMode!=="classique"&&exos.length>0&&(
-        <CircuitPlayer mode={sessionMode} exos={exos} blocks={day.blocks} defMin={sessionMode==="amrap"?(day.timeCapMin||12):(day.emomMinutes||Math.max(exos.length,8))} onClose={()=>setShowCircuit(false)} onAllDone={()=>{clock.stop();handleFeedbackSave({global:3,energy:3,notes:"",autoCompleted:true});}} startBlock={circuitStart} log={log} onLogSet={saveLog} sDate={sDate}/>
+        <CircuitPlayer mode={sessionMode} exos={exos} blocks={day.blocks} defMin={sessionMode==="amrap"?(day.timeCapMin||12):(day.emomMinutes||Math.max(exos.length,8))} onClose={()=>setShowCircuit(false)} onAllDone={()=>{clock.stop();setShowFeedback(true);}} startBlock={circuitStart} log={log} onLogSet={saveLog} sDate={sDate}/>
       )}
 
       {/* BOTTOM NAV */}
