@@ -209,7 +209,7 @@ const resolveDay = ({rawDay, doneDay, beforeStart, past, queueSession}) => {
 const SESSION_TEMPLATES = [...PROGRAM.filter(d=>d.salle).map(d=>({label:d.label,salle:d.salle,muscle:d.muscle,exercises:d.exercises,abs:d.abs,ids:d.ids})), REST_TPL];
 
 // Rotation hebdo - mesocycle hybride (Volume -> Intensite -> Puissance -> Deload)
-const VERSION="5.5.2";
+const VERSION="5.5.3";
 const weekNumber = () => { const dt=new Date(); const d=new Date(Date.UTC(dt.getFullYear(),dt.getMonth(),dt.getDate())); const dn=(d.getUTCDay()+6)%7; d.setUTCDate(d.getUTCDate()-dn+3); const ft=new Date(Date.UTC(d.getUTCFullYear(),0,4)); const fn=(ft.getUTCDay()+6)%7; ft.setUTCDate(ft.getUTCDate()-fn+3); return 1+Math.round((d-ft)/604800000); };
 const PHASES12=[{n:"Accumulation",f:"Volume, base"},{n:"Accumulation",f:"Volume"},{n:"Accumulation",f:"Volume +"},{n:"Intensification",f:"Charges +"},{n:"Intensification",f:"Charges ++"},{n:"Intensification",f:"Lourd"},{n:"Réalisation",f:"Explosif"},{n:"Réalisation",f:"Puissance"},{n:"Réalisation",f:"Pic de force"},{n:"Deload",f:"Récupération"},{n:"Test / PR",f:"Validation"},{n:"Test / PR",f:"Nouveaux maxs"}];
 const programWeek=()=>((weekNumber()-1)%12)+1;
@@ -1369,6 +1369,7 @@ function CircuitPlayer({mode,exos,onClose,defMin,blocks,onAllDone,startBlock,log
   };
   const durMin=cur.durationMin||defMin||(kind==="amrap"?12:Math.max(cexos.length,8));
   const total=durMin*60;
+  const timerKey=`${sDate}__circuit_timer`;
   const supTours=cur.tours||(cexos[0]&&cexos[0].groupTours)||(cexos[0]&&cexos[0].sets)||4;
   useEffect(()=>()=>{clearInterval(ref.current);clearInterval(restRef.current);},[]);
   useEffect(()=>{
@@ -1395,14 +1396,20 @@ function CircuitPlayer({mode,exos,onClose,defMin,blocks,onAllDone,startBlock,log
   // React StrictMode, ce qui pouvait compter une minute EMOM en double.
   const elRef=useRef(0);
   const startedAtRef=useRef(null);
-  const startTimer=()=>{
+  const runningRef=useRef(false);
+  const persistTimer=(state)=>{
+    if(!onLogSet||!sDate) return;
+    onLogSet(timerKey,{kind:"circuit_timer",block:bi,...state,date:sDate});
+  };
+  const startTimer=(resumeStartedAt=null,resumeElapsed=elapsed)=>{
     if(running||total<=0)return;
     // Le timer de circuit doit suivre l'horloge réelle, pas le nombre de ticks.
     // Ainsi une minute EMOM passe bien à l'exercice suivant même si le navigateur
     // ralentit un intervalle (écran verrouillé, économie d'énergie, arrière-plan).
     unlockAudio(); play("top"); buzz(30);
-    setRunning(true); elRef.current=elapsed; lastMin.current=Math.floor(elapsed/60);
-    startedAtRef.current=Date.now()-elapsed*1000;
+    setRunning(true); runningRef.current=true; elRef.current=resumeElapsed; lastMin.current=Math.floor(resumeElapsed/60);
+    startedAtRef.current=resumeStartedAt||Date.now()-resumeElapsed*1000;
+    persistTimer({startedAt:startedAtRef.current,running:true});
     const tt=total,isEmom=kind==="emom";
     ref.current=setInterval(()=>{
       const n=Math.min(tt,Math.floor((Date.now()-(startedAtRef.current||Date.now()))/1000));
@@ -1421,13 +1428,23 @@ function CircuitPlayer({mode,exos,onClose,defMin,blocks,onAllDone,startBlock,log
       if(n>=tt){
         clearInterval(ref.current);
         if(isEmom&&cexos.length) logOccurrence(cexos[lastMin.current%cexos.length]);
-        signalBlockOver(); setRunning(false); setElapsed(tt); setTimeout(()=>finishBlock(),900); return;
+        signalBlockOver(); runningRef.current=false; setRunning(false); persistTimer({elapsed:tt,running:false,completed:true}); setElapsed(tt); setTimeout(()=>finishBlock(),900); return;
       }
       setElapsed(n);
     },1000);
   };
-  const pause=()=>{clearInterval(ref.current);setRunning(false);};
-  const reset=()=>{clearInterval(ref.current);setRunning(false);setElapsed(0);elRef.current=0;startedAtRef.current=null;setRounds(0);lastMin.current=0;};
+  const pause=()=>{clearInterval(ref.current);runningRef.current=false;setRunning(false);persistTimer({elapsed:elRef.current,running:false});};
+  const reset=()=>{clearInterval(ref.current);runningRef.current=false;setRunning(false);setElapsed(0);elRef.current=0;startedAtRef.current=null;persistTimer({elapsed:0,running:false});setRounds(0);lastMin.current=0;};
+  // Le lecteur peut être fermé sans pause. À sa réouverture, la date de début
+  // sauvegardée recalcule la minute EMOM courante : aucun chrono ne se fige.
+  useEffect(()=>{
+    const saved=log&&log[timerKey];
+    if(!saved||saved.kind!=="circuit_timer"||saved.block!==bi||!saved.running||!saved.startedAt) return;
+    const recovered=Math.min(total,Math.max(0,Math.floor((Date.now()-Number(saved.startedAt))/1000)));
+    if(recovered>=total){ setElapsed(total); elRef.current=total; lastMin.current=Math.floor(total/60); setDebrief(true); return; }
+    setElapsed(recovered); elRef.current=recovered; lastMin.current=Math.floor(recovered/60);
+    startTimer(Number(saved.startedAt),recovered);
+  },[bi]);
   const remaining=Math.max(0,total-elapsed);
   const done=total>0&&elapsed>=total;
   const curMin=Math.min(durMin,Math.floor(elapsed/60)+1);
