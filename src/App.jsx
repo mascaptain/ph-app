@@ -209,7 +209,7 @@ const resolveDay = ({rawDay, doneDay, beforeStart, past, queueSession}) => {
 const SESSION_TEMPLATES = [...PROGRAM.filter(d=>d.salle).map(d=>({label:d.label,salle:d.salle,muscle:d.muscle,exercises:d.exercises,abs:d.abs,ids:d.ids})), REST_TPL];
 
 // Rotation hebdo - mesocycle hybride (Volume -> Intensite -> Puissance -> Deload)
-const VERSION="5.5.3";
+const VERSION="5.5.4";
 const weekNumber = () => { const dt=new Date(); const d=new Date(Date.UTC(dt.getFullYear(),dt.getMonth(),dt.getDate())); const dn=(d.getUTCDay()+6)%7; d.setUTCDate(d.getUTCDate()-dn+3); const ft=new Date(Date.UTC(d.getUTCFullYear(),0,4)); const fn=(ft.getUTCDay()+6)%7; ft.setUTCDate(ft.getUTCDate()-fn+3); return 1+Math.round((d-ft)/604800000); };
 const PHASES12=[{n:"Accumulation",f:"Volume, base"},{n:"Accumulation",f:"Volume"},{n:"Accumulation",f:"Volume +"},{n:"Intensification",f:"Charges +"},{n:"Intensification",f:"Charges ++"},{n:"Intensification",f:"Lourd"},{n:"Réalisation",f:"Explosif"},{n:"Réalisation",f:"Puissance"},{n:"Réalisation",f:"Pic de force"},{n:"Deload",f:"Récupération"},{n:"Test / PR",f:"Validation"},{n:"Test / PR",f:"Nouveaux maxs"}];
 const programWeek=()=>((weekNumber()-1)%12)+1;
@@ -572,8 +572,13 @@ const programDate = (dIdx,weekOffset=0) => {
   return localDateKey(d);
 };
 const todayIdx = () => { const d=new Date().getDay(); return d===0?6:d-1; };
-const fmtMSS = s => `${String(Math.floor(s/60)).padStart(2,"0")}:${String(s%60).padStart(2,"0")}`;
-const fmtDur = s => s>=3600?`${Math.floor(s/3600)}h${String(Math.floor((s%3600)/60)).padStart(2,"0")}m`:`${Math.floor(s/60)}m${String(s%60).padStart(2,"0")}s`;
+// Les états de timer peuvent venir d'une ancienne session : aucun ne doit propager NaN dans l'UI.
+const safeSeconds = (value, fallback=0) => {
+  const n=Number(value);
+  return Number.isFinite(n) ? Math.max(0,Math.floor(n)) : fallback;
+};
+const fmtMSS = s => { const v=safeSeconds(s); return `${String(Math.floor(v/60)).padStart(2,"0")}:${String(v%60).padStart(2,"0")}`; };
+const fmtDur = s => { const v=safeSeconds(s); return v>=3600?`${Math.floor(v/3600)}h${String(Math.floor((v%3600)/60)).padStart(2,"0")}m`:`${Math.floor(v/60)}m${String(v%60).padStart(2,"0")}s`; };
 const orm = (kg,reps) => kg>0?Math.round(kg*(1+(parseFloat(String(reps).split("–")[0])||8)/30)):null;
 
 // ─── FILE D'ATTENTE DES ECRITURES ───────────────────────────────────────────
@@ -1359,7 +1364,7 @@ function CircuitPlayer({mode,exos,onClose,defMin,blocks,onAllDone,startBlock,log
   const [si,setSi]=useState(0);
   const [stour,setStour]=useState(1);
   const [resting,setResting]=useState(0);
-  const ref=useRef(null); const lastMin=useRef(0); const restRef=useRef(null);
+  const ref=useRef(null); const lastMin=useRef(0); const restRef=useRef(null); const restEndRef=useRef(null);
   const occRef=useRef({});
   const logOccurrence=(ex)=>{
     if(!ex||!onLogSet||!sDate) return;
@@ -1367,8 +1372,8 @@ function CircuitPlayer({mode,exos,onClose,defMin,blocks,onAllDone,startBlock,log
     occRef.current[ex.id]=cnt+1;
     onLogSet(`${sDate}_${ex.id}_s${cnt}`,{done:true,weight:ex.kg||0,reps:Number(String(ex.reps||"0").replace(/\D+/g,""))||0,date:sDate});
   };
-  const durMin=cur.durationMin||defMin||(kind==="amrap"?12:Math.max(cexos.length,8));
-  const total=durMin*60;
+  const durMin=Math.max(1,safeSeconds(cur.durationMin||defMin||(kind==="amrap"?12:Math.max(cexos.length,8))));
+  const total=safeSeconds(durMin*60);
   const timerKey=`${sDate}__circuit_timer`;
   const supTours=cur.tours||(cexos[0]&&cexos[0].groupTours)||(cexos[0]&&cexos[0].sets)||4;
   useEffect(()=>()=>{clearInterval(ref.current);clearInterval(restRef.current);},[]);
@@ -1407,12 +1412,15 @@ function CircuitPlayer({mode,exos,onClose,defMin,blocks,onAllDone,startBlock,log
     // Ainsi une minute EMOM passe bien à l'exercice suivant même si le navigateur
     // ralentit un intervalle (écran verrouillé, économie d'énergie, arrière-plan).
     unlockAudio(); play("top"); buzz(30);
-    setRunning(true); runningRef.current=true; elRef.current=resumeElapsed; lastMin.current=Math.floor(resumeElapsed/60);
-    startedAtRef.current=resumeStartedAt||Date.now()-resumeElapsed*1000;
+    const safeElapsed=Math.min(total,safeSeconds(resumeElapsed));
+    const savedStart=Number(resumeStartedAt);
+    const startAt=Number.isFinite(savedStart)&&savedStart>0?savedStart:Date.now()-safeElapsed*1000;
+    setRunning(true); runningRef.current=true; elRef.current=safeElapsed; lastMin.current=Math.floor(safeElapsed/60);
+    startedAtRef.current=startAt;
     persistTimer({startedAt:startedAtRef.current,running:true});
     const tt=total,isEmom=kind==="emom";
     ref.current=setInterval(()=>{
-      const n=Math.min(tt,Math.floor((Date.now()-(startedAtRef.current||Date.now()))/1000));
+      const n=Math.min(tt,safeSeconds((Date.now()-(Number(startedAtRef.current)||Date.now()))/1000));
       if(n<=elRef.current) return;
       elRef.current=n;
       if(isEmom){
@@ -1439,23 +1447,35 @@ function CircuitPlayer({mode,exos,onClose,defMin,blocks,onAllDone,startBlock,log
   // sauvegardée recalcule la minute EMOM courante : aucun chrono ne se fige.
   useEffect(()=>{
     const saved=log&&log[timerKey];
-    if(!saved||saved.kind!=="circuit_timer"||saved.block!==bi||!saved.running||!saved.startedAt) return;
-    const recovered=Math.min(total,Math.max(0,Math.floor((Date.now()-Number(saved.startedAt))/1000)));
+    if(!saved||saved.kind!=="circuit_timer"||saved.block!==bi) return;
+    if(saved.phase==="rest"&&saved.restEndAt){
+      const endAt=Number(saved.restEndAt);
+      if(Number.isFinite(endAt)&&endAt>Date.now()) startRest(Math.ceil((endAt-Date.now())/1000),endAt);
+      return;
+    }
+    if(!saved.running) return;
+    const startedAt=Number(saved.startedAt);
+    if(!Number.isFinite(startedAt)||startedAt<=0){ persistTimer({elapsed:0,running:false,invalid:true}); return; }
+    const recovered=Math.min(total,safeSeconds((Date.now()-startedAt)/1000));
     if(recovered>=total){ setElapsed(total); elRef.current=total; lastMin.current=Math.floor(total/60); setDebrief(true); return; }
     setElapsed(recovered); elRef.current=recovered; lastMin.current=Math.floor(recovered/60);
-    startTimer(Number(saved.startedAt),recovered);
+    startTimer(startedAt,recovered);
   },[bi]);
-  const remaining=Math.max(0,total-elapsed);
-  const done=total>0&&elapsed>=total;
-  const curMin=Math.min(durMin,Math.floor(elapsed/60)+1);
-  const secInMin=done?0:60-(elapsed%60);
+  const safeElapsed=Math.min(total,safeSeconds(elapsed));
+  const remaining=Math.max(0,total-safeElapsed);
+  const done=total>0&&safeElapsed>=total;
+  const curMin=Math.min(durMin,Math.floor(safeElapsed/60)+1);
+  const secInMin=done?0:60-(safeElapsed%60);
   const emomEx=cexos.length?cexos[(curMin-1)%cexos.length]:null;
   const restLeft=useRef(0);
-  const startRest=()=>{
-    const rs=cur.restSec||90;
-    clearInterval(restRef.current); setResting(rs); restLeft.current=rs;
+  const startRest=(seconds=cur.restSec||90,resumeEndAt=null)=>{
+    const rs=Math.max(1,safeSeconds(seconds,90));
+    const savedEnd=Number(resumeEndAt);
+    restEndRef.current=Number.isFinite(savedEnd)&&savedEnd>Date.now()?savedEnd:Date.now()+rs*1000;
+    clearInterval(restRef.current); setResting(Math.max(1,Math.ceil((restEndRef.current-Date.now())/1000))); restLeft.current=rs;
+    persistTimer({phase:"rest",restEndAt:restEndRef.current,running:false});
     restRef.current=setInterval(()=>{
-      const nx=restLeft.current-1; restLeft.current=nx;
+      const nx=Math.max(0,Math.ceil((restEndRef.current-Date.now())/1000)); restLeft.current=nx;
       if(nx<=0){clearInterval(restRef.current);setResting(0);signalRestOver();return;}
       signalCountdown(nx); setResting(nx);
     },1000);
@@ -1484,12 +1504,12 @@ function CircuitPlayer({mode,exos,onClose,defMin,blocks,onAllDone,startBlock,log
   // L'ancienne liste de tous les exercices du bloc obligeait a chercher sa ligne en plein
   // effort, et ses cases a cocher n'etaient qu'un decor : elles n'ecrivaient rien.
   const RING=54,CIRC=2*Math.PI*RING;
-  const Ring=({pct,value,label})=>(
+  const Ring=({pct,value,label})=>{const safePct=Number.isFinite(Number(pct))?Math.max(0,Math.min(1,Number(pct))):0;return(
     <div style={{position:"relative",width:158,height:158,margin:"0 auto"}}>
       <svg width="158" height="158" viewBox="0 0 132 132" style={{transform:"rotate(-90deg)"}}>
         <circle cx="66" cy="66" r={RING} fill="none" stroke={C.s2} strokeWidth="9"/>
         <circle cx="66" cy="66" r={RING} fill="none" stroke={C.done} strokeWidth="9" strokeLinecap="round"
-          strokeDasharray={CIRC} strokeDashoffset={CIRC*(1-Math.max(0,Math.min(1,pct)))}
+          strokeDasharray={CIRC} strokeDashoffset={CIRC*(1-safePct)}
           style={{transition:`stroke-dashoffset 900ms linear`}}/>
       </svg>
       <div style={{position:"absolute",inset:0,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:3}}>
@@ -1497,10 +1517,10 @@ function CircuitPlayer({mode,exos,onClose,defMin,blocks,onAllDone,startBlock,log
         <span style={{fontSize:11.5,fontWeight:600,color:C.ink4,textTransform:"uppercase",letterSpacing:".1em"}}>{label}</span>
       </div>
     </div>
-  );
+  );};
   const TourBar=({d,t})=>(
     <div style={{display:"flex",gap:5}}>
-      {Array.from({length:Math.max(1,t)},(_,i)=>(
+      {Array.from({length:Math.max(1,safeSeconds(t,1))},(_,i)=>(
         <div key={i} style={{flex:1,height:5,borderRadius:3,background:i<d?C.done:C.s3,transition:`background 200ms ${EO}`}}/>
       ))}
     </div>
@@ -1531,7 +1551,7 @@ function CircuitPlayer({mode,exos,onClose,defMin,blocks,onAllDone,startBlock,log
       <span style={{fontSize:15,fontWeight:600,color:fg||(bg===C.done?C.onDark:C.onAccent)}}>{label}</span>
     </Tap>
   );
-  const skipRest=()=>{clearInterval(restRef.current);setResting(0);};
+  const skipRest=()=>{clearInterval(restRef.current);restEndRef.current=null;persistTimer({phase:"rest",running:false,completed:true});setResting(0);};
   const WRAP={padding:"4px 20px 8px",width:"100%",display:"flex",flexDirection:"column",gap:20};
   const BAR={display:"flex",gap:10,padding:"12px 20px calc(12px + env(safe-area-inset-bottom))",flexShrink:0};
 
@@ -4813,7 +4833,7 @@ export default function SomaApp() {
       const blocks=[block,...support];
       const workMin=blocks.reduce((sum,b)=>sum+(Number(b.durationMin)||0),0);
       setHeroOverride({key:sessionIndex+queueOffset(dayIdx),day:{
-        label:`Hero · ${h.name}`,short:"HERO",muscle:h.tribute,salle:"full",warmupFocus:"full",exercises:blocks.flatMap(b=>b.exercises),
+        label:"Hero - Corps entier",short:"HERO",muscle:h.tribute,salle:"full",warmupFocus:"full",exercises:blocks.flatMap(b=>b.exercises),
         abs:[{id:"ab03",n:"Hollow Body Hold",vol:"3×30s"},{id:"bw09",n:"L-Sit",vol:"3×20s"}],warmupMin:5,coreMin:6,
         recommendedMode:h.kind==="amrap"?"amrap":"classique",metcon:true,totalMin:workMin+11,minSessionMin:45,timeCapMin:workMin,
         emomMinutes:workMin,badge:"2 Hero",hero:h.id,heroName:h.name,archetype:"hero",v5:true,blocks,
