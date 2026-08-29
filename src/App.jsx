@@ -209,7 +209,7 @@ const resolveDay = ({rawDay, doneDay, beforeStart, past, queueSession}) => {
 const SESSION_TEMPLATES = [...PROGRAM.filter(d=>d.salle).map(d=>({label:d.label,salle:d.salle,muscle:d.muscle,exercises:d.exercises,abs:d.abs,ids:d.ids})), REST_TPL];
 
 // Rotation hebdo - mesocycle hybride (Volume -> Intensite -> Puissance -> Deload)
-const VERSION="5.5.5";
+const VERSION="5.5.6";
 const weekNumber = () => { const dt=new Date(); const d=new Date(Date.UTC(dt.getFullYear(),dt.getMonth(),dt.getDate())); const dn=(d.getUTCDay()+6)%7; d.setUTCDate(d.getUTCDate()-dn+3); const ft=new Date(Date.UTC(d.getUTCFullYear(),0,4)); const fn=(ft.getUTCDay()+6)%7; ft.setUTCDate(ft.getUTCDate()-fn+3); return 1+Math.round((d-ft)/604800000); };
 const PHASES12=[{n:"Accumulation",f:"Volume, base"},{n:"Accumulation",f:"Volume"},{n:"Accumulation",f:"Volume +"},{n:"Intensification",f:"Charges +"},{n:"Intensification",f:"Charges ++"},{n:"Intensification",f:"Lourd"},{n:"Réalisation",f:"Explosif"},{n:"Réalisation",f:"Puissance"},{n:"Réalisation",f:"Pic de force"},{n:"Deload",f:"Récupération"},{n:"Test / PR",f:"Validation"},{n:"Test / PR",f:"Nouveaux maxs"}];
 const programWeek=()=>((weekNumber()-1)%12)+1;
@@ -686,7 +686,7 @@ const SFX={
   // Fin de repos : le seul moment ou l'ecran n'est pas regarde. Doit porter.
   cloche:()=>{[0,.16,.32].forEach(t=>tone(1046,t,0.16,0.22,"sine"));},
   // Decompte 3-2-1 : un clic par seconde, montant, pour se remettre en position.
-  tick:(i)=>{tone([660,740,830][i]||830,0,0.09,0.18,"triangle");},
+  tick:(i)=>{tone([520,590,660,740,830][i]||830,0,0.09,0.18,"triangle");},
   // Minute EMOM : revient toutes les 60 s, donc volontairement bref et neutre.
   top:()=>{tone(880,0,0.07,0.20,"triangle");},
   // Fin de bloc / cap AMRAP : grave et long, aucune confusion avec le top de minute.
@@ -707,8 +707,8 @@ const buzz=(ms)=>{ if(!SOUND.vibrate) return; try{ navigator.vibrate&&navigator.
 // Fin de repos : son + vibration, pour le cas ou le telephone est en poche ou en silencieux.
 const signalRestOver=()=>{ play("cloche"); buzz([90,60,90]); };
 const signalBlockOver=()=>{ play("gong"); buzz([180,80,180]); };
-// Egrene le decompte des trois dernieres secondes d'un repos.
-const signalCountdown=(remaining)=>{ if(!SOUND.countdown) return; if(remaining>=1&&remaining<=3){ play("tick",3-remaining); buzz(35); } };
+// Cinq secondes de préparation avant toute relance : repos, minute EMOM ou changement AMRAP.
+const signalCountdown=(remaining)=>{ if(!SOUND.countdown) return; if(remaining>=1&&remaining<=5){ play("tick",5-remaining); buzz(35); } };
 
 // ─── HOOKS ───────────────────────────────────────────────────────────────────
 // Chrono de seance base sur des TIMESTAMPS, jamais sur un compteur de ticks.
@@ -1364,7 +1364,7 @@ function CircuitPlayer({mode,exos,onClose,defMin,blocks,onAllDone,startBlock,log
   const [si,setSi]=useState(0);
   const [stour,setStour]=useState(1);
   const [resting,setResting]=useState(0);
-  const ref=useRef(null); const lastMin=useRef(0); const restRef=useRef(null); const restEndRef=useRef(null); const recoveryRef=useRef("");
+  const ref=useRef(null); const lastMin=useRef(0); const lastStep=useRef(0); const restRef=useRef(null); const restEndRef=useRef(null); const recoveryRef=useRef("");
   const occRef=useRef({});
   const logOccurrence=(ex)=>{
     if(!ex||!onLogSet||!sDate) return;
@@ -1418,24 +1418,33 @@ function CircuitPlayer({mode,exos,onClose,defMin,blocks,onAllDone,startBlock,log
     setRunning(true); runningRef.current=true; elRef.current=safeElapsed; lastMin.current=Math.floor(safeElapsed/60);
     startedAtRef.current=startAt;
     persistTimer({startedAt:startedAtRef.current,running:true});
-    const tt=total,isEmom=kind==="emom";
+    const tt=total,isEmom=kind==="emom",isAmrap=kind==="amrap";
+    // Un AMRAP SOMA est guidé : sans toucher l'écran, les mouvements défilent
+    // à cadence régulière et le tour suivant commence automatiquement.
+    const cadence=isEmom?60:isAmrap?Math.max(10,safeSeconds(cur.exerciseSec,Math.floor(60/Math.max(1,cexos.length)))):0;
+    lastStep.current=cadence?Math.floor(safeElapsed/cadence):0;
+    if(isAmrap&&cexos.length){ setSi(lastStep.current%cexos.length); setRounds(Math.floor(lastStep.current/cexos.length)); }
     ref.current=setInterval(()=>{
       const n=Math.min(tt,safeSeconds((Date.now()-(Number(startedAtRef.current)||Date.now()))/1000));
       if(n<=elRef.current) return;
       elRef.current=n;
-      if(isEmom){
-        const cm=Math.floor(n/60);
-        if(cm!==lastMin.current&&n<tt){
+      if(cadence){
+        const step=Math.floor(n/cadence);
+        const untilChange=cadence-(n%cadence);
+        if(n<tt&&untilChange>=1&&untilChange<=5) signalCountdown(untilChange);
+        if(step!==lastStep.current&&n<tt){
           // Si le navigateur a sauté plusieurs ticks, on conserve chaque minute
-          // écoulée dans le log au lieu d'en perdre une arbitrairement.
-          for(let minute=lastMin.current;minute<cm;minute++)
-            logOccurrence(cexos.length?cexos[minute%cexos.length]:null);
-          lastMin.current=cm; play("top"); buzz(60);
+          // ou chaque créneau AMRAP écoulé dans le log au lieu d'en perdre un.
+          for(let completed=lastStep.current;completed<step;completed++)
+            logOccurrence(cexos.length?cexos[completed%cexos.length]:null);
+          lastStep.current=step; lastMin.current=Math.floor(n/60);
+          if(isAmrap){ setSi(cexos.length?step%cexos.length:0); setRounds(cexos.length?Math.floor(step/cexos.length):0); }
+          play("top"); buzz(60);
         }
       }
       if(n>=tt){
         clearInterval(ref.current);
-        if(isEmom&&cexos.length) logOccurrence(cexos[lastMin.current%cexos.length]);
+        if((isEmom||isAmrap)&&cexos.length) logOccurrence(cexos[lastStep.current%cexos.length]);
         signalBlockOver(); runningRef.current=false; setRunning(false); persistTimer({elapsed:tt,running:false,completed:true}); setElapsed(tt); setTimeout(()=>finishBlock(),900); return;
       }
       setElapsed(n);
@@ -1484,11 +1493,6 @@ function CircuitPlayer({mode,exos,onClose,defMin,blocks,onAllDone,startBlock,log
       if(nx<=0){clearInterval(restRef.current);setResting(0);signalRestOver();return;}
       signalCountdown(nx); setResting(nx);
     },1000);
-  };
-  const validateAmrap=()=>{
-    if(!running||done) return;
-    logOccurrence(cexos[si]);
-    if(si<cexos.length-1){ setSi(si+1); } else { setSi(0); setRounds(r=>r+1); }
   };
   const validateSup=()=>{if(resting>0)return;logOccurrence(cexos[si]);if(si<cexos.length-1){setSi(si+1);}else{setSi(0);if(stour>=supTours){finishBlock();}else{setStour(stour+1);startRest();}}};
   // Meme grammaire d'en-tete que l'ecran d'exercice : retour a gauche, intitule au centre,
@@ -1586,11 +1590,13 @@ function CircuitPlayer({mode,exos,onClose,defMin,blocks,onAllDone,startBlock,log
     </div>);
   } else if(kind==="amrap"){
     const curEx=cexos[si],nextEx=cexos.length?cexos[(si+1)%cexos.length]:null;
+    const amrapCadence=Math.max(10,safeSeconds(cur.exerciseSec,Math.floor(60/Math.max(1,cexos.length))));
+    const untilNext=done?0:amrapCadence-(safeElapsed%amrapCadence);
     BODY=(<div style={WRAP}>
       <Ring pct={total>0?elapsed/total:0} value={done?"FINI":fmtMSS(remaining)} label={done?"terminé":"restant"}/>
       <div style={{textAlign:"center",fontSize:14,color:C.ink3}}>
         <span style={{fontWeight:600,color:C.ink}}>{rounds}</span> tour{rounds>1?"s":""} complet{rounds>1?"s":""}
-        {running&&!done&&si>0?` · ${si}/${cexos.length} dans le tour en cours`:""}
+        {running&&!done?` · changement automatique dans ${untilNext}s`:""}
       </div>
       {running&&!done&&<><Now ex={curEx} sub={exSub(curEx)}/><Dots n={cexos.length} at={si}/><NextUp label="Ensuite" ex={nextEx}/></>}
       {!running&&!done&&<NextUp label="Commence par" ex={cexos[si]}/>}
@@ -1599,9 +1605,7 @@ function CircuitPlayer({mode,exos,onClose,defMin,blocks,onAllDone,startBlock,log
       {running&&!done&&<Btn label="Pause" act={pause} bg={C.s2} fg={C.ink3} flex={0} />}
       {done
         ? <Btn label={lastBlock?"Terminer":"Bloc suivant"} act={finishBlock} bg={C.done}/>
-        : running
-          ? <Btn label="Fait" act={validateAmrap} bg={C.done} flex={2}/>
-          : <Btn label={elapsed>0?"Reprendre":"Démarrer le bloc"} act={startTimer}/>}
+        : <Btn label={running?"Cadence automatique":(elapsed>0?"Reprendre":"Démarrer le bloc")} act={running?undefined:startTimer} bg={running?C.s2:undefined} fg={running?C.ink3:undefined}/>}
     </div>);
   } else {
     const nextEx=cexos.length?cexos[curMin%cexos.length]:null;
