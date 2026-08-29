@@ -23,7 +23,12 @@ const firstAvailable = (ids, equipment, zones = [], excluded = []) => ids.map(fi
 // a pu laisser ["kb"] dans un profil : on ne laisse jamais cette incohérence
 // transformer le programme en écran d'erreur.
 const FULL_GYM = ["bar", "db", "kb", "mc", "cd", "bw"];
-const programEquipment = (equipment = []) => equipment.length >= 2 ? equipment : FULL_GYM;
+const programEquipment = (equipment = []) => {
+  const usable=(equipment || []).filter((eq) => FULL_GYM.includes(eq));
+  // Le cycle hybride contient du développé couché et des jambes : un ancien profil
+  // partiel ou des identifiants obsolètes ne doit jamais faire tomber l'application.
+  return usable.length >= 2 && usable.some((eq) => eq === "bar" || eq === "db" || eq === "mc") ? usable : FULL_GYM;
+};
 const round = (eq, kg) => {
   if (!(kg > 0)) return 0;
   if (eq === "kb") return [6, 8, 10, 12, 16, 20, 24, 32].reduce((best, n) => Math.abs(n - kg) < Math.abs(best - kg) ? n : best, 6);
@@ -73,16 +78,16 @@ const strengthDay = (kind, ctx, template = 0) => {
   const upper = kind === "upper";
   // Ce sont des prescriptions de microcycle, non une rotation calculée après coup.
   const upperPlans = [
-    { label: "Force · Développé couché — Intensité", reps: 4, rows: [["bw01", "mc01"], ["bb06", "x018", "db06", "mc02"], ["db03", "bb08", "x021"], ["mc12", "bb10", "db13"]] },
-    { label: "Force · Développé couché — Volume", reps: 6, rows: [["mc01", "bw01"], ["db06", "mc02", "bb06"], ["bb08", "db03", "x021"], ["bb10", "mc12", "db13"]] },
-    { label: "Force · Développé couché — Contrôle", reps: 5, rows: [["bw01", "mc01"], ["mc02", "db06", "x018"], ["x021", "db03", "bb08"], ["db13", "mc12", "bb10"]] },
-    { label: "Force · Développé couché — Consolidation", reps: 5, rows: [["mc01", "bw01"], ["bb06", "mc02", "db06"], ["db03", "x021", "bb08"], ["mc12", "db13", "bb10"]] },
+    { label: "Force - Haut du corps", reps: 4, rows: [["bw01", "mc01"], ["bb06", "x018", "db06", "mc02"], ["db03", "bb08", "x021"], ["mc12", "bb10", "db13"]] },
+    { label: "Force - Haut du corps", reps: 6, rows: [["mc01", "bw01"], ["db06", "mc02", "bb06"], ["bb08", "db03", "x021"], ["bb10", "mc12", "db13"]] },
+    { label: "Force - Haut du corps", reps: 5, rows: [["bw01", "mc01"], ["mc02", "db06", "x018"], ["x021", "db03", "bb08"], ["db13", "mc12", "bb10"]] },
+    { label: "Force - Haut du corps", reps: 5, rows: [["mc01", "bw01"], ["bb06", "mc02", "db06"], ["db03", "x021", "bb08"], ["mc12", "db13", "bb10"]] },
   ];
   const lowerPlans = [
-    { label: "Force · Jambes — Squat", main: ["bb03", "x001", "bb09"], reps: 5, rows: [["bb07", "db10"], ["mc04", "db11", "bb16"], ["mc08", "mc07"]] },
-    { label: "Force · Jambes — Charnière", main: ["bb04", "x005", "bb07"], reps: 4, rows: [["bb03", "x001", "bb09"], ["db11", "mc04", "bb16"], ["mc07", "mc08"]] },
-    { label: "Force · Jambes — Unilatéral", main: ["bb16", "db11", "bb03"], reps: 6, rows: [["bb07", "bb04", "x005"], ["mc04", "mc07"], ["mc08"]] },
-    { label: "Force · Jambes — Consolidation", main: ["bb09", "bb03", "x001"], reps: 5, rows: [["bb07", "bb04", "x005"], ["mc04", "db11"], ["mc08", "mc07"]] },
+    { label: "Force - Jambes", main: ["bb03", "x001", "bb09"], reps: 5, rows: [["bb07", "db10"], ["mc04", "db11", "bb16"], ["mc08", "mc07"]] },
+    { label: "Force - Jambes", main: ["bb04", "x005", "bb07"], reps: 4, rows: [["bb03", "x001", "bb09"], ["db11", "mc04", "bb16"], ["mc07", "mc08"]] },
+    { label: "Force - Jambes", main: ["bb16", "db11", "bb03"], reps: 6, rows: [["bb07", "bb04", "x005"], ["mc04", "mc07"], ["mc08"]] },
+    { label: "Force - Jambes", main: ["bb09", "bb03", "x001"], reps: 5, rows: [["bb07", "bb04", "x005"], ["mc04", "db11"], ["mc08", "mc07"]] },
   ];
   const plan = (upper ? upperPlans : lowerPlans)[template % 4];
   const spec = upper ? { label: plan.label, muscle: "Développé couché · Dos · Biceps · Triceps", main: ["bb01", "x012", "db01", "mc06"], rows: plan.rows, reps: plan.reps }
@@ -134,7 +139,7 @@ const kbDay = (variant, ctx, template = 0) => {
   const moves = blocks.flatMap((block) => block.exercises);
   const durationMin = blocks.reduce((sum, block) => sum + block.durationMin, 0);
   return complete({
-    label: variant === "power" ? "Kettlebell · Puissance-endurance" : "Kettlebell · Capacité de travail",
+    label: "Kettlebell - Corps entier",
     short: "KB", muscle: "Kettlebell uniquement", salle: "full", warmupFocus: "bas", exercises: moves,
     abs: [], recommendedMode: "emom", metcon: true, totalMin: durationMin, timeCapMin: durationMin,
     emomMinutes: 15, badge: "3 blocs", archetype: "kettlebell", variantKey: `${variant}-${template}`, v5: true, blocks,
@@ -172,7 +177,7 @@ const heroDay = (ctx, template = 0) => {
   const blocks = picks.map(toBlock);
   const exercises = blocks.flatMap((block) => block.exercises);
   const workMin = blocks.reduce((sum, block) => sum + block.durationMin, 0);
-  return complete({ label: `Hero · ${hero.name}`, short: "HERO", muscle: hero.tribute, salle: "full", warmupFocus: "full", exercises, abs: [],
+  return complete({ label: "Hero - Corps entier", short: "HERO", muscle: hero.tribute, salle: "full", warmupFocus: "full", exercises, abs: [],
     recommendedMode: "amrap", metcon: true, timeCapMin: workMin, emomMinutes: workMin,
     badge: `${blocks.length} Hero`, hero: hero.id, heroName: hero.name, archetype: "hero", v5: true, blocks }, workMin, template);
 };
@@ -213,7 +218,7 @@ const conditioningDay = (ctx, template = 0) => {
     return { label: spec.label, kind: spec.kind, durationMin: 15, rounds: spec.kind === "emom" ? 5 : 0, exercises };
   });
   const exercises = blocks.flatMap((block) => block.exercises);
-  return complete({ label: template === 3 ? "Conditionnement · Hybride — Consolidation" : "Conditionnement · Hybride", short: "COND · HYB", muscle: "Cardio · Charge · Poids du corps",
+  return complete({ label: "Conditionnement - Corps entier", short: "COND · HYB", muscle: "Cardio · Charge · Poids du corps",
     salle: "full", warmupFocus: "full", exercises, abs: [], recommendedMode: "amrap", metcon: true,
     timeCapMin: 45, emomMinutes: 15, badge: "3 blocs", archetype: "conditioning", variantKey: `conditioning-${template}`, v5: true, blocks }, 45, template);
 };
@@ -226,9 +231,17 @@ const upperPatterns = new Set(["push_h", "push_v", "pull_h", "pull_v", "arm_pull
 const lowerPatterns = new Set(["squat", "hinge"]);
 const fail = (message) => { throw new Error(`V5 invariant: ${message}`); };
 const names = (day) => (day.exercises || []).map((ex) => ex.n).join(" · ");
+const SESSION_NAME = {
+  strength_upper: "Force - Haut du corps",
+  strength_lower: "Force - Jambes",
+  kettlebell: "Kettlebell - Corps entier",
+  conditioning: "Conditionnement - Corps entier",
+  hero: "Hero - Corps entier",
+};
 
 const validateDay = (day, ctx) => {
   if (!day || !day.label || !day.archetype) fail("séance incomplète");
+  if (SESSION_NAME[day.archetype] && day.label !== SESSION_NAME[day.archetype]) fail(`nom de séance incohérent (${day.label})`);
   const exercises = day.exercises || [];
   if (!(day.totalMin >= MIN_SESSION_MIN) || day.minSessionMin !== MIN_SESSION_MIN) fail(`session under ${MIN_SESSION_MIN} min`);
   if (!Array.isArray(day.abs) || day.abs.length < 2) fail("session without core finisher");
