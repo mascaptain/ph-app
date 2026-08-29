@@ -209,7 +209,7 @@ const resolveDay = ({rawDay, doneDay, beforeStart, past, queueSession}) => {
 const SESSION_TEMPLATES = [...PROGRAM.filter(d=>d.salle).map(d=>({label:d.label,salle:d.salle,muscle:d.muscle,exercises:d.exercises,abs:d.abs,ids:d.ids})), REST_TPL];
 
 // Rotation hebdo - mesocycle hybride (Volume -> Intensite -> Puissance -> Deload)
-const VERSION="5.5.4";
+const VERSION="5.5.5";
 const weekNumber = () => { const dt=new Date(); const d=new Date(Date.UTC(dt.getFullYear(),dt.getMonth(),dt.getDate())); const dn=(d.getUTCDay()+6)%7; d.setUTCDate(d.getUTCDate()-dn+3); const ft=new Date(Date.UTC(d.getUTCFullYear(),0,4)); const fn=(ft.getUTCDay()+6)%7; ft.setUTCDate(ft.getUTCDate()-fn+3); return 1+Math.round((d-ft)/604800000); };
 const PHASES12=[{n:"Accumulation",f:"Volume, base"},{n:"Accumulation",f:"Volume"},{n:"Accumulation",f:"Volume +"},{n:"Intensification",f:"Charges +"},{n:"Intensification",f:"Charges ++"},{n:"Intensification",f:"Lourd"},{n:"Réalisation",f:"Explosif"},{n:"Réalisation",f:"Puissance"},{n:"Réalisation",f:"Pic de force"},{n:"Deload",f:"Récupération"},{n:"Test / PR",f:"Validation"},{n:"Test / PR",f:"Nouveaux maxs"}];
 const programWeek=()=>((weekNumber()-1)%12)+1;
@@ -1364,7 +1364,7 @@ function CircuitPlayer({mode,exos,onClose,defMin,blocks,onAllDone,startBlock,log
   const [si,setSi]=useState(0);
   const [stour,setStour]=useState(1);
   const [resting,setResting]=useState(0);
-  const ref=useRef(null); const lastMin=useRef(0); const restRef=useRef(null); const restEndRef=useRef(null);
+  const ref=useRef(null); const lastMin=useRef(0); const restRef=useRef(null); const restEndRef=useRef(null); const recoveryRef=useRef("");
   const occRef=useRef({});
   const logOccurrence=(ex)=>{
     if(!ex||!onLogSet||!sDate) return;
@@ -1448,6 +1448,11 @@ function CircuitPlayer({mode,exos,onClose,defMin,blocks,onAllDone,startBlock,log
   useEffect(()=>{
     const saved=log&&log[timerKey];
     if(!saved||saved.kind!=="circuit_timer"||saved.block!==bi) return;
+    // Le journal Supabase peut arriver après le premier rendu. On le réévalue alors,
+    // mais une même sauvegarde n'est jamais relancée à chaque re-render.
+    const recoveryKey=`${bi}:${saved.phase||"work"}:${saved.startedAt||""}:${saved.restEndAt||""}:${saved.running?1:0}`;
+    if(recoveryRef.current===recoveryKey) return;
+    recoveryRef.current=recoveryKey;
     if(saved.phase==="rest"&&saved.restEndAt){
       const endAt=Number(saved.restEndAt);
       if(Number.isFinite(endAt)&&endAt>Date.now()) startRest(Math.ceil((endAt-Date.now())/1000),endAt);
@@ -1460,7 +1465,7 @@ function CircuitPlayer({mode,exos,onClose,defMin,blocks,onAllDone,startBlock,log
     if(recovered>=total){ setElapsed(total); elRef.current=total; lastMin.current=Math.floor(total/60); setDebrief(true); return; }
     setElapsed(recovered); elRef.current=recovered; lastMin.current=Math.floor(recovered/60);
     startTimer(startedAt,recovered);
-  },[bi]);
+  },[bi,log,total]);
   const safeElapsed=Math.min(total,safeSeconds(elapsed));
   const remaining=Math.max(0,total-safeElapsed);
   const done=total>0&&safeElapsed>=total;
