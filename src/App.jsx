@@ -209,7 +209,7 @@ const resolveDay = ({rawDay, doneDay, beforeStart, past, queueSession}) => {
 const SESSION_TEMPLATES = [...PROGRAM.filter(d=>d.salle).map(d=>({label:d.label,salle:d.salle,muscle:d.muscle,exercises:d.exercises,abs:d.abs,ids:d.ids})), REST_TPL];
 
 // Rotation hebdo - mesocycle hybride (Volume -> Intensite -> Puissance -> Deload)
-const VERSION="5.5.6";
+const VERSION="5.5.7";
 const weekNumber = () => { const dt=new Date(); const d=new Date(Date.UTC(dt.getFullYear(),dt.getMonth(),dt.getDate())); const dn=(d.getUTCDay()+6)%7; d.setUTCDate(d.getUTCDate()-dn+3); const ft=new Date(Date.UTC(d.getUTCFullYear(),0,4)); const fn=(ft.getUTCDay()+6)%7; ft.setUTCDate(ft.getUTCDate()-fn+3); return 1+Math.round((d-ft)/604800000); };
 const PHASES12=[{n:"Accumulation",f:"Volume, base"},{n:"Accumulation",f:"Volume"},{n:"Accumulation",f:"Volume +"},{n:"Intensification",f:"Charges +"},{n:"Intensification",f:"Charges ++"},{n:"Intensification",f:"Lourd"},{n:"Réalisation",f:"Explosif"},{n:"Réalisation",f:"Puissance"},{n:"Réalisation",f:"Pic de force"},{n:"Deload",f:"Récupération"},{n:"Test / PR",f:"Validation"},{n:"Test / PR",f:"Nouveaux maxs"}];
 const programWeek=()=>((weekNumber()-1)%12)+1;
@@ -1421,7 +1421,9 @@ function CircuitPlayer({mode,exos,onClose,defMin,blocks,onAllDone,startBlock,log
     const tt=total,isEmom=kind==="emom",isAmrap=kind==="amrap";
     // Un AMRAP SOMA est guidé : sans toucher l'écran, les mouvements défilent
     // à cadence régulière et le tour suivant commence automatiquement.
-    const cadence=isEmom?60:isAmrap?Math.max(10,safeSeconds(cur.exerciseSec,Math.floor(60/Math.max(1,cexos.length)))):0;
+    // Un bloc de travail fait toujours avancer UNE fois par minute. Un AMRAP à
+    // trois exercices signifie donc 5 tours sur 15 min, jamais 3 bascules/min.
+    const cadence=(isEmom||isAmrap)?60:0;
     lastStep.current=cadence?Math.floor(safeElapsed/cadence):0;
     if(isAmrap&&cexos.length){ setSi(lastStep.current%cexos.length); setRounds(Math.floor(lastStep.current/cexos.length)); }
     ref.current=setInterval(()=>{
@@ -1590,7 +1592,7 @@ function CircuitPlayer({mode,exos,onClose,defMin,blocks,onAllDone,startBlock,log
     </div>);
   } else if(kind==="amrap"){
     const curEx=cexos[si],nextEx=cexos.length?cexos[(si+1)%cexos.length]:null;
-    const amrapCadence=Math.max(10,safeSeconds(cur.exerciseSec,Math.floor(60/Math.max(1,cexos.length))));
+    const amrapCadence=60;
     const untilNext=done?0:amrapCadence-(safeElapsed%amrapCadence);
     BODY=(<div style={WRAP}>
       <Ring pct={total>0?elapsed/total:0} value={done?"FINI":fmtMSS(remaining)} label={done?"terminé":"restant"}/>
@@ -4836,16 +4838,26 @@ export default function SomaApp() {
       :`Pour le temps · ${h.cap} min`,kind:h.kind==="amrap"?"amrap":"fortime",
       durationMin:h.cap,rounds:h.rounds||0,exercises:hx};
     if(heroPickerMode==="replace"){
-      // Le Hero choisi remplace le premier benchmark, sans casser le second
-      // bloc et la duree minimale imposes par le moteur.
+      // Le Hero choisi remplace le premier benchmark. On conserve les éventuels
+      // autres blocs et on complète si nécessaire : une sélection manuelle ne
+      // peut jamais raccourcir la séance Hero sous 45 min de travail.
       const support=(queuedDay?.blocks||[]).slice(1);
       const blocks=[block,...support];
+      const used=new Set([h.id]);
+      const pool=HEROES.filter(x=>x&&x.kind==="amrap"&&x.cap>=12&&heroFits(x,profile?.equipment||[]));
+      let cursor=0;
+      while(blocks.reduce((sum,b)=>sum+(Number(b.durationMin)||0),0)<45&&cursor<pool.length){
+        const extra=pool[cursor++]; if(used.has(extra.id)) continue; used.add(extra.id);
+        const blockIdx=blocks.length;
+        blocks.push({label:`Hero ${blockIdx+1} · ${extra.name} · AMRAP ${extra.cap}`,kind:"amrap",durationMin:extra.cap,rounds:0,
+          cadenceSec:60,exercises:extra.moves.map((m,k)=>({id:`hero_${extra.id}_${blockIdx}_${k}`,n:m.n,m:"Full body",eq:"bw",kg:m.kg||0,sets:1,reps:String(m.reps),rest:0,role:"density",v5:true,blockIdx}))});
+      }
       const workMin=blocks.reduce((sum,b)=>sum+(Number(b.durationMin)||0),0);
       setHeroOverride({key:sessionIndex+queueOffset(dayIdx),day:{
         label:"Hero - Corps entier",short:"HERO",muscle:h.tribute,salle:"full",warmupFocus:"full",exercises:blocks.flatMap(b=>b.exercises),
         abs:[{id:"ab03",n:"Hollow Body Hold",vol:"3×30s"},{id:"bw09",n:"L-Sit",vol:"3×20s"}],warmupMin:5,coreMin:6,
         recommendedMode:h.kind==="amrap"?"amrap":"classique",metcon:true,totalMin:workMin+11,minSessionMin:45,timeCapMin:workMin,
-        emomMinutes:workMin,badge:"2 Hero",hero:h.id,heroName:h.name,archetype:"hero",v5:true,blocks,
+        emomMinutes:workMin,badge:`${blocks.length} Hero`,hero:h.id,heroName:h.name,archetype:"hero",v5:true,blocks,
       }});
       setHeroExtra(null);setHeroPickerMode("append");setShowHeroes(false);return;
     }

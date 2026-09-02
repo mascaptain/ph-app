@@ -42,7 +42,14 @@ const prescribed = (ex, sets, reps, role, ctx, intensity = 1) => {
   const rm = ctx.rms && ctx.rms[ex.id];
   let kg = ex.kg || 0;
   if (ex.eq !== "bw" && kg > 0) {
-    if (perf && perf.kg > 0) kg = perf.kg * (Number(perf.rpe) <= 7 ? 1.025 : Number(perf.rpe) >= 10 ? .9 : 1);
+    if (perf && perf.kg > 0) {
+      const rpe=Number(perf.rpe);
+      // Sans RPE explicite, une série validée est considérée comme tolérée : le
+      // prochain pilier progresse d'un incrément, jamais en dessous hors décharge.
+      const factor=Number.isFinite(rpe) && rpe >= 10 ? .9 : Number.isFinite(rpe) && rpe >= 8 ? 1 : 1.025;
+      kg=perf.kg*factor;
+      if (role === "pillar" && !ctx.deload && (!Number.isFinite(rpe) || rpe <= 7) && kg <= perf.kg) kg=perf.kg+(ex.eq === "bar" ? 2.5 : 2);
+    }
     else if (rm > 0) kg = rm * intensity;
     else kg *= ctx.scale || 1;
     kg = round(ex.eq, kg * (ctx.deload ? .85 : 1));
@@ -115,26 +122,29 @@ const kbDay = (variant, ctx, template = 0) => {
   const equipment = programEquipment(ctx.equipment || []), zones = ctx.injuryZones || [], excluded = ctx.excluded || [];
   const build = (ids, reps) => ids.map(find).filter((ex) => has(ex, equipment, zones, excluded))
     .map((ex, i) => prescribed(ex, 1, reps[i], "density", ctx, .65));
-  // Deux intentions, deux blocs. Une séance KB n'est jamais un unique EMOM
-  // uniforme : on construit d'abord la qualité technique, puis la capacité à
-  // répéter les gestes sous fatigue. Les six mouvements sont tous à la cloche.
-  const powerA = template % 2 === 0;
-  const technical = variant === "power"
-    ? build(powerA ? ["kb03", "kb08", "kb05"] : ["kb04", "kb12", "kb05"], powerA ? [6, 8, 6] : [6, 10, 8])
-    : build(powerA ? ["kb01", "kb04", "kb08"] : ["kb12", "kb03", "kb08"], powerA ? [12, 6, 10] : [10, 6, 10]);
-  const capacity = variant === "power"
-    ? build(powerA ? ["kb01", "kb11", "kb10"] : ["kb12", "kb10", "kb11"], powerA ? [15, 10, "30m"] : [12, "40m", 12])
-    : build(powerA ? ["kb12", "kb11", "kb10"] : ["kb01", "kb10", "kb11"], powerA ? [12, 10, "30m"] : [15, "40m", 12]);
-  const finisher = variant === "power"
-    ? build(powerA ? ["kb12", "kb05", "kb01"] : ["kb03", "kb08", "kb01"], powerA ? [10, 6, 12] : [6, 12, 15])
-    : build(powerA ? ["kb03", "kb08", "kb11"] : ["kb04", "kb05", "kb12"], powerA ? [6, 10, 10] : [6, 8, 12]);
+  // Quatre séances KB réellement distinctes, neuf mouvements sans répétition dans
+  // chacune. La variation vient du programme, non d'un tirage superficiel.
+  const plans = [
+    [["kb03", "kb08", "kb05"], ["kb01", "kb11", "kb10"], ["kb12", "kb07", "kb09"]],
+    [["kb04", "kb19", "kb14"], ["kb06", "kb47", "kb38"], ["kb28", "kb13", "kb18"]],
+    [["kb36", "kb30", "kb55"], ["kb44", "kb52", "kb50"], ["kb31", "kb32", "kb54"]],
+    [["kb40", "kb39", "kb46"], ["kb48", "kb59", "kb45"], ["kb34", "kb43", "kb53"]],
+  ];
+  const repPlans = [
+    [[6, 8, 6], [15, 10, "30m"], [10, 3, 10]],
+    [[6, 12, 10], [8, "30m", 8], [8, 6, 12]],
+    [[6, 8, 8], [12, "30m", 8], [10, 8, "30m"]],
+    [[6, 6, 10], [10, "30m", 10], [8, 6, 8]],
+  ];
+  const index=(template+(variant === "capacity" ? 1 : 0))%plans.length;
+  const [technical, capacity, finisher]=plans[index].map((ids,i)=>build(ids,repPlans[index][i]));
   const blocks = variant === "power"
-    ? [{ label: "Bloc 1 · Technique sous cadence", kind: "emom", durationMin: 15, rounds: 5, exercises: technical },
-       { label: "Bloc 2 · Capacité de travail", kind: "amrap", durationMin: 15, rounds: 0, exercises: capacity },
-       { label: "Bloc 3 · Finisseur", kind: "amrap", durationMin: 15, rounds: 0, exercises: finisher }]
-    : [{ label: "Bloc 1 · Volume continu", kind: "amrap", durationMin: 15, rounds: 0, exercises: technical },
-       { label: "Bloc 2 · Puissance répétée", kind: "emom", durationMin: 15, rounds: 5, exercises: capacity },
-       { label: "Bloc 3 · Finisseur", kind: "amrap", durationMin: 15, rounds: 0, exercises: finisher }];
+    ? [{ label: "Bloc 1 · Technique sous cadence", kind: "emom", durationMin: 15, cadenceSec: 60, rounds: 5, exercises: technical },
+       { label: "Bloc 2 · Capacité de travail", kind: "amrap", durationMin: 15, cadenceSec: 60, rounds: 5, exercises: capacity },
+       { label: "Bloc 3 · Finisseur", kind: "amrap", durationMin: 15, cadenceSec: 60, rounds: 5, exercises: finisher }]
+    : [{ label: "Bloc 1 · Volume continu", kind: "amrap", durationMin: 15, cadenceSec: 60, rounds: 5, exercises: technical },
+       { label: "Bloc 2 · Puissance répétée", kind: "emom", durationMin: 15, cadenceSec: 60, rounds: 5, exercises: capacity },
+       { label: "Bloc 3 · Finisseur", kind: "amrap", durationMin: 15, cadenceSec: 60, rounds: 5, exercises: finisher }];
   blocks.forEach((block, blockIdx) => block.exercises.forEach((ex) => { ex.blockIdx = blockIdx; }));
   const moves = blocks.flatMap((block) => block.exercises);
   const durationMin = blocks.reduce((sum, block) => sum + block.durationMin, 0);
@@ -154,25 +164,25 @@ const heroDay = (ctx, template = 0) => {
   // demandent une charge/installation que leur fiche résume mal. La sélection
   // automatique se limite donc aux benchmarks hybrides lisibles et réalisables;
   // le catalogue complet reste disponible au choix manuel.
-  const HYBRID_HERO_IDS = new Set(["danny", "havana", "jack", "jennifer", "laura", "mcghee", "rah oi", "rahoi", "rankel", "ricky", "tk", "viola"]);
+  const HYBRID_HERO_IDS = new Set(["danny", "havana", "jack", "jennifer", "laura", "mcghee", "hortman", "rah oi", "rahoi", "rankel", "ricky", "tk", "viola"]);
   const pool = HEROES.filter((h) => HYBRID_HERO_IDS.has(String(h.id).toLowerCase())
-    && heroFits(h, equipment) && h.cap >= 12 && h.cap <= 35 && h.kind === "amrap"
+    && heroFits(h, equipment) && h.cap >= 12 && h.cap <= 60 && h.kind === "amrap"
     && h.moves.length >= 3 && h.moves.length <= 4
     && new Set(h.moves.map((move) => String(move.n).toLowerCase())).size === h.moves.length
     && h.moves.every((move) => isSafe({ n: move.n }, zones)));
   const hero = pool.length ? pool[template % pool.length] : null;
   if (!hero) return kbDay("capacity", ctx, template);
-  const support = pool.length > 1 ? pool[(template + 1) % pool.length] : hero;
   const toBlock = (entry, blockIdx) => {
     const exercises = entry.moves.map((m, i) => ({ id: `hero_${entry.id}_${blockIdx}_${i}`, n: m.n, m: "Full body", eq: "bw", kg: m.kg || 0,
       sets: 1, reps: String(m.reps), rest: 0, role: "density", v5: true, blockIdx }));
-    return { label: `Hero ${blockIdx + 1} · ${entry.name} · AMRAP ${entry.cap}`, kind: "amrap", durationMin: entry.cap, rounds: 0, exercises };
+    return { label: `Hero ${blockIdx + 1} · ${entry.name} · AMRAP ${entry.cap}`, kind: "amrap", durationMin: entry.cap, cadenceSec: 60, rounds: 0, exercises };
   };
-  const picks = [hero, support];
-  // Deux Hero sont la base. Lorsque deux benchmarks courts ne couvrent pas le
-  // budget de travail requis, un troisieme est ajoute automatiquement.
-  for (let offset = 2; picks.reduce((sum, entry) => sum + entry.cap, 0) < 34 && offset < pool.length; offset += 1) {
-    picks.push(pool[(template + offset) % pool.length]);
+  const picks = [hero];
+  // Un ou plusieurs Hero selon leur format, mais les blocs eux-mêmes totalisent
+  // toujours au moins 45 min. Un Hero long peut suffire ; des courts se combinent.
+  for (let offset = 1; picks.reduce((sum, entry) => sum + entry.cap, 0) < 45 && offset < pool.length; offset += 1) {
+    const candidate=pool[(template + offset) % pool.length];
+    if (!picks.some((entry) => entry.id === candidate.id)) picks.push(candidate);
   }
   const blocks = picks.map(toBlock);
   const exercises = blocks.flatMap((block) => block.exercises);
@@ -215,7 +225,7 @@ const conditioningDay = (ctx, template = 0) => {
   const blocks = variants[template % variants.length].map((spec, blockIdx) => {
     const exercises = build(spec.slots);
     exercises.forEach((ex) => { ex.blockIdx = blockIdx; });
-    return { label: spec.label, kind: spec.kind, durationMin: 15, rounds: spec.kind === "emom" ? 5 : 0, exercises };
+    return { label: spec.label, kind: spec.kind, durationMin: 15, cadenceSec: 60, rounds: 5, exercises };
   });
   const exercises = blocks.flatMap((block) => block.exercises);
   return complete({ label: "Conditionnement - Corps entier", short: "COND · HYB", muscle: "Cardio · Charge · Poids du corps",
@@ -243,6 +253,7 @@ const validateDay = (day, ctx) => {
   if (!day || !day.label || !day.archetype) fail("séance incomplète");
   if (SESSION_NAME[day.archetype] && day.label !== SESSION_NAME[day.archetype]) fail(`nom de séance incohérent (${day.label})`);
   const exercises = day.exercises || [];
+  if ((day.blocks || []).some((block) => (block.kind === "emom" || block.kind === "amrap") && block.cadenceSec !== 60)) fail("bloc cadencé hors contrat 60 secondes");
   if (!(day.totalMin >= MIN_SESSION_MIN) || day.minSessionMin !== MIN_SESSION_MIN) fail(`session under ${MIN_SESSION_MIN} min`);
   if (!Array.isArray(day.abs) || day.abs.length < 2) fail("session without core finisher");
   if (/abdominaux|gainage|core/i.test(day.label)) fail(`titre core interdit (${day.label})`);
@@ -262,6 +273,8 @@ const validateDay = (day, ctx) => {
     if (!formats.has("emom") || !formats.has("amrap")) fail("kettlebell sans EMOM et AMRAP");
     if (exercises.length < 5 || exercises.some((ex) => ex.eq !== "kb")) fail(`kettlebell non pure: ${names(day)}`);
     if (day.blocks.some((block) => !block.exercises.length || block.durationMin < 8)) fail("bloc kettlebell trop court ou vide");
+    if (new Set(exercises.map((ex) => ex.id)).size !== exercises.length) fail("kettlebell redondante dans une même séance");
+    if (day.blocks.some((block) => block.cadenceSec !== 60)) fail("cadence kettlebell différente d'une minute");
   }
   if (day.archetype === "conditioning") {
     if (!Array.isArray(day.blocks) || day.blocks.length !== 3 || day.blocks.some((block) => block.durationMin !== 15 || block.exercises.length !== 3)) fail("conditionnement sans trois blocs de quinze minutes");
@@ -270,7 +283,8 @@ const validateDay = (day, ctx) => {
     if (new Set(exercises.map((ex) => ex.eq)).size < 2) fail("conditionnement sans variété de matériel");
   }
   if (day.archetype === "hero") {
-    if (!day.hero || !day.blocks || day.blocks.length < 2 || day.blocks.some((block) => block.kind !== "amrap" || block.durationMin < 12)) fail("Hero without two AMRAP blocks");
+    if (!day.hero || !day.blocks || day.blocks.length < 1 || day.blocks.some((block) => block.kind !== "amrap" || block.durationMin < 12)) fail("Hero AMRAP invalide");
+    if (day.blocks.reduce((sum, block) => sum + block.durationMin, 0) < 45) fail("Hero sous 45 minutes de travail");
   }
   return true;
 };
