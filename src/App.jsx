@@ -209,7 +209,7 @@ const resolveDay = ({rawDay, doneDay, beforeStart, past, queueSession}) => {
 const SESSION_TEMPLATES = [...PROGRAM.filter(d=>d.salle).map(d=>({label:d.label,salle:d.salle,muscle:d.muscle,exercises:d.exercises,abs:d.abs,ids:d.ids})), REST_TPL];
 
 // Rotation hebdo - mesocycle hybride (Volume -> Intensite -> Puissance -> Deload)
-const VERSION="5.6.0";
+const VERSION="5.6.1";
 const weekNumber = () => { const dt=new Date(); const d=new Date(Date.UTC(dt.getFullYear(),dt.getMonth(),dt.getDate())); const dn=(d.getUTCDay()+6)%7; d.setUTCDate(d.getUTCDate()-dn+3); const ft=new Date(Date.UTC(d.getUTCFullYear(),0,4)); const fn=(ft.getUTCDay()+6)%7; ft.setUTCDate(ft.getUTCDate()-fn+3); return 1+Math.round((d-ft)/604800000); };
 const PHASES12=[{n:"Accumulation",f:"Volume, base"},{n:"Accumulation",f:"Volume"},{n:"Accumulation",f:"Volume +"},{n:"Intensification",f:"Charges +"},{n:"Intensification",f:"Charges ++"},{n:"Intensification",f:"Lourd"},{n:"Réalisation",f:"Explosif"},{n:"Réalisation",f:"Puissance"},{n:"Réalisation",f:"Pic de force"},{n:"Deload",f:"Récupération"},{n:"Test / PR",f:"Validation"},{n:"Test / PR",f:"Nouveaux maxs"}];
 const programWeek=()=>((weekNumber()-1)%12)+1;
@@ -1809,7 +1809,7 @@ function WorkTimer({seconds}) {
   );
 }
 
-function ExerciseFocus({ex,dayIdx,sDate,log,onLogSet,onClose,onNext,hasNext,idx,count,heading,onDetail,lastPerf,originY}) {
+function ExerciseFocus({ex,dayIdx,sDate,log,onLogSet,onComplete,onClose,onNext,hasNext,idx,count,heading,onDetail,lastPerf,originY}) {
   // Fermeture animee : le composant reste monte le temps de l'animation de sortie, sinon
   // l'ecran disparaissait d'un coup et on perdait le lien avec la liste d'ou l'on venait.
   const [closing,setClosing]=useState(false);
@@ -1887,6 +1887,19 @@ function ExerciseFocus({ex,dayIdx,sDate,log,onLogSet,onClose,onNext,hasNext,idx,
         ? Math.max(0,Math.round(((Number(plan[j].w)||0)+drift)*10)/10) : v));
     }
     if(i<n-1&&ex.rest>0) startRest(ex.rest);
+  };
+  // Ce bouton n'est rendu qu'après la dernière série, mais il reste la
+  // validation finale du bloc : on écrit une image complète et atomique du
+  // bloc avant de fermer, sans dépendre du délai du dernier setState.
+  const completeBlockAndLeave=()=>{
+    const entries={};
+    plan.forEach((_,i)=>{
+      entries[`${lk}_s${i}`]={done:true,weight:loads[i],reps:reps[i],date:sDate};
+    });
+    entries[`${lk}_complete`]={kind:"exercise_block_complete",exerciseId:ex.id,completed:true,sets:n,date:sDate};
+    if(onComplete) onComplete(entries);
+    else Object.entries(entries).forEach(([key,value])=>onLogSet(key,value));
+    leave();
   };
   // ─── "Une chose a la fois" ─────────────────────────────────────────────────
   // L'ecran ne montre que l'action en cours : cette serie, ou ce repos. Le reste
@@ -2006,7 +2019,7 @@ function ExerciseFocus({ex,dayIdx,sDate,log,onLogSet,onClose,onNext,hasNext,idx,
               </div>
             </div>
             <div>
-              <Tap onTap={()=>leave()} style={{padding:"16px",borderRadius:22,background:C.fill,display:"flex",alignItems:"center",justifyContent:"center"}}>
+              <Tap onTap={completeBlockAndLeave} style={{padding:"16px",borderRadius:22,background:C.fill,display:"flex",alignItems:"center",justifyContent:"center"}}>
                 <span style={{fontSize:15,fontWeight:600,color:C.onFill}}>Retour à la liste</span>
               </Tap>
               {hasNext&&<Tap onTap={()=>leave(onNext)} style={{marginTop:10,padding:"16px",borderRadius:22,background:"transparent",border:`1px solid ${C.div}`,display:"flex",alignItems:"center",justifyContent:"center"}}>
@@ -4475,6 +4488,18 @@ export default function SomaApp() {
     setLog(prev=>{const next={...prev,[key]:val};persist(user?.id,{log:next});return next;});
     if(val.weight) setWeights(prev=>{const exId=key.split("_s")[0];if(!prev[exId]||val.weight>prev[exId]){const next={...prev,[exId]:val.weight};persist(user?.id,{weights:next});return next;}return prev;});
   },[persist,clock]);
+  // Une clôture de bloc est un seul événement métier. Un batch évite que la
+  // navigation puisse s'intercaler entre la dernière série et son écriture.
+  const saveLogBatch=useCallback((entries)=>{
+    const values=Object.values(entries||{});
+    if(values.some(v=>v&&v.done)&&!clock.running&&clock.sec===0) clock.start();
+    setLog(prev=>{const next={...prev,...(entries||{})};persist(user?.id,{log:next});return next;});
+    Object.entries(entries||{}).forEach(([key,val])=>{
+      if(!val||!val.weight) return;
+      const exId=key.split("_s")[0];
+      setWeights(prev=>{if(!prev[exId]||val.weight>prev[exId]){const next={...prev,[exId]:val.weight};persist(user?.id,{weights:next});return next;}return prev;});
+    });
+  },[persist,clock]);
 
   const saveWeight=useCallback((id,val)=>{setWeights(prev=>{const next={...prev,[id]:val};persist(user?.id,{weights:next});return next;});},[persist]);
   const toggleExclude=useCallback(id=>{setExcluded(prev=>{const next=prev.includes(id)?prev.filter(x=>x!==id):[...prev,id];persist(user?.id,{excluded:next});return next;});},[persist]);
@@ -5493,7 +5518,7 @@ const NAV=[{id:"home",l:"Accueil"},{id:"seance",l:"Séances"},{id:"stats",l:"Sta
           :`Apprentissage · ${focusIdx-SKILL_OFF+1}/${skillPairs.length}`;
         return (
         <ExerciseFocus key={focusList[focusIdx].id} ex={focusList[focusIdx]} idx={focusIdx-seg[0]} count={seg[1]-seg[0]} dayIdx={dayIdx} sDate={sDate}
-          log={log} onLogSet={saveLog} heading={heading} onDetail={e=>setDetailEx(e)} lastPerf={perf[focusList[focusIdx].id]} originY={focusOrigin}
+          log={log} onLogSet={saveLog} onComplete={saveLogBatch} heading={heading} onDetail={e=>setDetailEx(e)} lastPerf={perf[focusList[focusIdx].id]} originY={focusOrigin}
           onClose={()=>setFocusIdx(null)} hasNext={focusIdx<seg[1]-1} onNext={()=>{
             const _n=focusList[focusIdx+1];
             if(_n&&_n.circuitId){
