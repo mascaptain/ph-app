@@ -209,7 +209,7 @@ const resolveDay = ({rawDay, doneDay, beforeStart, past, queueSession}) => {
 const SESSION_TEMPLATES = [...PROGRAM.filter(d=>d.salle).map(d=>({label:d.label,salle:d.salle,muscle:d.muscle,exercises:d.exercises,abs:d.abs,ids:d.ids})), REST_TPL];
 
 // Rotation hebdo - mesocycle hybride (Volume -> Intensite -> Puissance -> Deload)
-const VERSION="5.5.11";
+const VERSION="5.6.0";
 const weekNumber = () => { const dt=new Date(); const d=new Date(Date.UTC(dt.getFullYear(),dt.getMonth(),dt.getDate())); const dn=(d.getUTCDay()+6)%7; d.setUTCDate(d.getUTCDate()-dn+3); const ft=new Date(Date.UTC(d.getUTCFullYear(),0,4)); const fn=(ft.getUTCDay()+6)%7; ft.setUTCDate(ft.getUTCDate()-fn+3); return 1+Math.round((d-ft)/604800000); };
 const PHASES12=[{n:"Accumulation",f:"Volume, base"},{n:"Accumulation",f:"Volume"},{n:"Accumulation",f:"Volume +"},{n:"Intensification",f:"Charges +"},{n:"Intensification",f:"Charges ++"},{n:"Intensification",f:"Lourd"},{n:"Réalisation",f:"Explosif"},{n:"Réalisation",f:"Puissance"},{n:"Réalisation",f:"Pic de force"},{n:"Deload",f:"Récupération"},{n:"Test / PR",f:"Validation"},{n:"Test / PR",f:"Nouveaux maxs"}];
 const programWeek=()=>((weekNumber()-1)%12)+1;
@@ -322,6 +322,18 @@ const perfIndex=(sessions)=>{
     });
   });
   return m;
+};
+// Le retour d'une séance KB alimente directement la prochaine prescription KB :
+// volume et cloche progressent avec le ressenti, au lieu de répéter 6/8 par défaut.
+const kbFeedbackIndex=(sessions)=>{
+  const done=(sessions||[]).filter(s=>/kettlebell/i.test(String(s&&((s.dayLabel||s.day_label||s.session_type)||""))))
+    .slice().sort((a,b)=>String(b.date).localeCompare(String(a.date))).slice(0,3);
+  if(!done.length) return {};
+  const rpes=done.flatMap(s=>(s.exercises||[]).map(e=>Number(e&&e.rpe)).filter(Number.isFinite));
+  const intensity=done.map(s=>Number(s.feedback&&s.feedback.global)).filter(Number.isFinite);
+  const energy=done.map(s=>Number(s.feedback&&s.feedback.energy)).filter(Number.isFinite);
+  const avg=(arr)=>arr.length?arr.reduce((a,b)=>a+b,0)/arr.length:null;
+  return {rpe:avg(rpes),intensity:avg(intensity),energy:avg(energy),sessions:done.length};
 };
 const RPE_LABEL={6:"Facile · 4 reps en réserve",7:"Confortable · 3 reps en réserve",8:"Exigeant · 2 reps en réserve",9:"Difficile · 1 rep en réserve",10:"Maximal · aucune rep en réserve"};
 
@@ -1391,11 +1403,30 @@ function CircuitPlayer({mode,exos,onClose,defMin,blocks,onAllDone,startBlock,log
     (cexos||[]).forEach(e=>{ if(!e||!e.id||!sDate) return; let c=0; while(log&&log[`${sDate}_${e.id}_s${c}`]&&log[`${sDate}_${e.id}_s${c}`].done) c++; occ[e.id]=c; });
     occRef.current=occ;
   },[bi]);
+  // Un bloc automatique est une séquence de minutes, pas une série de clics. Au
+  // moment où il est clôturé (ou quitté fini), on réconcilie le journal avec les
+  // minutes réellement écoulées. Cela couvre le dernier tick et empêche autant
+  // la série non validée que les trois validations par minute de l'ancienne UI.
+  const finalizeAutoBlock=()=>{
+    if(!sDate||!onLogSet||manualRounds||!(kind==="emom"||kind==="amrap")) return;
+    for(let minute=0;minute<durMin;minute+=1){
+      const ex=cexos.length?cexos[minute%cexos.length]:null;
+      if(!ex||!ex.id) continue;
+      const expected=Math.floor((durMin-1-minute)/Math.max(1,cexos.length))+1;
+      while((occRef.current[ex.id]||0)<expected) logOccurrence(ex);
+    }
+    onLogSet(`${sDate}__block_${bi}`,{kind:"block_complete",block:bi,completed:true,date:sDate});
+  };
+  const returnToList=()=>{
+    clearInterval(ref.current);clearInterval(restRef.current);
+    if(done) finalizeAutoBlock();
+    onClose&&onClose();
+  };
   const goNext=()=>{clearInterval(ref.current);clearInterval(restRef.current);if(lastBlock){onAllDone&&onAllDone();onClose&&onClose();}else{setBi(b=>b+1);}};
   // Fin de bloc : on ne passe plus directement au suivant. Le ressenti est demande ici,
   // et il pilote la charge des prochaines seances - c'est ce qui rend le coach dynamique.
   const [debrief,setDebrief]=useState(false);
-  const finishBlock=()=>{clearInterval(ref.current);clearInterval(restRef.current);setRunning(false);setDebrief(true);};
+  const finishBlock=()=>{clearInterval(ref.current);clearInterval(restRef.current);finalizeAutoBlock();setRunning(false);setDebrief(true);};
   const submitDebrief=(rpe)=>{
     if(rpe&&sDate&&onLogSet) (cexos||[]).forEach(e=>{ if(e&&e.id) onLogSet(`${sDate}_${e.id}_rpe`,{rpe,date:sDate}); });
     setDebrief(false); goNext();
@@ -1423,8 +1454,8 @@ function CircuitPlayer({mode,exos,onClose,defMin,blocks,onAllDone,startBlock,log
     startedAtRef.current=startAt;
     persistTimer({startedAt:startedAtRef.current,running:true});
     const tt=total,isEmom=kind==="emom",isAmrap=kind==="amrap";
-    // Un AMRAP SOMA est guidé : sans toucher l'écran, les mouvements défilent
-    // à cadence régulière et le tour suivant commence automatiquement.
+    // Les AMRAP de conditionnement/KB sont guidés : une seule transition par
+    // minute. Les Hero gardent execution=manual_rounds et ne sont jamais ici.
     // Un bloc de travail fait toujours avancer UNE fois par minute. Un AMRAP à
     // trois exercices signifie donc 5 tours sur 15 min, jamais 3 bascules/min.
     const cadence=isEmom||(isAmrap&&!manualRounds)?60:0;
@@ -1512,7 +1543,7 @@ function CircuitPlayer({mode,exos,onClose,defMin,blocks,onAllDone,startBlock,log
   // selon le type de seance, au meme endroit et avec le meme geste attendu.
   const HEAD=(
     <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,padding:"16px",flexShrink:0}}>
-      <Tap onTap={onClose} style={{width:40,height:40,borderRadius:12,background:C.s2,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}><span style={{fontSize:21,color:C.ink3}}>‹</span></Tap>
+      <Tap onTap={returnToList} style={{width:40,height:40,borderRadius:12,background:C.s2,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}><span style={{fontSize:21,color:C.ink3}}>‹</span></Tap>
       <div style={{textAlign:"center",minWidth:0,flex:1}}>
         <div style={{fontSize:12.5,fontWeight:600,color:C.ink4,textTransform:"uppercase",letterSpacing:".1em"}}>Bloc {blockNo||(bi+1)}/{blockCount||BLK.length}</div>
         <div style={{fontSize:15,fontWeight:600,color:C.ink,marginTop:2,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{cur.label||(kind==="amrap"?"AMRAP":kind==="emom"?"EMOM":kind==="circuit"?"Circuit":"Superset")}</div>
@@ -4788,7 +4819,7 @@ export default function SomaApp() {
     return slots;
   })();
   const isLate=overdueCount>0;
-  const engineCtx={frequency:trainingDaysPerWeek,rms:profile?.rms||{},perf,
+  const engineCtx={frequency:trainingDaysPerWeek,rms:profile?.rms||{},perf,kbFeedback:kbFeedbackIndex(sessions),
     strength:patternStrength(profile?.rms||{}),scale:engineScale(profile),
     excluded,total:totalSessions};
   const pendingTemplate=(!programDone&&!isBeforeProgramStart)
@@ -4851,7 +4882,11 @@ export default function SomaApp() {
       // Chaque carte Hero porte son propre index. Remplacer Hero 2 ne touche donc
       // jamais Hero 1, ni l'ordre ni l'identité des autres benchmarks.
       const target=Math.max(0,Number(heroPickerMode.blockIndex)||0);
-      const source=queuedDay?.blocks||[];
+      // Une seconde substitution doit partir du dernier choix local, pas de la
+      // séance initiale : sinon remplacer Hero 2 réintroduisait silencieusement
+      // Hero 1 d'origine.
+      const overrideKey=sessionIndex+queueOffset(dayIdx);
+      const source=(heroOverride&&heroOverride.key===overrideKey?heroOverride.day:queuedDay)?.blocks||[];
       let blocks=source.map((current,index)=>{
         const entry=index===target?h:HEROES.find(x=>x.id===current.heroId)||null;
         return entry?makeHeroBlock(entry,index):{...current,exercises:(current.exercises||[]).map(ex=>({...ex,blockIdx:index}))};

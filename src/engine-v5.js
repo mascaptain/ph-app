@@ -52,10 +52,46 @@ const prescribed = (ex, sets, reps, role, ctx, intensity = 1) => {
     }
     else if (rm > 0) kg = rm * intensity;
     else kg *= ctx.scale || 1;
-    kg = round(ex.eq, kg * (ctx.deload ? .85 : 1));
+    // Les séances KB ne doivent pas rester figées à la même cloche et aux mêmes
+    // répétitions. Le bilan de la dernière séance KB pilote une progression
+    // prudente de la charge, indépendante des 1RM de barre.
+    const kbFactor = ex.eq === "kb" && role === "density" ? (Number(ctx.kbLoadFactor) || 1) : 1;
+    kg = round(ex.eq, kg * (ctx.deload ? .85 : 1) * kbFactor);
   }
   // Densite hybride : pas de repos de trois minutes, meme sur le pilier.
   return { ...ex, kg, sets, reps: String(reps), rest: role === "pillar" ? 120 : 60, role, v5: true };
+};
+
+// Le bilan global et les RPE réellement enregistrés lors des séances KB sont la
+// source de progression du prochain bloc : une séance déclarée légère ne repart
+// jamais avec le même volume/poids. Les bornes restent compatibles avec une
+// cadence de 60 s, et la décharge garde la priorité.
+const kbProgression = (ctx = {}) => {
+  const feedback = ctx.kbFeedback || {};
+  const intensity = Number(feedback.intensity);
+  const rpe = Number(feedback.rpe);
+  let repBump = 1;
+  let loadFactor = 1.025;
+  if ((Number.isFinite(intensity) && intensity <= 3) || (Number.isFinite(rpe) && rpe <= 7)) {
+    repBump = 3; loadFactor = 1.075;
+  } else if ((Number.isFinite(intensity) && intensity === 4) || (Number.isFinite(rpe) && rpe === 8)) {
+    repBump = 2; loadFactor = 1.05;
+  } else if ((Number.isFinite(intensity) && intensity >= 5) || (Number.isFinite(rpe) && rpe >= 9)) {
+    repBump = -1; loadFactor = .975;
+  }
+  if (ctx.deload) { repBump = -2; loadFactor = .85; }
+  return { repBump, loadFactor };
+};
+const kbRep = (value, bump, profile, slot) => {
+  if (typeof value === "string" && /m|s/i.test(value)) return value;
+  const base = Number(value);
+  if (!Number.isFinite(base)) return String(value || "8");
+  // Les mouvements techniques lourds restent faisables sous une minute, les
+  // swings/carries et les mouvements simples prennent réellement du volume.
+  const technical = profile === 0 && slot === 0;
+  const min = technical ? 5 : 8;
+  const max = technical ? 10 : 20;
+  return String(Math.max(min, Math.min(max, Math.round(base + bump))));
 };
 
 // Le temps est un contrat du moteur, pas une promesse dans l'interface. Chaque
@@ -142,8 +178,9 @@ const strengthDay = (kind, ctx, template = 0) => {
 
 const kbDay = (variant, ctx, template = 0) => {
   const equipment = programEquipment(ctx.equipment || []), zones = ctx.injuryZones || [], excluded = ctx.excluded || [];
-  const build = (ids, reps) => ids.map(find).filter((ex) => has(ex, equipment, zones, excluded))
-    .map((ex, i) => prescribed(ex, 1, reps[i], "density", ctx, .65));
+  const response = kbProgression(ctx);
+  const build = (ids, reps, profile) => ids.map(find).filter((ex) => has(ex, equipment, zones, excluded))
+    .map((ex, i) => prescribed(ex, 1, kbRep(reps[i], response.repBump, profile, i), "density", {...ctx,kbLoadFactor:response.loadFactor}, .65));
   // 12 prescriptions réparties en 4 profils : technique/force, puissance/densité,
   // unilatéral/stabilité et complexe/carry. Les répétitions utiles au sein d'un
   // entraînement restent possibles ; ce qui est interdit est de resservir la même
@@ -177,16 +214,17 @@ const kbDay = (variant, ctx, template = 0) => {
     [[6, 10, 8], [15, 8, "30m"], [6, 10, 12]],
   ];
   const index=(template+(variant === "capacity" ? 1 : 0))%plans.length;
-  const [technical, capacity, finisher]=plans[index].map((ids,i)=>build(ids,repPlans[index][i]));
+  const profileIndex=index % 4;
+  const [technical, capacity, finisher]=plans[index].map((ids,i)=>build(ids,repPlans[index][i],profileIndex));
   const kbProfiles = ["Technique & force", "Puissance & densité", "Unilatéral & stabilité", "Complexe & carry"];
-  const profile = kbProfiles[index % kbProfiles.length];
+  const profile = kbProfiles[profileIndex];
   const blocks = variant === "power"
     ? [{ label: "Bloc 1 · Technique sous cadence", kind: "emom", durationMin: 15, cadenceSec: 60, rounds: 5, exercises: technical },
-       { label: "Bloc 2 · Capacité de travail", kind: "amrap", execution: "manual_rounds", durationMin: 15, cadenceSec: 0, rounds: 0, exercises: capacity },
-       { label: "Bloc 3 · Finisseur", kind: "amrap", execution: "manual_rounds", durationMin: 15, cadenceSec: 0, rounds: 0, exercises: finisher }]
-    : [{ label: "Bloc 1 · Volume continu", kind: "amrap", execution: "manual_rounds", durationMin: 15, cadenceSec: 0, rounds: 0, exercises: technical },
+       { label: "Bloc 2 · Capacité de travail", kind: "amrap", execution: "auto_cadence", durationMin: 15, cadenceSec: 60, rounds: 5, exercises: capacity },
+       { label: "Bloc 3 · Finisseur", kind: "amrap", execution: "auto_cadence", durationMin: 15, cadenceSec: 60, rounds: 5, exercises: finisher }]
+    : [{ label: "Bloc 1 · Volume continu", kind: "amrap", execution: "auto_cadence", durationMin: 15, cadenceSec: 60, rounds: 5, exercises: technical },
        { label: "Bloc 2 · Puissance répétée", kind: "emom", durationMin: 15, cadenceSec: 60, rounds: 5, exercises: capacity },
-       { label: "Bloc 3 · Finisseur", kind: "amrap", execution: "manual_rounds", durationMin: 15, cadenceSec: 0, rounds: 0, exercises: finisher }];
+       { label: "Bloc 3 · Finisseur", kind: "amrap", execution: "auto_cadence", durationMin: 15, cadenceSec: 60, rounds: 5, exercises: finisher }];
   blocks.forEach((block, blockIdx) => block.exercises.forEach((ex) => { ex.blockIdx = blockIdx; }));
   const moves = blocks.flatMap((block) => block.exercises);
   const durationMin = blocks.reduce((sum, block) => sum + block.durationMin, 0);
@@ -306,7 +344,9 @@ const conditioningDay = (ctx, template = 0, slot = 0) => {
   const blocks = programmed.map((spec, blockIdx) => {
     const exercises = build(spec.slots, lane);
     exercises.forEach((ex) => { ex.blockIdx = blockIdx; });
-    return { label: spec.label, kind: spec.kind, execution: spec.kind === "amrap" ? "manual_rounds" : "guided", durationMin: 15, cadenceSec: spec.kind === "emom" ? 60 : 0, rounds: spec.kind === "emom" ? 5 : 0, exercises };
+    // Hero = manuel. Les autres AMRAP/EMOM SOMA sont cadencés à exactement une
+    // transition par minute pour que l'athlète puisse rester en mouvement.
+    return { label: spec.label, kind: spec.kind, execution: spec.kind === "amrap" ? "auto_cadence" : "guided", durationMin: 15, cadenceSec: 60, rounds: 5, exercises };
   });
   const exercises = blocks.flatMap((block) => block.exercises);
   return complete({ label: "Conditionnement - Corps entier", short: "COND · HYB", muscle: "Cardio · Charge · Poids du corps",
@@ -341,7 +381,11 @@ const validateDay = (day, ctx) => {
   if (!Array.isArray(day.abs) || day.abs.length < 2) fail("session without core finisher");
   if (/abdominaux|gainage|core/i.test(day.label)) fail(`titre core interdit (${day.label})`);
   if (day.archetype === "strength_upper") {
-    if (!exercises.some((ex) => /développé couché|bench/i.test(ex.n))) fail("force haut sans développé couché");
+    // Le développé couché est hebdomadaire sauf lorsqu'une épaule déclarée
+    // blessée l'interdit explicitement ; dans ce cas l'alternative sûre vaut
+    // mieux qu'un écran d'erreur ou qu'une prescription dangereuse.
+    const shoulderInjured=(ctx.injuryZones||[]).includes("épaule");
+    if (!shoulderInjured&&!exercises.some((ex) => /développé couché|bench/i.test(ex.n))) fail("force haut sans développé couché");
     if (!exercises.some((ex) => /curl|biceps/i.test(ex.n)) || !exercises.some((ex) => /triceps|skull|pushdown/i.test(ex.n))) fail("force haut sans bras directs");
     if (exercises.some((ex) => !upperPatterns.has(metaOf(ex).pattern))) fail(`mouvement hors haut du corps: ${names(day)}`);
   }
@@ -351,21 +395,29 @@ const validateDay = (day, ctx) => {
     if (!exercises.some((ex) => metaOf(ex).pattern === "squat") || !exercises.some((ex) => metaOf(ex).pattern === "hinge")) fail("force jambes sans squat et hinge");
   }
   if (day.archetype === "kettlebell") {
+    const adaptedForInjury=(ctx.injuryZones||[]).length>0;
     if (!Array.isArray(day.blocks) || day.blocks.length < 2) fail("kettlebell sans deux blocs");
     const formats = new Set(day.blocks.map((block) => block.kind));
     if (!formats.has("emom") || !formats.has("amrap")) fail("kettlebell sans EMOM et AMRAP");
     if (exercises.length < 5 || exercises.some((ex) => ex.eq !== "kb")) fail(`kettlebell non pure: ${names(day)}`);
     if (day.blocks.some((block) => !block.exercises.length || block.durationMin < 8)) fail("bloc kettlebell trop court ou vide");
-    if (exercises.length !== 9) fail("kettlebell sans neuf mouvements prescrits");
+    if (!adaptedForInjury&&exercises.length !== 9) fail("kettlebell sans neuf mouvements prescrits");
+    if (adaptedForInjury&&exercises.length < 6) fail("kettlebell blessure sans alternatives suffisantes");
     if (day.blocks.some((block) => block.kind === "emom" && block.cadenceSec !== 60)) fail("cadence EMOM kettlebell différente d'une minute");
-    if (day.blocks.some((block) => block.kind === "amrap" && block.execution !== "manual_rounds")) fail("AMRAP kettlebell doit être manuel");
+    if (day.blocks.some((block) => block.kind === "amrap" && (block.execution !== "auto_cadence" || block.cadenceSec !== 60))) fail("AMRAP kettlebell sans cadence automatique par minute");
+    const numericReps = exercises.map((ex) => Number.parseInt(String(ex.reps), 10)).filter(Number.isFinite);
+    if (!adaptedForInjury&&(numericReps.length < 7 || new Set(numericReps).size < 3)) fail("kettlebell sans variété de répétitions");
+    // Même après un retour « très dur », une KB complète conserve un volume de
+    // travail minimal ; elle baisse sans devenir une séance de 6/8 répétitions.
+    if (!adaptedForInjury&&numericReps.filter((reps) => reps >= 8).length < 5) fail("kettlebell sous-dosé en volume");
   }
   if (day.archetype === "conditioning") {
-    if (!Array.isArray(day.blocks) || day.blocks.length !== 3 || day.blocks.some((block) => block.durationMin !== 15 || block.exercises.length !== 3)) fail("conditionnement sans trois blocs de quinze minutes");
+    const adaptedForInjury=(ctx.injuryZones||[]).length>0;
+    if (!Array.isArray(day.blocks) || day.blocks.length !== 3 || day.blocks.some((block) => block.durationMin !== 15 || (!adaptedForInjury&&block.exercises.length !== 3) || block.exercises.length < 1)) fail("conditionnement sans trois blocs de quinze minutes");
     const formats = new Set(day.blocks.map((block) => block.kind));
     if (!formats.has("emom") || !formats.has("amrap")) fail("conditionnement sans EMOM et AMRAP");
-    if (day.blocks.some((block) => block.kind === "amrap" && block.execution !== "manual_rounds")) fail("AMRAP conditionnement doit être manuel");
-    if (new Set(exercises.map((ex) => ex.eq)).size < 2) fail("conditionnement sans variété de matériel");
+    if (day.blocks.some((block) => block.kind === "amrap" && (block.execution !== "auto_cadence" || block.cadenceSec !== 60))) fail("AMRAP conditionnement sans cadence automatique par minute");
+    if (!adaptedForInjury&&new Set(exercises.map((ex) => ex.eq)).size < 2) fail("conditionnement sans variété de matériel");
   }
   if (day.archetype === "hero") {
     if (!day.hero || !day.blocks || day.blocks.length < 1 || day.blocks.some((block) => block.kind !== "amrap" || block.execution !== "manual_rounds" || block.durationMin < 12)) fail("Hero AMRAP manuel invalide");
@@ -452,7 +504,7 @@ export const buildV5Program = (ctx = {}) => {
 const CACHE = new Map();
 export const v5Session = (index, ctx = {}) => {
   const key = JSON.stringify({ frequency: ctx.frequency || 5, equipment: ctx.equipment || [], total: ctx.total || 60,
-    rms: ctx.rms || {}, perf: ctx.perf || {}, excluded: ctx.excluded || [], injuryZones: ctx.injuryZones || [] });
+    rms: ctx.rms || {}, perf: ctx.perf || {}, kbFeedback: ctx.kbFeedback || {}, excluded: ctx.excluded || [], injuryZones: ctx.injuryZones || [] });
   let program = CACHE.get(key);
   if (!program) { program = buildV5Program(ctx); CACHE.set(key, program); }
   return program[Math.max(0, index) % program.length] || null;
