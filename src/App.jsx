@@ -209,7 +209,7 @@ const resolveDay = ({rawDay, doneDay, beforeStart, past, queueSession}) => {
 const SESSION_TEMPLATES = [...PROGRAM.filter(d=>d.salle).map(d=>({label:d.label,salle:d.salle,muscle:d.muscle,exercises:d.exercises,abs:d.abs,ids:d.ids})), REST_TPL];
 
 // Rotation hebdo - mesocycle hybride (Volume -> Intensite -> Puissance -> Deload)
-const VERSION="5.5.8";
+const VERSION="5.5.9";
 const weekNumber = () => { const dt=new Date(); const d=new Date(Date.UTC(dt.getFullYear(),dt.getMonth(),dt.getDate())); const dn=(d.getUTCDay()+6)%7; d.setUTCDate(d.getUTCDate()-dn+3); const ft=new Date(Date.UTC(d.getUTCFullYear(),0,4)); const fn=(ft.getUTCDay()+6)%7; ft.setUTCDate(ft.getUTCDate()-fn+3); return 1+Math.round((d-ft)/604800000); };
 const PHASES12=[{n:"Accumulation",f:"Volume, base"},{n:"Accumulation",f:"Volume"},{n:"Accumulation",f:"Volume +"},{n:"Intensification",f:"Charges +"},{n:"Intensification",f:"Charges ++"},{n:"Intensification",f:"Lourd"},{n:"Réalisation",f:"Explosif"},{n:"Réalisation",f:"Puissance"},{n:"Réalisation",f:"Pic de force"},{n:"Deload",f:"Récupération"},{n:"Test / PR",f:"Validation"},{n:"Test / PR",f:"Nouveaux maxs"}];
 const programWeek=()=>((weekNumber()-1)%12)+1;
@@ -1356,6 +1356,10 @@ function CircuitPlayer({mode,exos,onClose,defMin,blocks,onAllDone,startBlock,log
   const [bi,setBi]=useState(startBlock||0);
   const cur=BLK[Math.min(bi,BLK.length-1)]||{exercises:[]};
   const kind=cur.kind||mode||"amrap";
+  // EMOM = cadence automatique. AMRAP Hero = chrono continu et validation
+  // volontaire des mouvements/tours ; aucune distance ou série ne devient une
+  // "minute" fictive.
+  const manualRounds=kind==="amrap"&&cur.execution==="manual_rounds";
   const cexos=cur.exercises||[];
   const lastBlock=bi>=BLK.length-1;
   const [running,setRunning]=useState(false);
@@ -1423,7 +1427,7 @@ function CircuitPlayer({mode,exos,onClose,defMin,blocks,onAllDone,startBlock,log
     // à cadence régulière et le tour suivant commence automatiquement.
     // Un bloc de travail fait toujours avancer UNE fois par minute. Un AMRAP à
     // trois exercices signifie donc 5 tours sur 15 min, jamais 3 bascules/min.
-    const cadence=(isEmom||isAmrap)?60:0;
+    const cadence=isEmom||(isAmrap&&!manualRounds)?60:0;
     lastStep.current=cadence?Math.floor(safeElapsed/cadence):0;
     if(isAmrap&&cexos.length){ setSi(lastStep.current%cexos.length); setRounds(Math.floor(lastStep.current/cexos.length)); }
     ref.current=setInterval(()=>{
@@ -1446,7 +1450,7 @@ function CircuitPlayer({mode,exos,onClose,defMin,blocks,onAllDone,startBlock,log
       }
       if(n>=tt){
         clearInterval(ref.current);
-        if((isEmom||isAmrap)&&cexos.length) logOccurrence(cexos[lastStep.current%cexos.length]);
+        if((isEmom||(isAmrap&&!manualRounds))&&cexos.length) logOccurrence(cexos[lastStep.current%cexos.length]);
         signalBlockOver(); runningRef.current=false; setRunning(false); persistTimer({elapsed:tt,running:false,completed:true}); setElapsed(tt); setTimeout(()=>finishBlock(),900); return;
       }
       setElapsed(n);
@@ -1497,6 +1501,12 @@ function CircuitPlayer({mode,exos,onClose,defMin,blocks,onAllDone,startBlock,log
     },1000);
   };
   const validateSup=()=>{if(resting>0)return;logOccurrence(cexos[si]);if(si<cexos.length-1){setSi(si+1);}else{setSi(0);if(stour>=supTours){finishBlock();}else{setStour(stour+1);startRest();}}};
+  const advanceManualRound=()=>{
+    if(!running||done||!cexos.length)return;
+    logOccurrence(cexos[si]);
+    if(si<cexos.length-1){setSi(si+1);return;}
+    setSi(0);setRounds(r=>r+1);play("clic");buzz(25);
+  };
   // Meme grammaire d'en-tete que l'ecran d'exercice : retour a gauche, intitule au centre,
   // emplacement d'action a droite. Les deux ecrans presentaient une croix ou une fleche
   // selon le type de seance, au meme endroit et avec le meme geste attendu.
@@ -1598,16 +1608,18 @@ function CircuitPlayer({mode,exos,onClose,defMin,blocks,onAllDone,startBlock,log
       <Ring pct={total>0?elapsed/total:0} value={done?"FINI":fmtMSS(remaining)} label={done?"terminé":"restant"}/>
       <div style={{textAlign:"center",fontSize:14,color:C.ink3}}>
         <span style={{fontWeight:600,color:C.ink}}>{rounds}</span> tour{rounds>1?"s":""} complet{rounds>1?"s":""}
-        {running&&!done?` · changement automatique dans ${untilNext}s`:""}
+        {running&&!done?(manualRounds?" · valide chaque mouvement à ton rythme":` · changement automatique dans ${untilNext}s`):""}
       </div>
-      {running&&!done&&<><Now ex={curEx} sub={exSub(curEx)}/><Dots n={cexos.length} at={si}/><NextUp label="Ensuite" ex={nextEx}/></>}
+      {running&&!done&&<><Now ex={curEx} sub={exSub(curEx)}/><Dots n={cexos.length} at={si}/><NextUp label={manualRounds?"Puis":"Ensuite"} ex={nextEx}/></>}
       {!running&&!done&&<NextUp label="Commence par" ex={cexos[si]}/>}
     </div>);
     FOOT=(<div style={BAR}>
       {running&&!done&&<Btn label="Pause" act={pause} bg={C.s2} fg={C.ink3} flex={0} />}
       {done
         ? <Btn label={lastBlock?"Terminer":"Bloc suivant"} act={finishBlock} bg={C.done}/>
-        : <Btn label={running?"Cadence automatique":(elapsed>0?"Reprendre":"Démarrer le bloc")} act={running?undefined:startTimer} bg={running?C.s2:undefined} fg={running?C.ink3:undefined}/>}
+        : manualRounds&&running
+          ? <Btn label={si<cexos.length-1?"Suivant":"Valider le tour"} act={advanceManualRound}/>
+          : <Btn label={running?"Cadence automatique":(elapsed>0?"Reprendre":"Démarrer le bloc")} act={running?undefined:startTimer} bg={running?C.s2:undefined} fg={running?C.ink3:undefined}/>}
     </div>);
   } else {
     const nextEx=cexos.length?cexos[curMin%cexos.length]:null;
@@ -4836,6 +4848,9 @@ export default function SomaApp() {
       kg:m.kg||0,sets:1,reps:String(m.reps),rest:0,role:"density",v4:true,blockIdx:0}));
     const block={label:h.kind==="amrap"?`AMRAP ${h.cap}`:h.kind==="rounds"?`${h.rounds} tours`
       :`Pour le temps · ${h.cap} min`,kind:h.kind==="amrap"?"amrap":"fortime",
+      // Un Hero est toujours une progression manuelle : le chrono limite le WOD,
+      // il ne transforme jamais 800 m ou 80 squats en créneau d'une minute.
+      execution:h.kind==="amrap"?"manual_rounds":undefined,cadenceSec:h.kind==="amrap"?0:undefined,
       durationMin:h.cap,rounds:h.rounds||0,exercises:hx};
     if(heroPickerMode==="replace"){
       // Le Hero choisi remplace le premier benchmark. On conserve les éventuels
@@ -4849,8 +4864,8 @@ export default function SomaApp() {
       while(blocks.reduce((sum,b)=>sum+(Number(b.durationMin)||0),0)<45&&cursor<pool.length){
         const extra=pool[cursor++]; if(used.has(extra.id)) continue; used.add(extra.id);
         const blockIdx=blocks.length;
-        blocks.push({label:`Hero ${blockIdx+1} · ${extra.name} · AMRAP ${extra.cap}`,kind:"amrap",durationMin:extra.cap,rounds:0,
-          cadenceSec:60,exercises:extra.moves.map((m,k)=>({id:`hero_${extra.id}_${blockIdx}_${k}`,n:m.n,m:"Full body",eq:"bw",kg:m.kg||0,sets:1,reps:String(m.reps),rest:0,role:"density",v5:true,blockIdx}))});
+        blocks.push({label:`Hero ${blockIdx+1} · ${extra.name} · AMRAP ${extra.cap}`,kind:"amrap",execution:"manual_rounds",durationMin:extra.cap,rounds:0,
+          cadenceSec:0,exercises:extra.moves.map((m,k)=>({id:`hero_${extra.id}_${blockIdx}_${k}`,n:m.n,m:"Full body",eq:"bw",kg:m.kg||0,sets:1,reps:String(m.reps),rest:0,role:"density",v5:true,blockIdx}))});
       }
       const workMin=blocks.reduce((sum,b)=>sum+(Number(b.durationMin)||0),0);
       setHeroOverride({key:sessionIndex+queueOffset(dayIdx),day:{
