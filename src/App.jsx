@@ -209,7 +209,7 @@ const resolveDay = ({rawDay, doneDay, beforeStart, past, queueSession}) => {
 const SESSION_TEMPLATES = [...PROGRAM.filter(d=>d.salle).map(d=>({label:d.label,salle:d.salle,muscle:d.muscle,exercises:d.exercises,abs:d.abs,ids:d.ids})), REST_TPL];
 
 // Rotation hebdo - mesocycle hybride (Volume -> Intensite -> Puissance -> Deload)
-const VERSION="5.5.10";
+const VERSION="5.5.11";
 const weekNumber = () => { const dt=new Date(); const d=new Date(Date.UTC(dt.getFullYear(),dt.getMonth(),dt.getDate())); const dn=(d.getUTCDay()+6)%7; d.setUTCDate(d.getUTCDate()-dn+3); const ft=new Date(Date.UTC(d.getUTCFullYear(),0,4)); const fn=(ft.getUTCDay()+6)%7; ft.setUTCDate(ft.getUTCDate()-fn+3); return 1+Math.round((d-ft)/604800000); };
 const PHASES12=[{n:"Accumulation",f:"Volume, base"},{n:"Accumulation",f:"Volume"},{n:"Accumulation",f:"Volume +"},{n:"Intensification",f:"Charges +"},{n:"Intensification",f:"Charges ++"},{n:"Intensification",f:"Lourd"},{n:"Réalisation",f:"Explosif"},{n:"Réalisation",f:"Puissance"},{n:"Réalisation",f:"Pic de force"},{n:"Deload",f:"Récupération"},{n:"Test / PR",f:"Validation"},{n:"Test / PR",f:"Nouveaux maxs"}];
 const programWeek=()=>((weekNumber()-1)%12)+1;
@@ -2568,11 +2568,11 @@ const heroRecords=(sessions)=>{
   return out;
 };
 
-function HeroSheet({equipment,sessions,onPick,onClose}) {
+function HeroSheet({equipment,sessions,onPick,onClose,title}) {
   const rec=heroRecords(sessions);
   // A la main, on autorise aussi les seances a corde, traineau ou piscine :
   // c'est a toi de voir si tu peux les faire. Elles sont signalees.
-  const list=HEROES.filter(h=>heroFits(h,equipment,true));
+  const list=HEROES.filter(h=>h.kind==="amrap"&&heroFits(h,equipment,true));
   const [q,setQ]=useState("");
   const shown=q?list.filter(h=>h.name.toLowerCase().includes(q.toLowerCase())):list;
   return (
@@ -2581,7 +2581,7 @@ function HeroSheet({equipment,sessions,onPick,onClose}) {
       <div style={{width:"100%",maxWidth:600,margin:"0 auto",display:"flex",flexDirection:"column",flex:1,minHeight:0}}>
         <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,padding:"16px 18px"}}>
           <div style={{minWidth:0}}>
-            <div style={{fontSize:21,fontWeight:600,color:C.ink,letterSpacing:"-.02em"}}>Hero WODs</div>
+            <div style={{fontSize:21,fontWeight:600,color:C.ink,letterSpacing:"-.02em"}}>{title||"Hero WODs"}</div>
             <div style={{fontSize:11.5,color:C.ink4,marginTop:2}}>
               {list.length} réalisables avec ton matériel · {Object.keys(rec).length} déjà faits</div>
           </div>
@@ -4139,7 +4139,7 @@ export default function SomaApp() {
   // La cle est l'index de file : ce choix ne fuit jamais vers le Hero de la
   // semaine suivante.
   const[heroOverride,setHeroOverride]=useState(null);
-  const[heroPickerMode,setHeroPickerMode]=useState("append");
+  const[heroPickerMode,setHeroPickerMode]=useState({type:"append",blockIndex:null});
   const[schedule,setSchedule]=useState(PROGRAM);
   const[streak,setStreak]=useState(0);
   const[sessionActive,setSessionActive]=useState(false);
@@ -4844,28 +4844,25 @@ export default function SomaApp() {
     return personalizeDay(c,profile,sessionWeek,perf);
   };
   const pickHero=(h)=>{
-    const hx=h.moves.map((m,k)=>({id:`hero_${h.id}_${k}`,n:m.n,m:"Full body",eq:"bw",
-      kg:m.kg||0,sets:1,reps:String(m.reps),rest:0,role:"density",v4:true,blockIdx:0}));
-    const block={label:h.kind==="amrap"?`AMRAP ${h.cap}`:h.kind==="rounds"?`${h.rounds} tours`
-      :`Pour le temps · ${h.cap} min`,kind:h.kind==="amrap"?"amrap":"fortime",
-      // Un Hero est toujours une progression manuelle : le chrono limite le WOD,
-      // il ne transforme jamais 800 m ou 80 squats en créneau d'une minute.
-      execution:h.kind==="amrap"?"manual_rounds":undefined,cadenceSec:h.kind==="amrap"?0:undefined,
-      durationMin:h.cap,rounds:h.rounds||0,exercises:hx};
-    if(heroPickerMode==="replace"){
-      // Le Hero choisi remplace le premier benchmark. On conserve les éventuels
-      // autres blocs et on complète si nécessaire : une sélection manuelle ne
-      // peut jamais raccourcir la séance Hero sous 45 min de travail.
-      const support=(queuedDay?.blocks||[]).slice(1);
-      const blocks=[block,...support];
-      const used=new Set([h.id]);
+    const makeHeroBlock=(entry,blockIdx)=>({heroId:entry.id,heroName:entry.name,
+      label:`Hero ${blockIdx+1} · ${entry.name} · AMRAP ${entry.cap}`,kind:"amrap",execution:"manual_rounds",cadenceSec:0,durationMin:entry.cap,rounds:0,
+      exercises:entry.moves.map((m,k)=>({id:`hero_${entry.id}_${blockIdx}_${k}`,n:m.n,m:"Full body",eq:"bw",kg:m.kg||0,sets:1,reps:String(m.reps),rest:0,role:"density",v5:true,blockIdx}))});
+    if(heroPickerMode?.type==="replace"){
+      // Chaque carte Hero porte son propre index. Remplacer Hero 2 ne touche donc
+      // jamais Hero 1, ni l'ordre ni l'identité des autres benchmarks.
+      const target=Math.max(0,Number(heroPickerMode.blockIndex)||0);
+      const source=queuedDay?.blocks||[];
+      let blocks=source.map((current,index)=>{
+        const entry=index===target?h:HEROES.find(x=>x.id===current.heroId)||null;
+        return entry?makeHeroBlock(entry,index):{...current,exercises:(current.exercises||[]).map(ex=>({...ex,blockIdx:index}))};
+      });
+      if(!blocks.length) blocks=[makeHeroBlock(h,0)];
+      const used=new Set(blocks.map(b=>b.heroId).filter(Boolean));
       const pool=HEROES.filter(x=>x&&x.kind==="amrap"&&x.cap>=12&&heroFits(x,profile?.equipment||[]));
       let cursor=0;
       while(blocks.reduce((sum,b)=>sum+(Number(b.durationMin)||0),0)<45&&cursor<pool.length){
         const extra=pool[cursor++]; if(used.has(extra.id)) continue; used.add(extra.id);
-        const blockIdx=blocks.length;
-        blocks.push({label:`Hero ${blockIdx+1} · ${extra.name} · AMRAP ${extra.cap}`,kind:"amrap",execution:"manual_rounds",durationMin:extra.cap,rounds:0,
-          cadenceSec:0,exercises:extra.moves.map((m,k)=>({id:`hero_${extra.id}_${blockIdx}_${k}`,n:m.n,m:"Full body",eq:"bw",kg:m.kg||0,sets:1,reps:String(m.reps),rest:0,role:"density",v5:true,blockIdx}))});
+        blocks.push(makeHeroBlock(extra,blocks.length));
       }
       const workMin=blocks.reduce((sum,b)=>sum+(Number(b.durationMin)||0),0);
       setHeroOverride({key:sessionIndex+queueOffset(dayIdx),day:{
@@ -4874,11 +4871,12 @@ export default function SomaApp() {
         recommendedMode:h.kind==="amrap"?"amrap":"classique",metcon:true,totalMin:workMin+11,minSessionMin:45,timeCapMin:workMin,
         emomMinutes:workMin,badge:`${blocks.length} Hero`,hero:h.id,heroName:h.name,archetype:"hero",v5:true,blocks,
       }});
-      setHeroExtra(null);setHeroPickerMode("append");setShowHeroes(false);return;
+      setHeroExtra(null);setHeroPickerMode({type:"append",blockIndex:null});setShowHeroes(false);return;
     }
     // Un bloc de PLUS, pas une journee de remplacement : la seance du jour reste
     // affichee et le Hero vient s'ajouter en dessous.
-    setHeroExtra({hero:h,exercises:hx,block});
+    const block=makeHeroBlock(h,0);
+    setHeroExtra({hero:h,exercises:block.exercises,block});
     setShowHeroes(false);
   };
   const queuedDay=resolveDay({
@@ -5141,12 +5139,17 @@ const NAV=[{id:"home",l:"Accueil"},{id:"seance",l:"Séances"},{id:"stats",l:"Sta
                     </div>
                   )}
                   {day.archetype==="hero"&&!locked&&(
-                    <Tap label="Changer le Hero" onTap={()=>{setHeroPickerMode("replace");setShowHeroes(true);}}
-                      style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"12px 14px",marginBottom:14,
-                        borderRadius:14,background:C.s1,border:`1px solid ${C.s2}`}}>
-                      <span style={{fontSize:13.5,fontWeight:600,color:C.ink}}>Changer le Hero</span>
-                      <span style={{fontSize:12,color:C.ink4}}>Choisir un autre benchmark ›</span>
-                    </Tap>
+                    <div style={{marginBottom:14,display:"flex",flexDirection:"column",gap:8}}>
+                      {(day.blocks||[]).map((block,blockIndex)=>(
+                        <Tap key={block.heroId||blockIndex} label={`Changer ${block.heroName||`Hero ${blockIndex+1}`}`}
+                          onTap={()=>{setHeroPickerMode({type:"replace",blockIndex});setShowHeroes(true);}}
+                          style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"12px 14px",
+                            borderRadius:14,background:C.s1,border:`1px solid ${C.s2}`}}>
+                          <span style={{fontSize:13.5,fontWeight:600,color:C.ink}}>Hero {blockIndex+1} · {block.heroName||block.label?.replace(/^Hero \d+ · /,"").replace(/ · AMRAP.*$/,"")}</span>
+                          <span style={{fontSize:12,color:C.ink4}}>Changer ›</span>
+                        </Tap>
+                      ))}
+                    </div>
                   )}
                   {isPostponedToday&&(
                     <div style={{background:C.alertSoft,border:`1px solid ${C.alert}`,borderRadius:14,padding:"12px 14px",marginBottom:14}}>
@@ -5504,7 +5507,8 @@ const NAV=[{id:"home",l:"Accueil"},{id:"seance",l:"Séances"},{id:"stats",l:"Sta
       {showSettings&&<SessionSettingsSheet day={day} curMode={effMode} onClose={()=>setShowSettings(false)} onApply={({mode,cons})=>{setModeOverride(mode);setDayCons(cons);setShowSettings(false);}}/>}
       {showInjuryReport&&<InjuryReportSheet onClose={()=>setShowInjuryReport(false)} onReport={reportInjury}/>}
       {showHeroes&&<HeroSheet equipment={profile?.equipment} sessions={sessions}
-        onPick={pickHero} onClose={()=>{setHeroPickerMode("append");setShowHeroes(false);}}/>}
+        title={heroPickerMode?.type==="replace"?`Remplacer Hero ${(heroPickerMode.blockIndex||0)+1}`:undefined}
+        onPick={pickHero} onClose={()=>{setHeroPickerMode({type:"append",blockIndex:null});setShowHeroes(false);}}/>}
       {showAI&&<AISheet onClose={()=>setShowAI(false)} onResult={o=>{setAiOverride(o);setShowAI(false);}} excluded={excluded}/>}
       {/* Alertes : jusqu'ici tout echec partait dans la console et l'utilisateur n'en savait rien. */}
       {toasts.length>0&&(
