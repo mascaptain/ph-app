@@ -206,7 +206,10 @@ const heroDay = (ctx, template = 0) => {
   // demandent une charge/installation que leur fiche résume mal. La sélection
   // automatique se limite donc aux benchmarks hybrides lisibles et réalisables;
   // le catalogue complet reste disponible au choix manuel.
-  const HYBRID_HERO_IDS = new Set(["danny", "havana", "jack", "jennifer", "laura", "mcghee", "hortman", "rah oi", "rahoi", "rankel", "ricky", "tk", "viola"]);
+  // Hortman demeure accessible dans le catalogue manuel, mais n'est pas injecté
+  // automatiquement : 800 m + 80 squats + 8 muscle-ups est un benchmark expert,
+  // pas un Hero raisonnable à prescrire par défaut.
+  const HYBRID_HERO_IDS = new Set(["danny", "havana", "jack", "jennifer", "laura", "mcghee", "rah oi", "rahoi", "rankel", "ricky", "tk", "viola"]);
   const pool = HEROES.filter((h) => HYBRID_HERO_IDS.has(String(h.id).toLowerCase())
     && heroFits(h, equipment) && h.cap >= 12 && h.cap <= 60 && h.kind === "amrap"
     && h.moves.length >= 3 && h.moves.length <= 4
@@ -217,7 +220,9 @@ const heroDay = (ctx, template = 0) => {
   const toBlock = (entry, blockIdx) => {
     const exercises = entry.moves.map((m, i) => ({ id: `hero_${entry.id}_${blockIdx}_${i}`, n: m.n, m: "Full body", eq: "bw", kg: m.kg || 0,
       sets: 1, reps: String(m.reps), rest: 0, role: "density", v5: true, blockIdx }));
-    return { label: `Hero ${blockIdx + 1} · ${entry.name} · AMRAP ${entry.cap}`, kind: "amrap", durationMin: entry.cap, cadenceSec: 60, rounds: 0, exercises };
+    // Le chrono borne le Hero ; il ne cadence pas les mouvements. L'athlète
+    // avance manuellement et valide ses tours, comme sur un chronomètre WOD.
+    return { label: `Hero ${blockIdx + 1} · ${entry.name} · AMRAP ${entry.cap}`, kind: "amrap", execution: "manual_rounds", durationMin: entry.cap, cadenceSec: 0, rounds: 0, exercises };
   };
   const picks = [hero];
   // Un ou plusieurs Hero selon leur format, mais les blocs eux-mêmes totalisent
@@ -272,15 +277,9 @@ const conditioningDay = (ctx, template = 0, slot = 0) => {
   const programmedTemplate = template + slot;
   const lane = Math.floor(programmedTemplate / variants.length);
   const selected = variants[programmedTemplate % variants.length];
-  // Les passages ultérieurs changent aussi l'ordre des capacités : c'est une
-  // séance différente, pas la copie d'une semaine antérieure avec un autre titre.
-  const blockOrders = [
-    selected,
-    [selected[1], selected[2], selected[0]],
-    [selected[2], selected[0], selected[1]],
-    [selected[2], selected[1], selected[0]],
-  ];
-  const programmed = blockOrders[lane % blockOrders.length];
+  // L'ordre Bloc 1 → Bloc 2 → Bloc 3 est sacré : la variation porte sur les
+  // exercices, jamais sur la lecture de la séance.
+  const programmed = selected;
   const blocks = programmed.map((spec, blockIdx) => {
     const exercises = build(spec.slots, lane);
     exercises.forEach((ex) => { ex.blockIdx = blockIdx; });
@@ -312,7 +311,9 @@ const validateDay = (day, ctx) => {
   if (!day || !day.label || !day.archetype) fail("séance incomplète");
   if (SESSION_NAME[day.archetype] && day.label !== SESSION_NAME[day.archetype]) fail(`nom de séance incohérent (${day.label})`);
   const exercises = day.exercises || [];
-  if ((day.blocks || []).some((block) => (block.kind === "emom" || block.kind === "amrap") && block.cadenceSec !== 60)) fail("bloc cadencé hors contrat 60 secondes");
+  if ((day.blocks || []).some((block) => block.kind === "emom" && block.cadenceSec !== 60)) fail("EMOM hors contrat 60 secondes");
+  if ((day.blocks || []).some((block) => block.kind === "amrap" && block.execution !== "manual_rounds" && block.cadenceSec !== 60)) fail("AMRAP guidé hors contrat 60 secondes");
+  if ((day.blocks || []).some((block) => block.execution === "manual_rounds" && block.cadenceSec !== 0)) fail("AMRAP manuel ne doit pas cadencer les mouvements");
   if (!(day.totalMin >= MIN_SESSION_MIN) || day.minSessionMin !== MIN_SESSION_MIN) fail(`session under ${MIN_SESSION_MIN} min`);
   if (!Array.isArray(day.abs) || day.abs.length < 2) fail("session without core finisher");
   if (/abdominaux|gainage|core/i.test(day.label)) fail(`titre core interdit (${day.label})`);
@@ -342,7 +343,7 @@ const validateDay = (day, ctx) => {
     if (new Set(exercises.map((ex) => ex.eq)).size < 2) fail("conditionnement sans variété de matériel");
   }
   if (day.archetype === "hero") {
-    if (!day.hero || !day.blocks || day.blocks.length < 1 || day.blocks.some((block) => block.kind !== "amrap" || block.durationMin < 12)) fail("Hero AMRAP invalide");
+    if (!day.hero || !day.blocks || day.blocks.length < 1 || day.blocks.some((block) => block.kind !== "amrap" || block.execution !== "manual_rounds" || block.durationMin < 12)) fail("Hero AMRAP manuel invalide");
     if (day.blocks.reduce((sum, block) => sum + block.durationMin, 0) < 45) fail("Hero sous 45 minutes de travail");
   }
   return true;
