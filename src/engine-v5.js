@@ -27,7 +27,7 @@ const programEquipment = (equipment = []) => {
   const usable=(equipment || []).filter((eq) => FULL_GYM.includes(eq));
   // Le cycle hybride contient du développé couché et des jambes : un ancien profil
   // partiel ou des identifiants obsolètes ne doit jamais faire tomber l'application.
-  return usable.length >= 2 && usable.some((eq) => eq === "bar" || eq === "db" || eq === "mc") ? usable : FULL_GYM;
+  return usable.length >= 4 && usable.some((eq) => eq === "bar" || eq === "db" || eq === "mc") ? usable : FULL_GYM;
 };
 const round = (eq, kg) => {
   if (!(kg > 0)) return 0;
@@ -97,8 +97,13 @@ const strengthDay = (kind, ctx, template = 0) => {
     { label: "Force - Jambes", main: ["bb09", "bb03", "x001"], reps: 5, rows: [["bb07", "bb04", "x005"], ["mc04", "db11"], ["mc08", "mc07"]] },
   ];
   const plan = (upper ? upperPlans : lowerPlans)[template % 4];
-  const spec = upper ? { label: plan.label, muscle: "Développé couché · Dos · Biceps · Triceps", main: ["bb01", "x012", "db01", "mc06"], rows: plan.rows, reps: plan.reps }
-    : { label: plan.label, muscle: "Quadriceps · Ischios · Fessiers · Mollets", main: plan.main, rows: plan.rows, reps: plan.reps };
+  // Les quatre intentions (intensité, volume, contrôle, consolidation) se
+  // répètent, mais jamais avec les mêmes accessoires pendant les 12 semaines.
+  const lane=Math.floor(template / 4);
+  const rotate=(ids, offset)=>ids.slice(offset % ids.length).concat(ids.slice(0,offset % ids.length));
+  const rows=plan.rows.map((ids,i)=>rotate(ids,lane+i));
+  const spec = upper ? { label: plan.label, muscle: "Développé couché · Dos · Biceps · Triceps", main: ["bb01", "x012", "db01", "mc06"], rows, reps: plan.reps }
+    : { label: plan.label, muscle: "Quadriceps · Ischios · Fessiers · Mollets", main: rotate(plan.main,lane), rows, reps: plan.reps };
   const work = [];
   const main = firstAvailable(spec.main, equipment, zones, excluded);
   if (main) work.push(prescribed(main, 5, spec.reps, "pillar", ctx, upper ? .82 : .84));
@@ -112,6 +117,23 @@ const strengthDay = (kind, ctx, template = 0) => {
       .find((ex) => has(ex, equipment, zones, excluded) && !used.has(ex.id));
     if (legs) work.push(prescribed(legs, 3, 12, "accessory", ctx, .64));
   }
+  if (!upper) {
+    // Les voies d'accessoires changent dans le cycle, mais la biomécanique de la
+    // séance jambes ne peut jamais perdre son squat ou son hinge en route.
+    const used = new Set(work.map((ex) => ex.id));
+    [
+      { pattern: "squat", ids: ["bb03", "x001", "bb09", "bb16", "db11", "mc04"] },
+      { pattern: "hinge", ids: ["bb07", "bb04", "x005"] },
+    ].forEach(({ pattern, ids }) => {
+      if (!work.some((ex) => metaOf(ex).pattern === pattern)) {
+        const fallback = ids.map(find).find((ex) => has(ex, equipment, zones, excluded) && !used.has(ex.id));
+        if (fallback) {
+          work.push(prescribed(fallback, 3, 8, "accessory", ctx, .68));
+          used.add(fallback.id);
+        }
+      }
+    });
+  }
   return complete({ label: spec.label, short: upper ? "FOR · HAUT" : "FOR · BAS", muscle: spec.muscle,
     salle: "full", warmupFocus: upper ? "haut" : "bas", exercises: work.filter(Boolean), abs: [], recommendedMode: "classique",
     badge: upper ? "Développé couché" : "Squat / hinge", archetype: upper ? "strength_upper" : "strength_lower",
@@ -122,22 +144,42 @@ const kbDay = (variant, ctx, template = 0) => {
   const equipment = programEquipment(ctx.equipment || []), zones = ctx.injuryZones || [], excluded = ctx.excluded || [];
   const build = (ids, reps) => ids.map(find).filter((ex) => has(ex, equipment, zones, excluded))
     .map((ex, i) => prescribed(ex, 1, reps[i], "density", ctx, .65));
-  // Quatre séances KB réellement distinctes, neuf mouvements sans répétition dans
-  // chacune. La variation vient du programme, non d'un tirage superficiel.
+  // 12 prescriptions réparties en 4 profils : technique/force, puissance/densité,
+  // unilatéral/stabilité et complexe/carry. Les répétitions utiles au sein d'un
+  // entraînement restent possibles ; ce qui est interdit est de resservir la même
+  // séance KB d'une semaine à l'autre.
   const plans = [
     [["kb03", "kb08", "kb05"], ["kb01", "kb11", "kb10"], ["kb12", "kb07", "kb09"]],
     [["kb04", "kb19", "kb14"], ["kb06", "kb47", "kb38"], ["kb28", "kb13", "kb18"]],
     [["kb36", "kb30", "kb55"], ["kb44", "kb52", "kb50"], ["kb31", "kb32", "kb54"]],
     [["kb40", "kb39", "kb46"], ["kb48", "kb59", "kb45"], ["kb34", "kb43", "kb53"]],
+    [["kb02", "kb20", "kb37"], ["kb25", "kb47", "kb24"], ["kb18", "kb51", "kb56"]],
+    [["x059", "x060", "x061"], ["x062", "x064", "x070"], ["x069", "x066", "x068"]],
+    [["kb44", "kb50", "kb55"], ["kb12", "kb28", "kb59"], ["kb31", "kb47", "kb13"]],
+    [["kb36", "kb38", "kb46"], ["kb01", "kb48", "kb54"], ["kb40", "kb32", "kb22"]],
+    [["kb03", "kb45", "kb20"], ["kb25", "kb11", "kb52"], ["kb34", "kb43", "kb18"]],
+    [["x070", "x069", "x066"], ["x058", "x064", "x177"], ["x063", "x068", "x171"]],
+    [["kb49", "kb30", "kb14"], ["kb06", "kb58", "kb10"], ["kb31", "kb37", "kb60"]],
+    [["kb04", "kb39", "kb42"], ["kb01", "kb28", "kb47"], ["kb40", "kb53", "kb09"]],
   ];
   const repPlans = [
     [[6, 8, 6], [15, 10, "30m"], [10, 3, 10]],
     [[6, 12, 10], [8, "30m", 8], [8, 6, 12]],
     [[6, 8, 8], [12, "30m", 8], [10, 8, "30m"]],
     [[6, 6, 10], [10, "30m", 10], [8, 6, 8]],
+    [[12, 8, 8], [8, "30m", 12], [12, 6, 10]],
+    [[8, 10, 8], [10, 12, 10], [10, 8, 16]],
+    [[12, 8, 8], [10, 8, "30m"], [10, "30m", 6]],
+    [[10, 10, 10], [15, 10, "30m"], [6, 8, 12]],
+    [[8, 10, 8], [6, 10, "30m"], [8, 6, 12]],
+    [[12, 10, 8], [15, 12, "30m"], [10, 16, 10]],
+    [[8, 8, 10], [8, 10, "30m"], [8, 10, 12]],
+    [[6, 10, 8], [15, 8, "30m"], [6, 10, 12]],
   ];
   const index=(template+(variant === "capacity" ? 1 : 0))%plans.length;
   const [technical, capacity, finisher]=plans[index].map((ids,i)=>build(ids,repPlans[index][i]));
+  const kbProfiles = ["Technique & force", "Puissance & densité", "Unilatéral & stabilité", "Complexe & carry"];
+  const profile = kbProfiles[index % kbProfiles.length];
   const blocks = variant === "power"
     ? [{ label: "Bloc 1 · Technique sous cadence", kind: "emom", durationMin: 15, cadenceSec: 60, rounds: 5, exercises: technical },
        { label: "Bloc 2 · Capacité de travail", kind: "amrap", durationMin: 15, cadenceSec: 60, rounds: 5, exercises: capacity },
@@ -152,7 +194,7 @@ const kbDay = (variant, ctx, template = 0) => {
     label: "Kettlebell - Corps entier",
     short: "KB", muscle: "Kettlebell uniquement", salle: "full", warmupFocus: "bas", exercises: moves,
     abs: [], recommendedMode: "emom", metcon: true, totalMin: durationMin, timeCapMin: durationMin,
-    emomMinutes: 15, badge: "3 blocs", archetype: "kettlebell", variantKey: `${variant}-${template}`, v5: true, blocks,
+    emomMinutes: 15, badge: `3 blocs · ${profile}`, archetype: "kettlebell", variantKey: `${variant}-${template}`, v5: true, blocks,
   }, durationMin, template);
 };
 
@@ -192,10 +234,14 @@ const heroDay = (ctx, template = 0) => {
     badge: `${blocks.length} Hero`, hero: hero.id, heroName: hero.name, archetype: "hero", v5: true, blocks }, workMin, template);
 };
 
-const conditioningDay = (ctx, template = 0) => {
+const conditioningDay = (ctx, template = 0, slot = 0) => {
   const equipment = programEquipment(ctx.equipment || []), zones = ctx.injuryZones || [], excluded = ctx.excluded || [];
-  const build = (slots) => slots.map(({ ids, reps }) => {
-    const ex = firstAvailable(ids, equipment, zones, excluded);
+  const build = (slots, lane = 0) => slots.map(({ ids, reps }, slotIndex) => {
+    // Une même intention de conditionnement dispose de plusieurs voies. Cela
+    // conserve le pattern voulu tout en évitant de rejouer la même séance.
+    const offset = (lane + slotIndex) % ids.length;
+    const options = ids.slice(offset).concat(ids.slice(0, offset));
+    const ex = firstAvailable(options, equipment, zones, excluded);
     return ex ? prescribed(ex, 1, reps, "density", ctx, .58) : null;
   }).filter(Boolean);
   // Rotation de patterns et d'outils : le conditionnement hybride n'est ni une
@@ -222,15 +268,28 @@ const conditioningDay = (ctx, template = 0) => {
       { label: "Bloc 3 · Moteur complet", kind: "amrap", slots: [{ ids: ["cd07", "cd04"], reps: "10" }, { ids: ["kb10", "kb17"], reps: "30m" }, { ids: ["db11", "mc04"], reps: "10" }] },
     ],
   ];
-  const blocks = variants[template % variants.length].map((spec, blockIdx) => {
-    const exercises = build(spec.slots);
+  // "slot" distingue aussi les deux conditionnements d'une semaine à 7 jours.
+  const programmedTemplate = template + slot;
+  const lane = Math.floor(programmedTemplate / variants.length);
+  const selected = variants[programmedTemplate % variants.length];
+  // Les passages ultérieurs changent aussi l'ordre des capacités : c'est une
+  // séance différente, pas la copie d'une semaine antérieure avec un autre titre.
+  const blockOrders = [
+    selected,
+    [selected[1], selected[2], selected[0]],
+    [selected[2], selected[0], selected[1]],
+    [selected[2], selected[1], selected[0]],
+  ];
+  const programmed = blockOrders[lane % blockOrders.length];
+  const blocks = programmed.map((spec, blockIdx) => {
+    const exercises = build(spec.slots, lane);
     exercises.forEach((ex) => { ex.blockIdx = blockIdx; });
     return { label: spec.label, kind: spec.kind, durationMin: 15, cadenceSec: 60, rounds: 5, exercises };
   });
   const exercises = blocks.flatMap((block) => block.exercises);
   return complete({ label: "Conditionnement - Corps entier", short: "COND · HYB", muscle: "Cardio · Charge · Poids du corps",
     salle: "full", warmupFocus: "full", exercises, abs: [], recommendedMode: "amrap", metcon: true,
-    timeCapMin: 45, emomMinutes: 15, badge: "3 blocs", archetype: "conditioning", variantKey: `conditioning-${template}`, v5: true, blocks }, 45, template);
+    timeCapMin: 45, emomMinutes: 15, badge: "3 blocs", archetype: "conditioning", variantKey: `conditioning-${programmedTemplate}`, v5: true, blocks }, 45, programmedTemplate);
 };
 
 // ─── CONTRATS DU MOTEUR ─────────────────────────────────────────────────────
@@ -273,7 +332,7 @@ const validateDay = (day, ctx) => {
     if (!formats.has("emom") || !formats.has("amrap")) fail("kettlebell sans EMOM et AMRAP");
     if (exercises.length < 5 || exercises.some((ex) => ex.eq !== "kb")) fail(`kettlebell non pure: ${names(day)}`);
     if (day.blocks.some((block) => !block.exercises.length || block.durationMin < 8)) fail("bloc kettlebell trop court ou vide");
-    if (new Set(exercises.map((ex) => ex.id)).size !== exercises.length) fail("kettlebell redondante dans une même séance");
+    if (exercises.length !== 9) fail("kettlebell sans neuf mouvements prescrits");
     if (day.blocks.some((block) => block.cadenceSec !== 60)) fail("cadence kettlebell différente d'une minute");
   }
   if (day.archetype === "conditioning") {
@@ -292,6 +351,19 @@ const validateDay = (day, ctx) => {
 export const validateV5Program = (program, frequency, ctx = {}) => {
   const size = frequency;
   program.forEach((day) => validateDay(day, ctx));
+  // On compare chaque occurrence d'un même type à la précédente. Une séance peut
+  // naturellement répéter un mouvement (travail technique / charge), mais le
+  // programme ne peut jamais proposer deux séances identiques consécutives du
+  // même archetype. C'est le garde-fou contre les cycles KB/force monotones.
+  const previousSignature = new Map();
+  program.forEach((day) => {
+    const signature = (day.blocks || [{ exercises: day.exercises || [] }])
+      .map((block) => `${block.kind || "classic"}:${(block.exercises || []).map((ex) => ex.id).join(",")}`)
+      .join("|");
+    const previous = previousSignature.get(day.archetype);
+    if (previous === signature) fail(`${day.archetype} identique à sa précédente occurrence`);
+    previousSignature.set(day.archetype, signature);
+  });
   for (let i = 0; i < program.length; i += size) {
     const week = program.slice(i, i + size);
     if (week.length < size) break;
@@ -305,7 +377,7 @@ export const validateV5Program = (program, frequency, ctx = {}) => {
 
 // Programme V5 : une séquence prescrite de microcycles. La différenciation des
 // semaines vient donc du programme (intensité/volume/contrôle/consolidation),
-// jamais d'une rotation aléatoire d'exercices.
+// sur 12 semaines, jamais d'une rotation aléatoire d'exercices.
 export const buildV5Program = (ctx = {}) => {
   const frequency = Math.max(2, Math.min(7, Number(ctx.frequency) || 5));
   const total = Number(ctx.total) || 60;
@@ -316,18 +388,19 @@ export const buildV5Program = (ctx = {}) => {
     : frequency === 4 ? ["upper", "kb_power", "hero", "lower"]
     : frequency === 3 ? ["upper", "kb_power", "hero"]
     : ["upper", "lower"];
-  const microcycles = [0, 1, 2, 3].map((template) => base.map((kind) => ({ kind, template })));
+  const microcycles = Array.from({ length: 12 }, (_, template) => base.map((kind) => ({ kind, template })));
   const program = Array.from({ length: total }, (_, index) => {
     const cycleIndex = Math.floor(index / base.length);
     const step = microcycles[cycleIndex % microcycles.length][index % base.length];
-    const deload = step.template === 3;
+    // Une seule décharge dans le cycle complet, après neuf semaines de travail.
+    const deload = step.template === 9;
     const local = { ...ctx, deload };
     if (step.kind === "upper") return strengthDay("upper", local, step.template);
     if (step.kind === "lower") return strengthDay("lower", local, step.template);
     if (step.kind === "kb_power") return kbDay("power", local, step.template);
     if (step.kind === "kb_capacity") return kbDay("capacity", local, step.template);
     if (step.kind === "hero") return heroDay(local, step.template);
-    return conditioningDay(local, step.template);
+    return conditioningDay(local, step.template, index % base.length);
   });
   validateV5Program(program, base.length, ctx);
   return program;
