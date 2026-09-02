@@ -215,21 +215,44 @@ const heroDay = (ctx, template = 0) => {
     && h.moves.length >= 3 && h.moves.length <= 4
     && new Set(h.moves.map((move) => String(move.n).toLowerCase())).size === h.moves.length
     && h.moves.every((move) => isSafe({ n: move.n }, zones)));
-  const hero = pool.length ? pool[template % pool.length] : null;
+  // Les Hero ne forment pas une fenêtre glissante (A+B puis B+C) : ce modèle
+  // rendait deux semaines voisines presque identiques. Le pas premier avec la
+  // taille du pool distribue les benchmarks sur le cycle complet.
+  const previousHeroIds = new Set(ctx.previousHeroIds || []);
+  const heroUses = ctx.heroUses || {};
+  const heroSeed = Math.max(0, Number(ctx.heroSeed) || 0);
+  const hero = pool.length ? pool.filter((entry) => !previousHeroIds.has(entry.id)).sort((a, b) => {
+    const usage = (heroUses[a.id] || 0) - (heroUses[b.id] || 0);
+    const order = (entry) => (pool.indexOf(entry) - ((template * 5 + heroSeed) % pool.length) + pool.length) % pool.length;
+    return usage || order(a) - order(b);
+  })[0] || null : null;
   if (!hero) return kbDay("capacity", ctx, template);
   const toBlock = (entry, blockIdx) => {
     const exercises = entry.moves.map((m, i) => ({ id: `hero_${entry.id}_${blockIdx}_${i}`, n: m.n, m: "Full body", eq: "bw", kg: m.kg || 0,
       sets: 1, reps: String(m.reps), rest: 0, role: "density", v5: true, blockIdx }));
     // Le chrono borne le Hero ; il ne cadence pas les mouvements. L'athlète
     // avance manuellement et valide ses tours, comme sur un chronomètre WOD.
-    return { label: `Hero ${blockIdx + 1} · ${entry.name} · AMRAP ${entry.cap}`, kind: "amrap", execution: "manual_rounds", durationMin: entry.cap, cadenceSec: 0, rounds: 0, exercises };
+    return { heroId: entry.id, heroName: entry.name, label: `Hero ${blockIdx + 1} · ${entry.name} · AMRAP ${entry.cap}`, kind: "amrap", execution: "manual_rounds", durationMin: entry.cap, cadenceSec: 0, rounds: 0, exercises };
   };
   const picks = [hero];
   // Un ou plusieurs Hero selon leur format, mais les blocs eux-mêmes totalisent
   // toujours au moins 45 min. Un Hero long peut suffire ; des courts se combinent.
-  for (let offset = 1; picks.reduce((sum, entry) => sum + entry.cap, 0) < 45 && offset < pool.length; offset += 1) {
-    const candidate=pool[(template + offset) % pool.length];
-    if (!picks.some((entry) => entry.id === candidate.id)) picks.push(candidate);
+  const moveNames = (entry) => new Set(entry.moves.map((move) => String(move.n).toLowerCase()));
+  const priority = [4, 7, 2, 9, 5, 1, 8, 3, 6, 10, 11, 12];
+  for (let attempt = 0; picks.reduce((sum, entry) => sum + entry.cap, 0) < 45 && attempt < pool.length; attempt += 1) {
+    const usedMoves = new Set(picks.flatMap((entry) => [...moveNames(entry)]));
+    const candidates = pool.filter((candidate) => !previousHeroIds.has(candidate.id) && !picks.some((entry) => entry.id === candidate.id));
+    if (!candidates.length) break;
+    candidates.sort((a, b) => {
+      const overlap = (entry) => [...moveNames(entry)].filter((name) => usedMoves.has(name)).length;
+      const order = (entry) => {
+        const offset = (pool.indexOf(entry) - pool.indexOf(hero) + pool.length) % pool.length;
+        const rank = priority.indexOf(offset);
+        return rank < 0 ? priority.length + offset : rank;
+      };
+      return overlap(a) - overlap(b) || (heroUses[a.id] || 0) - (heroUses[b.id] || 0) || order(a) - order(b);
+    });
+    picks.push(candidates[0]);
   }
   const blocks = picks.map(toBlock);
   const exercises = blocks.flatMap((block) => block.exercises);
@@ -370,6 +393,12 @@ export const validateV5Program = (program, frequency, ctx = {}) => {
     if (day.archetype !== "hero" && previous === signature) fail(`${day.archetype} identique à sa précédente occurrence`);
     previousSignature.set(day.archetype, signature);
   });
+  const priorHeroIds = new Set();
+  program.filter((day) => day.archetype === "hero").forEach((day) => {
+    const ids = (day.blocks || []).map((block) => block.heroId).filter(Boolean);
+    if (ids.some((id) => priorHeroIds.has(id))) fail("Hero répété sur deux occurrences consécutives");
+    priorHeroIds.clear(); ids.forEach((id) => priorHeroIds.add(id));
+  });
   for (let i = 0; i < program.length; i += size) {
     const week = program.slice(i, i + size);
     if (week.length < size) break;
@@ -395,17 +424,25 @@ export const buildV5Program = (ctx = {}) => {
     : frequency === 3 ? ["upper", "kb_power", "hero"]
     : ["upper", "lower"];
   const microcycles = Array.from({ length: 12 }, (_, template) => base.map((kind) => ({ kind, template })));
+  let previousHeroIds = new Set();
+  let heroUses = {};
   const program = Array.from({ length: total }, (_, index) => {
     const cycleIndex = Math.floor(index / base.length);
     const step = microcycles[cycleIndex % microcycles.length][index % base.length];
     // Une seule décharge dans le cycle complet, après neuf semaines de travail.
     const deload = step.template === 9;
-    const local = { ...ctx, deload };
+    const local = { ...ctx, deload, previousHeroIds: [...previousHeroIds], heroUses };
     if (step.kind === "upper") return strengthDay("upper", local, step.template);
     if (step.kind === "lower") return strengthDay("lower", local, step.template);
     if (step.kind === "kb_power") return kbDay("power", local, step.template);
     if (step.kind === "kb_capacity") return kbDay("capacity", local, step.template);
-    if (step.kind === "hero") return heroDay(local, step.template);
+    if (step.kind === "hero") {
+      const day = heroDay(local, step.template);
+      previousHeroIds = new Set((day.blocks || []).map((block) => block.heroId).filter(Boolean));
+      heroUses = { ...heroUses };
+      previousHeroIds.forEach((id) => { heroUses[id] = (heroUses[id] || 0) + 1; });
+      return day;
+    }
     return conditioningDay(local, step.template, index % base.length);
   });
   validateV5Program(program, base.length, ctx);
