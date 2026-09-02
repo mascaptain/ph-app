@@ -182,11 +182,11 @@ const kbDay = (variant, ctx, template = 0) => {
   const profile = kbProfiles[index % kbProfiles.length];
   const blocks = variant === "power"
     ? [{ label: "Bloc 1 · Technique sous cadence", kind: "emom", durationMin: 15, cadenceSec: 60, rounds: 5, exercises: technical },
-       { label: "Bloc 2 · Capacité de travail", kind: "amrap", durationMin: 15, cadenceSec: 60, rounds: 5, exercises: capacity },
-       { label: "Bloc 3 · Finisseur", kind: "amrap", durationMin: 15, cadenceSec: 60, rounds: 5, exercises: finisher }]
-    : [{ label: "Bloc 1 · Volume continu", kind: "amrap", durationMin: 15, cadenceSec: 60, rounds: 5, exercises: technical },
+       { label: "Bloc 2 · Capacité de travail", kind: "amrap", execution: "manual_rounds", durationMin: 15, cadenceSec: 0, rounds: 0, exercises: capacity },
+       { label: "Bloc 3 · Finisseur", kind: "amrap", execution: "manual_rounds", durationMin: 15, cadenceSec: 0, rounds: 0, exercises: finisher }]
+    : [{ label: "Bloc 1 · Volume continu", kind: "amrap", execution: "manual_rounds", durationMin: 15, cadenceSec: 0, rounds: 0, exercises: technical },
        { label: "Bloc 2 · Puissance répétée", kind: "emom", durationMin: 15, cadenceSec: 60, rounds: 5, exercises: capacity },
-       { label: "Bloc 3 · Finisseur", kind: "amrap", durationMin: 15, cadenceSec: 60, rounds: 5, exercises: finisher }];
+       { label: "Bloc 3 · Finisseur", kind: "amrap", execution: "manual_rounds", durationMin: 15, cadenceSec: 0, rounds: 0, exercises: finisher }];
   blocks.forEach((block, blockIdx) => block.exercises.forEach((ex) => { ex.blockIdx = blockIdx; }));
   const moves = blocks.flatMap((block) => block.exercises);
   const durationMin = blocks.reduce((sum, block) => sum + block.durationMin, 0);
@@ -283,7 +283,7 @@ const conditioningDay = (ctx, template = 0, slot = 0) => {
   const blocks = programmed.map((spec, blockIdx) => {
     const exercises = build(spec.slots, lane);
     exercises.forEach((ex) => { ex.blockIdx = blockIdx; });
-    return { label: spec.label, kind: spec.kind, durationMin: 15, cadenceSec: 60, rounds: 5, exercises };
+    return { label: spec.label, kind: spec.kind, execution: spec.kind === "amrap" ? "manual_rounds" : "guided", durationMin: 15, cadenceSec: spec.kind === "emom" ? 60 : 0, rounds: spec.kind === "emom" ? 5 : 0, exercises };
   });
   const exercises = blocks.flatMap((block) => block.exercises);
   return complete({ label: "Conditionnement - Corps entier", short: "COND · HYB", muscle: "Cardio · Charge · Poids du corps",
@@ -334,12 +334,14 @@ const validateDay = (day, ctx) => {
     if (exercises.length < 5 || exercises.some((ex) => ex.eq !== "kb")) fail(`kettlebell non pure: ${names(day)}`);
     if (day.blocks.some((block) => !block.exercises.length || block.durationMin < 8)) fail("bloc kettlebell trop court ou vide");
     if (exercises.length !== 9) fail("kettlebell sans neuf mouvements prescrits");
-    if (day.blocks.some((block) => block.cadenceSec !== 60)) fail("cadence kettlebell différente d'une minute");
+    if (day.blocks.some((block) => block.kind === "emom" && block.cadenceSec !== 60)) fail("cadence EMOM kettlebell différente d'une minute");
+    if (day.blocks.some((block) => block.kind === "amrap" && block.execution !== "manual_rounds")) fail("AMRAP kettlebell doit être manuel");
   }
   if (day.archetype === "conditioning") {
     if (!Array.isArray(day.blocks) || day.blocks.length !== 3 || day.blocks.some((block) => block.durationMin !== 15 || block.exercises.length !== 3)) fail("conditionnement sans trois blocs de quinze minutes");
     const formats = new Set(day.blocks.map((block) => block.kind));
     if (!formats.has("emom") || !formats.has("amrap")) fail("conditionnement sans EMOM et AMRAP");
+    if (day.blocks.some((block) => block.kind === "amrap" && block.execution !== "manual_rounds")) fail("AMRAP conditionnement doit être manuel");
     if (new Set(exercises.map((ex) => ex.eq)).size < 2) fail("conditionnement sans variété de matériel");
   }
   if (day.archetype === "hero") {
@@ -362,7 +364,10 @@ export const validateV5Program = (program, frequency, ctx = {}) => {
       .map((block) => `${block.kind || "classic"}:${(block.exercises || []).map((ex) => ex.id).join(",")}`)
       .join("|");
     const previous = previousSignature.get(day.archetype);
-    if (previous === signature) fail(`${day.archetype} identique à sa précédente occurrence`);
+    // Les Hero sont des benchmarks : les répétitions à distance servent la
+    // comparaison de score. Les autres archétypes restent protégés contre une
+    // séance identique consécutive.
+    if (day.archetype !== "hero" && previous === signature) fail(`${day.archetype} identique à sa précédente occurrence`);
     previousSignature.set(day.archetype, signature);
   });
   for (let i = 0; i < program.length; i += size) {
