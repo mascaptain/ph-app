@@ -209,7 +209,7 @@ const resolveDay = ({rawDay, doneDay, beforeStart, past, queueSession}) => {
 const SESSION_TEMPLATES = [...PROGRAM.filter(d=>d.salle).map(d=>({label:d.label,salle:d.salle,muscle:d.muscle,exercises:d.exercises,abs:d.abs,ids:d.ids})), REST_TPL];
 
 // Rotation hebdo - mesocycle hybride (Volume -> Intensite -> Puissance -> Deload)
-const VERSION="5.6.1";
+const VERSION="5.8.0";
 const weekNumber = () => { const dt=new Date(); const d=new Date(Date.UTC(dt.getFullYear(),dt.getMonth(),dt.getDate())); const dn=(d.getUTCDay()+6)%7; d.setUTCDate(d.getUTCDate()-dn+3); const ft=new Date(Date.UTC(d.getUTCFullYear(),0,4)); const fn=(ft.getUTCDay()+6)%7; ft.setUTCDate(ft.getUTCDate()-fn+3); return 1+Math.round((d-ft)/604800000); };
 const PHASES12=[{n:"Accumulation",f:"Volume, base"},{n:"Accumulation",f:"Volume"},{n:"Accumulation",f:"Volume +"},{n:"Intensification",f:"Charges +"},{n:"Intensification",f:"Charges ++"},{n:"Intensification",f:"Lourd"},{n:"Réalisation",f:"Explosif"},{n:"Réalisation",f:"Puissance"},{n:"Réalisation",f:"Pic de force"},{n:"Deload",f:"Récupération"},{n:"Test / PR",f:"Validation"},{n:"Test / PR",f:"Nouveaux maxs"}];
 const programWeek=()=>((weekNumber()-1)%12)+1;
@@ -329,9 +329,9 @@ const kbFeedbackIndex=(sessions)=>{
   const done=(sessions||[]).filter(s=>/kettlebell/i.test(String(s&&((s.dayLabel||s.day_label||s.session_type)||""))))
     .slice().sort((a,b)=>String(b.date).localeCompare(String(a.date))).slice(0,3);
   if(!done.length) return {};
-  const rpes=done.flatMap(s=>(s.exercises||[]).map(e=>Number(e&&e.rpe)).filter(Number.isFinite));
-  const intensity=done.map(s=>Number(s.feedback&&s.feedback.global)).filter(Number.isFinite);
-  const energy=done.map(s=>Number(s.feedback&&s.feedback.energy)).filter(Number.isFinite);
+  const rpes=done.flatMap(s=>(s.exercises||[]).map(e=>e?.rpe==null?NaN:Number(e.rpe)).filter(n=>n>=1&&n<=10));
+  const intensity=done.map(s=>s.feedback?.global==null?NaN:Number(s.feedback.global)).filter(n=>n>=1&&n<=5);
+  const energy=done.map(s=>s.feedback?.energy==null?NaN:Number(s.feedback.energy)).filter(n=>n>=1&&n<=5);
   const avg=(arr)=>arr.length?arr.reduce((a,b)=>a+b,0)/arr.length:null;
   return {rpe:avg(rpes),intensity:avg(intensity),energy:avg(energy),sessions:done.length};
 };
@@ -414,6 +414,12 @@ const baseGoal=(g)=>g==="force"?"force":g==="endurance"?"endurance":g==="seche"?
 import { noAccent, patternOf, tierOf, progOf, metaOf, unitOf, unitLabel } from "./classify.js";
 import { v4Session, patternStrength } from "./engine.js";
 import { v5Session } from "./engine-v5.js";
+import { circuitClock } from "./circuit-clock.js";
+import { sessionRecord } from "./session-record.js";
+import { pauseOn, projectedEnd, shiftDate } from "./training-pause.js";
+import PauseSettings from "./PauseSettings.jsx";
+import WorkoutComposer from "./WorkoutComposer.jsx";
+import { customWorkoutDay, normalizeWorkout } from "./custom-workouts.js";
 import { HEROES, heroFits, heroById, heroSummary } from "./heroes.js";
 
 const REGION={push_h:"haut",push_v:"haut",pull_h:"haut",pull_v:"haut",arm_push:"haut",arm_pull:"haut",squat:"bas",hinge:"bas",core:"core",cardio:"cardio"};
@@ -1129,6 +1135,7 @@ const skillExo=(sk,step)=>{
 
 const setPlanFor=(ex)=>{
   const n=Math.max(1,typeof ex.sets==="number"?ex.sets:4);
+  if(ex.role==='custom') return Array.from({length:n},()=>({w:ex.kg||0,reps:ex.reps}));
   const fixed=isFixedLoad(ex);
   const W=fixed?snapKb(ex.kg||0):(ex.kg||0);
   return Array.from({length:n},(_,i)=>{
@@ -1371,7 +1378,7 @@ function CircuitPlayer({mode,exos,onClose,defMin,blocks,onAllDone,startBlock,log
   // EMOM = cadence automatique. AMRAP Hero = chrono continu et validation
   // volontaire des mouvements/tours ; aucune distance ou série ne devient une
   // "minute" fictive.
-  const manualRounds=kind==="amrap"&&cur.execution==="manual_rounds";
+  const manualRounds=kind==="amrap";
   const cexos=cur.exercises||[];
   const lastBlock=bi>=BLK.length-1;
   const [running,setRunning]=useState(false);
@@ -1395,6 +1402,7 @@ function CircuitPlayer({mode,exos,onClose,defMin,blocks,onAllDone,startBlock,log
   useEffect(()=>()=>{clearInterval(ref.current);clearInterval(restRef.current);},[]);
   useEffect(()=>{
     clearInterval(ref.current);clearInterval(restRef.current);
+    runningRef.current=false;
     setRunning(false);setElapsed(0);setRounds(0);setSi(0);setStour(1);setResting(0);lastMin.current=0;
     // Le compteur d'occurrences repartait de zero a chaque ouverture du lecteur : reprendre un
     // bloc interrompu reecrivait par-dessus les tours deja valides. On repart de ce qui est
@@ -1408,7 +1416,11 @@ function CircuitPlayer({mode,exos,onClose,defMin,blocks,onAllDone,startBlock,log
   // minutes réellement écoulées. Cela couvre le dernier tick et empêche autant
   // la série non validée que les trois validations par minute de l'ancienne UI.
   const finalizeAutoBlock=()=>{
-    if(!sDate||!onLogSet||manualRounds||!(kind==="emom"||kind==="amrap")) return;
+    if(!sDate||!onLogSet||!(kind==="emom"||kind==="amrap")) return;
+    if(manualRounds){
+      onLogSet(`${sDate}__block_${bi}`,{kind:"block_complete",block:bi,completed:true,date:sDate});
+      return;
+    }
     for(let minute=0;minute<durMin;minute+=1){
       const ex=cexos.length?cexos[minute%cexos.length]:null;
       if(!ex||!ex.id) continue;
@@ -1442,7 +1454,8 @@ function CircuitPlayer({mode,exos,onClose,defMin,blocks,onAllDone,startBlock,log
     onLogSet(timerKey,{kind:"circuit_timer",block:bi,...state,date:sDate});
   };
   const startTimer=(resumeStartedAt=null,resumeElapsed=elapsed)=>{
-    if(running||total<=0)return;
+    if(runningRef.current||total<=0)return;
+    clearInterval(ref.current);
     // Le timer de circuit doit suivre l'horloge réelle, pas le nombre de ticks.
     // Ainsi une minute EMOM passe bien à l'exercice suivant même si le navigateur
     // ralentit un intervalle (écran verrouillé, économie d'énergie, arrière-plan).
@@ -1460,16 +1473,18 @@ function CircuitPlayer({mode,exos,onClose,defMin,blocks,onAllDone,startBlock,log
     // trois exercices signifie donc 5 tours sur 15 min, jamais 3 bascules/min.
     const cadence=isEmom||(isAmrap&&!manualRounds)?60:0;
     lastStep.current=cadence?Math.floor(safeElapsed/cadence):0;
-    if(isAmrap&&cexos.length){ setSi(lastStep.current%cexos.length); setRounds(Math.floor(lastStep.current/cexos.length)); }
+    if(isAmrap&&!manualRounds&&cexos.length){ setSi(lastStep.current%cexos.length); setRounds(Math.floor(lastStep.current/cexos.length)); }
     ref.current=setInterval(()=>{
-      const n=Math.min(tt,safeSeconds((Date.now()-(Number(startedAtRef.current)||Date.now()))/1000));
+      const snapshot=circuitClock({kind,startedAt:startedAtRef.current,durationSec:tt});
+      const n=snapshot.elapsed;
       if(n<=elRef.current) return;
       elRef.current=n;
+      if(!cadence&&snapshot.countdown>=1&&snapshot.countdown<=5) signalCountdown(snapshot.countdown);
       if(cadence){
         const step=Math.floor(n/cadence);
         const untilChange=cadence-(n%cadence);
         if(n<tt&&untilChange>=1&&untilChange<=5) signalCountdown(untilChange);
-        if(step!==lastStep.current&&n<tt){
+        if(step!==lastStep.current){
           // Si le navigateur a sauté plusieurs ticks, on conserve chaque minute
           // ou chaque créneau AMRAP écoulé dans le log au lieu d'en perdre un.
           for(let completed=lastStep.current;completed<step;completed++)
@@ -1481,7 +1496,6 @@ function CircuitPlayer({mode,exos,onClose,defMin,blocks,onAllDone,startBlock,log
       }
       if(n>=tt){
         clearInterval(ref.current);
-        if((isEmom||(isAmrap&&!manualRounds))&&cexos.length) logOccurrence(cexos[lastStep.current%cexos.length]);
         signalBlockOver(); runningRef.current=false; setRunning(false); persistTimer({elapsed:tt,running:false,completed:true}); setElapsed(tt); setTimeout(()=>finishBlock(),900); return;
       }
       setElapsed(n);
@@ -1508,7 +1522,7 @@ function CircuitPlayer({mode,exos,onClose,defMin,blocks,onAllDone,startBlock,log
     const startedAt=Number(saved.startedAt);
     if(!Number.isFinite(startedAt)||startedAt<=0){ persistTimer({elapsed:0,running:false,invalid:true}); return; }
     const recovered=Math.min(total,safeSeconds((Date.now()-startedAt)/1000));
-    if(recovered>=total){ setElapsed(total); elRef.current=total; lastMin.current=Math.floor(total/60); setDebrief(true); return; }
+    if(recovered>=total){ finalizeAutoBlock(); setElapsed(total); elRef.current=total; lastMin.current=Math.floor(total/60); setDebrief(true); return; }
     setElapsed(recovered); elRef.current=recovered; lastMin.current=Math.floor(recovered/60);
     startTimer(startedAt,recovered);
   },[bi,log,total]);
@@ -3408,7 +3422,7 @@ function ScheduleEditor({schedule,onChange,onReset,onClose,autoRotate,onToggleAu
 // l'objectif d'entrainement. La frontiere est desormais nette —
 //   Moi       ce qui te decrit et ce qui nourrit le moteur
 //   Reglages  ce qui habille l'application et le compte
-function SettingsTab({user,excluded,onToggleExclude,onSignOut,onReset,onOpenLibrary,profile,schedule,avatarUrl,onUpdateConfig,onOpenScheduleEditor,onRedoOnboarding,progDone}) {
+function SettingsTab({user,excluded,onToggleExclude,onSignOut,onReset,onOpenLibrary,profile,schedule,avatarUrl,onUpdateConfig,onOpenScheduleEditor,onRedoOnboarding,progDone,busyWorkout,onLaunchCustom}) {
   const[view,setView]=useState("moi");
   const[showLib,setShowLib]=useState(false);
   const[w,setW]=useState(profile?.weight_kg!=null?String(profile.weight_kg):"");
@@ -3442,9 +3456,7 @@ function SettingsTab({user,excluded,onToggleExclude,onSignOut,onReset,onOpenLibr
   const doneN=Math.min(progDone!=null?progDone:(profile?.session_index||0),total);
   const pct=total?Math.round(doneN/total*100):0;
   // Semaine du programme : "semaine 6" se deduit de la date de debut, pas du calendrier.
-  const progWeek=profile?.program_start
-    ?Math.max(1,Math.floor((new Date(todayKey()+"T00:00:00")-new Date(profile.program_start+"T00:00:00"))/604800000)+1)
-    :null;
+  const progWeek=profile?.program_start?Math.min(12,Math.floor(doneN/5)+1):null;
 
   const CARD={background:C.card,border:`1px solid ${C.s2}`,boxShadow:`0 3px 16px ${C.ink5}`,borderRadius:22};
   const LBL={fontSize:10,fontWeight:600,letterSpacing:".11em",textTransform:"uppercase",color:C.ink4};
@@ -3640,6 +3652,8 @@ function SettingsTab({user,excluded,onToggleExclude,onSignOut,onReset,onOpenLibr
 
       {view==="reglages"&&(
       <div key="reglages" style={{animation:`riseIn 300ms ${EO} both`}}>
+        <PauseSettings pauses={profile?.training_pauses||[]} today={todayKey()} onSave={onUpdateConfig} colors={C} busyWorkout={busyWorkout}/>
+        <WorkoutComposer workouts={profile?.custom_workouts||[]} onSave={onUpdateConfig} onLaunch={onLaunchCustom} colors={C}/>
 
         <div style={{...CARD,padding:"16px",marginBottom:10}}>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:10,marginBottom:10}}>
@@ -4057,6 +4071,7 @@ const pendingSessionFor=(goal,sessionIndex,equipment,ctx)=>{
     frequency:(ctx&&ctx.frequency)||5,
     rms:(ctx&&ctx.rms)||{},
     perf:(ctx&&ctx.perf)||{},
+    kbFeedback:(ctx&&ctx.kbFeedback)||{},
     strength:(ctx&&ctx.strength)||{},
     scale:(ctx&&ctx.scale)||1,
     excluded:(ctx&&ctx.excluded)||[],
@@ -4357,6 +4372,7 @@ export default function SomaApp() {
         if(prof.accent) setAccent(prof.accent);
         if(typeof prof.auto_rotate==="boolean") setAutoRotate(prof.auto_rotate);
       }
+      profileRef.current=resolvedProfile;
       setProfile(resolvedProfile);
       // Seance en cours : le log des series cochees et le chrono reprennent ou qu'on soit,
       // mais uniquement si elle concerne aujourd'hui (sinon c'est un reste a jeter).
@@ -4375,7 +4391,7 @@ export default function SomaApp() {
         totalKg:Number(s.total_kg||s.totalKg||0),
         totalSets:Number(s.total_sets||s.totalSets||0),
         sessionIndex:Number(s.session_index||s.sessionIndex||0),
-        ...(s.tag?{tag:s.tag}:{}),
+        ...((s.tag||s.feedback?.workout?.tag)?{tag:s.tag||s.feedback.workout.tag}:{}),
         targetKg:s.target_kg!=null?Number(s.target_kg):null,
         targetSets:s.target_sets!=null?Number(s.target_sets):null,
         duration:Number(s.duration_seconds||s.duration||0),
@@ -4423,8 +4439,9 @@ export default function SomaApp() {
       // jour marque Repos etait donc purement invisible pour la serie, qui affichait 1 au lieu
       // de 2. C'est ce qui s'est reellement passe le 29/07 (mercredi, hors planning par defaut).
       if(dateSet.has(key)){cnt++;continue;}
+      if(pauseOn(profileRef.current?.training_pauses,key)) continue;
       const dow=(dt.getDay()+6)%7;
-      const dd=(schedule&&schedule[dow])||PROG_DEF[dow];
+      const dd=(profileRef.current?.schedule||schedule||PROG_DEF)[dow];
       if(!(dd&&dd.salle)) continue; // repos prevu et non travaille : n'interrompt pas la serie
       if(i===0) continue;           // aujourd'hui pas encore fait : la serie court toujours
       break;                        // seance prevue et manquee : la serie est rompue
@@ -4540,6 +4557,20 @@ export default function SomaApp() {
 
   const toggleFav=useCallback(id=>{setFavorites(prev=>{const next=prev.includes(id)?prev.filter(x=>x!==id):[...prev,id];persist(user?.id,{favorites:next});return next;});},[persist]);
   const updateConfig=useCallback((updates)=>{
+    if('training_pauses' in updates || 'custom_workouts' in updates) {
+      return (async()=>{
+        try {
+          const patch={updated_at:new Date().toISOString()};
+          for(const key of ['training_pauses','custom_workouts']) if(key in updates) patch[key]=updates[key];
+          const {error}=await supabase.from('profiles').update(patch).eq('id',user?.id).select('id').single();
+          if(error) return {error};
+          profileRef.current={...profileRef.current,...patch};
+          setProfile(previous=>({...previous,...patch}));
+          if('training_pauses' in patch) computeStreak(sessions);
+          return {error:null};
+        } catch(error) {return {error};}
+      })();
+    }
     // On repart de la DERNIERE valeur connue, pas de celle capturee au rendu :
     // sans cela deux appels rapproches se recouvrent au lieu de se cumuler.
     const base=profileRef.current||profile||{};
@@ -4550,7 +4581,7 @@ export default function SomaApp() {
     setProfile(next);
     persist(user?.id,{profile:next});
     return (async()=>{ try{ const{error}=await supabase.from("profiles").upsert({id:user?.id,goal:next.goal,level:next.level,equipment:next.equipment,frequency:next.frequency,weight_kg:next.weight_kg,sex:next.sex,height_cm:next.height_cm,age:next.age,program_start:next.program_start,rms:next.rms,avatar:next.avatar,photos:next.photos,session_index:next.session_index,total_sessions:next.total_sessions,pinned_pbs:next.pinned_pbs,active_skills:next.active_skills,injury_reports:next.injury_reports||[],updated_at:new Date().toISOString()},{onConflict:"id"}); if(error)console.error("profile save",error.message); return {error}; }catch(e){ console.error("profile save",e); return {error:e}; } })();
-  },[persist,user,profile]);
+  },[persist,user,profile,sessions]);
   useEffect(()=>{updateConfigRef.current=updateConfig;},[updateConfig]);
   useEffect(()=>{profileRef.current=profile;},[profile]);
   // Remise en accord du compteur stocke avec le nombre reel de seances. Sans
@@ -4586,6 +4617,9 @@ export default function SomaApp() {
     // ne JAMAIS recalculer une version independante basee sur le jour de la semaine (bug precedent:
     // divergence entre la seance reellement affichee/jouee et celle enregistree/comptee comme faite).
     const sDateLocal=tabDate;
+    if(pauseOn(profileRef.current?.training_pauses,sDateLocal)&&!sessions.some(s=>s.date===sDateLocal)) {
+      notify('Le programme est en pause. Reprends-le dans les réglages avant de lancer une séance.');return;
+    }
     if(fb&&fb.photo){
       const shot=fb.photo; delete fb.photo;
       // La photo de fin de seance part dans Storage ; la base ne garde que son chemin.
@@ -4668,7 +4702,7 @@ export default function SomaApp() {
       targetKg,targetSets,
       duration:durationSec,
       score,
-      feedback:fb,
+      feedback:day.customWorkout?{...fb,workout:{custom:day.customWorkout}}:fb,
       user_id:user?.id,
       sessionIndex:sessionIndex+1,
       mode:sessionMode,
@@ -4681,20 +4715,8 @@ export default function SomaApp() {
     // faisait disparaître son écriture, alors que le streak avait déjà été compté.
     setSavingSession(true);
     try{
-      const {error}=await supabase.from("sessions").upsert({
-        user_id:uid,date:sDate,week:"S"+wk,
-        day:day.day,day_label:entry.dayLabel,
-        session_type:entry.dayLabel,
-        ...(day.hero?{tag:"hero:"+day.hero}:{}),
-        session_index:entry.sessionIndex,
-        mode:sessionMode,
-        total_kg:Math.round(totalKg),total_sets:totalSets,
-        target_kg:targetKg,target_sets:targetSets,
-        duration_seconds:durationSec,score,completed:true,
-        exercises:exercisesData,
-        feedback:fb,
-        notes:fb.notes||""
-      },{onConflict:"user_id,date"}).select("id").single();
+      const record=sessionRecord(entry,{week:"S"+wk,blocks:day.blocks||[]});
+      const {error}=await supabase.from("sessions").upsert(record,{onConflict:"user_id,date"}).select("id").single();
       if(error) throw error;
     }catch(e){
       console.error("session save",e);
@@ -4838,7 +4860,7 @@ export default function SomaApp() {
     while(d<end&&guard++<400){
       const dow=(d.getDay()+6)%7;
       const dd=(schedule&&schedule[dow])||PROG_DEF[dow];
-      if(dd&&dd.salle) slots++;
+      if(dd&&dd.salle&&!pauseOn(profile?.training_pauses,localDateKey(d))) slots++;
       d.setDate(d.getDate()+1);
     }
     return slots;
@@ -4886,6 +4908,7 @@ export default function SomaApp() {
       const d=viewSchedule[k]||PROGRAM[k];
       // Le creneau d'aujourd'hui ne compte que s'il reste a faire.
       const date=programDate(k,Math.floor(abs/7));
+      if(pauseOn(profile?.training_pauses,date)) continue;
       if(abs===ti){ if((d&&d.salle||isPostponedToday)&&!sessions.some(x=>x.date===date)) n++; }
       else if(d&&d.salle) n++;
     }
@@ -4939,21 +4962,32 @@ export default function SomaApp() {
     setHeroExtra({hero:h,exercises:block.exercises,block});
     setShowHeroes(false);
   };
-  const queuedDay=resolveDay({
+  const selectedPause=pauseOn(profile?.training_pauses,tabDate);
+  const queuedDay=selectedPause&&!isDayDone?{...REST_TPL,label:selectedPause.reason==='blessure'?'Pause blessure':'Vacances',pause:selectedPause}:resolveDay({
     rawDay:rawDayForQueue, doneDay, beforeStart:isBeforeProgramStart, past:isPastUndone&&!isPostponedToday,
     queueSession:()=>sessionFromQueue(queueOffset(dayIdx),rawDayForQueue),
   });
   const currentQueueKey=sessionIndex+queueOffset(dayIdx);
-  const day0=heroOverride&&heroOverride.key===currentQueueKey&&queuedDay?.archetype==="hero"
-    ?{...queuedDay,...heroOverride.day,day:queuedDay.day}:queuedDay;
+  const customDraft=log[`${tabDate}__custom_workout`];
+  const customDay=(!isDayDone&&!selectedPause&&!isBeforeProgramStart&&customDraft)?(()=>{
+    try {return customWorkoutDay(customDraft,rawDay0?.day);} catch(_error) {return null;}
+  })():null;
+  const day0=customDay||(heroOverride&&heroOverride.key===currentQueueKey&&queuedDay?.archetype==="hero"
+    ?{...queuedDay,...heroOverride.day,day:queuedDay.day}:queuedDay);
   // Seance "aujourd'hui" pour la page Accueil : DOIT utiliser la meme logique de sequence que day0 ci-dessus,
   // independamment de l'onglet jour actuellement affiche (dayIdx peut pointer vers un autre jour que aujourd'hui).
   const todaySessionForHome=(()=>{
     const trIdx=todayIdx();
     const trRaw=viewSchedule[trIdx]||PROGRAM[trIdx];
     const trDate=programDate(trIdx);
+    const todayPause=pauseOn(profile?.training_pauses,trDate);
+    if(todayPause&&!sessions.some(s=>s.date===trDate)) return {...REST_TPL,label:todayPause.reason==='blessure'?'Pause blessure':'Vacances',pause:todayPause};
     const trBeforeStart=!!(profile?.program_start&&trDate<profile.program_start);
     if(trBeforeStart) return {...REST_TPL,day:trRaw?.day};
+    const custom=log[`${trDate}__custom_workout`];
+    if(custom&&!sessions.some(s=>s.date===trDate)) {
+      try {return customWorkoutDay(custom,trRaw?.day);} catch(_error) {/* Ignore a malformed snapshot, keep the program available. */}
+    }
     // Meme regle que l'onglet Seance : un jour desactive n'a pas de seance.
     const postponed=injuryReports.some(r=>r&&!r.completed_at&&r.to&&r.to<=trDate)&&!sessions.some(s=>s.date===trDate);
     const trDay=postponed?{...trRaw,salle:"full"}:trRaw;
@@ -4969,6 +5003,18 @@ export default function SomaApp() {
   // exercices tires au sort) par-dessus une seance deja faite.
   const day=isDayDone?day0:applyMode(day0,effMode,profile,sessionWeek,dayIdx,perf);
   const sDate=tabDate;
+  const launchCustom=async(input)=>{
+    const date=todayKey();
+    if(pauseOn(profileRef.current?.training_pauses,date)) throw new Error('Le programme est en pause. Reprends-le dans les réglages avant de lancer un entraînement.');
+    if(profile?.program_start>date||programDone) throw new Error('Le programme doit être en cours pour remplacer une séance.');
+    if(sessions.some(s=>s.date===date)) throw new Error('La séance d’aujourd’hui est déjà enregistrée. Elle ne sera pas écrasée.');
+    if(clock.sec>0||Object.keys(log).some(k=>k.startsWith(date)&&!k.endsWith('__custom_workout'))) throw new Error('Une séance est déjà en cours. Termine-la avant de changer d’entraînement.');
+    const workout=normalizeWorkout(input);
+    const next={...log,[`${date}__custom_workout`]:workout};
+    const {error}=await supabase.from('active_session').upsert({user_id:user.id,date,log:next,updated_at:new Date().toISOString()},{onConflict:'user_id'}).select('user_id').single();
+    if(error) throw error;
+    setLog(next);setWeekOffset(0);setDayIdx(todayIdx());setAiOverride(null);setModeOverride(null);setHeroOverride(null);setHeroExtra(null);switchTab('seance');
+  };
   const reportInjury=(detail)=>{
     const date=new Date(`${sDate}T00:00:00`); date.setDate(date.getDate()+1);
     const to=localDateKey(date);
@@ -4978,7 +5024,7 @@ export default function SomaApp() {
     notify(`Séance reportée au ${fmtDateShort(to)}.`);
   };
   const isPastMissed=!!(day?.salle&&!isDayDone&&new Date(sDate+"T00:00:00")<new Date(new Date().toDateString()));
-  const locked=isDayDone||isPastMissed;
+  const locked=isDayDone||isPastMissed||!!selectedPause;
   const isRest=!day?.salle;
   // Pour une journee close on part de doneDay (exercices enregistres REMIS EN FORME : kg issu
   // de weight, sets issu de completedSets) et non de doneSession.exercises brut. Lire la base
@@ -5158,7 +5204,14 @@ const NAV=[{id:"home",l:"Accueil"},{id:"seance",l:"Séances"},{id:"stats",l:"Sta
           {tab==="home"&&<HomeTab profile={profile} streak={streak} sessions={sessions} weights={weights} todaySession={todaySessionForHome} accent={accent} trainingDaysPerWeek={trainingDaysPerWeek} weighIns={weighIns} onStartToday={()=>{setWeekOffset(0);setDayIdx(todayIdx());switchTab("seance");}}/>}
           {tab==="seance"&&(
             <div style={{padding:"14px 18px 0",maxWidth:600,margin:"0 auto"}}>
-              {isRest?(
+              {selectedPause&&!isDayDone?(
+                <div style={{padding:'40px 16px',color:C.ink,textAlign:'center'}}>
+                  <h2>{selectedPause.reason==='blessure'?'Pause blessure':'Vacances'}</h2>
+                  <p>Ta prochaine séance reste en attente. Ta progression et ton historique sont conservés.</p>
+                  <p>{selectedPause.end?`Pause jusqu’au ${fmtDateShort(selectedPause.end)} inclus.`:'Reprends le programme depuis les réglages lorsque tu es prêt.'}</p>
+                  <Tap onTap={()=>switchTab('settings')} style={{padding:16,background:C.accent,borderRadius:18}}>Gérer ma pause dans les réglages</Tap>
+                </div>
+              ):isRest?(
                 <div style={{textAlign:"center",padding:"80px 20px"}}>
                   <div style={{fontSize:34,fontWeight:600,color:C.ink4,letterSpacing:"-.02em",marginBottom:14}}>Récupération</div>
                   <div style={{fontSize:15,color:C.ink4,lineHeight:1.65,maxWidth:300,margin:"0 auto 28px"}}>{dayIdx===3?"Récupération active. Tes fibres consolident.":"Reset total. Synthèse protéique prioritaire."}</div>
@@ -5181,14 +5234,14 @@ const NAV=[{id:"home",l:"Accueil"},{id:"seance",l:"Séances"},{id:"stats",l:"Sta
                     <div style={{fontSize:11.5,fontWeight:500,color:C.ink4,textTransform:"uppercase",letterSpacing:".14em",marginBottom:8}}>{day.day} · {"S"+wk} · {day.salle==="haut"?"Salle Haute":"Salle Basse"}{totalSessions>0&&day.salle&&` · Séance ${Math.min(sessionIndex+1,totalSessions)}/${totalSessions}`}</div>
                     <div style={{fontSize:34,fontWeight:500,color:C.ink,letterSpacing:"-.03em",lineHeight:1.1,marginBottom:6}}>{aiOverride?.titre||day.label}</div>
                     <div style={{fontSize:14,color:C.ink3}}>{day.muscle}</div>
-                    {day.salle&&(()=>{const pw=sessionWeek;const ph12=PHASES12[pw-1];const pend=progEndDate(profile?.program_start);return(
+                    {day.salle&&(()=>{const pw=sessionWeek;const ph12=PHASES12[pw-1];const pend=projectedEnd({from:profile?.program_start>todayKey()?profile.program_start:shiftDate(todayKey(),sessions.some(s=>s.date===todayKey())?1:0),remaining:Math.max(0,totalSessions-sessionIndex),trainingDays:schedule.map((d,i)=>d?.salle?i:-1).filter(i=>i>=0),pauses:profile?.training_pauses||[]});return(
                       <div style={{marginTop:14,padding:"13px 15px",borderRadius:22,background:C.s1}}>
                         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
                           <span style={{fontSize:11.5,fontWeight:600,color:C.accent,textTransform:"uppercase",letterSpacing:".06em"}}>Cycle 12 sem · S{pw}/12</span>
                           <span style={{fontSize:11.5,fontWeight:600,color:C.ink3}}>{ph12.n}</span>
                         </div>
                         <div style={{height:6,borderRadius:999,background:C.s4,overflow:"hidden"}}><div style={{height:"100%",width:`${pw/12*100}%`,background:C.accent,borderRadius:999}}/></div>
-                        {profile?.program_start&&<div style={{fontSize:11.5,color:C.ink4,marginTop:8}}>Programme : {fmtDateShort(profile.program_start)} → {fmtDateShort(pend)}</div>}
+                        {profile?.program_start&&<div style={{fontSize:11.5,color:C.ink4,marginTop:8}}>Programme : {fmtDateShort(profile.program_start)} → {pend?`${fmtDateShort(pend)} (prévision)`:'à recalculer à la reprise'}</div>}
                         {autoRotate&&<div style={{fontSize:11.5,color:C.ink4,marginTop:6}}>{ph12.f} · phase {phaseOf(pw).k}</div>}
                       </div>);})()}
                   </div>
@@ -5478,7 +5531,7 @@ const NAV=[{id:"home",l:"Accueil"},{id:"seance",l:"Séances"},{id:"stats",l:"Sta
             </div>
           )}
           {tab==="stats"&&<StatsTab sessions={sessions} weights={weights} accent={accent} trainingDaysPerWeek={trainingDaysPerWeek} profile={profile} weighIns={weighIns} onSaveWeighIn={saveWeighIn} onOpenPhotos={()=>setShowPhotos(true)} photos={photos} photoUrls={photoUrls} pinnedPBs={profile?.pinned_pbs} onManagePBs={()=>setShowPBManager(true)} activeSkills={profile?.active_skills} onManageSkills={()=>setShowSkillManager(true)} onOpenRewards={()=>setShowRewardsManager(true)}><HistoryTab sessions={sessions} onSelect={setShowReport} accent={accent}/></StatsTab>}
-          {tab==="settings"&&<SettingsTab progDone={sessionIndex} user={user} excluded={excluded} onToggleExclude={toggleExclude} onOpenLibrary={()=>setShowLibrary(true)} profile={profile} schedule={schedule} avatarUrl={avatarUrl} onUpdateConfig={updateConfig} onOpenScheduleEditor={()=>setShowSched(true)} onRedoOnboarding={()=>setShowOnboardingRedo(true)}
+          {tab==="settings"&&<SettingsTab onLaunchCustom={launchCustom} busyWorkout={(clock.sec>0||Object.keys(log).some(k=>k.startsWith(todayKey())&&!k.endsWith('__custom_workout')))&&!sessions.some(s=>s.date===todayKey())} progDone={sessionIndex} user={user} excluded={excluded} onToggleExclude={toggleExclude} onOpenLibrary={()=>setShowLibrary(true)} profile={profile} schedule={schedule} avatarUrl={avatarUrl} onUpdateConfig={updateConfig} onOpenScheduleEditor={()=>setShowSched(true)} onRedoOnboarding={()=>setShowOnboardingRedo(true)}
             onSignOut={async()=>{await supabase.auth.signOut();setUser(null);setLog({});setWeights({});setSessions([]);setExcluded([]);setStreak(0);}}
             onReset={async()=>{
               const uid=user?.id;
