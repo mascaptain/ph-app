@@ -209,7 +209,7 @@ const resolveDay = ({rawDay, doneDay, beforeStart, past, queueSession}) => {
 const SESSION_TEMPLATES = [...PROGRAM.filter(d=>d.salle).map(d=>({label:d.label,salle:d.salle,muscle:d.muscle,exercises:d.exercises,abs:d.abs,ids:d.ids})), REST_TPL];
 
 // Rotation hebdo - mesocycle hybride (Volume -> Intensite -> Puissance -> Deload)
-const VERSION="5.9.0";
+const VERSION="5.10.0";
 const weekNumber = () => { const dt=new Date(); const d=new Date(Date.UTC(dt.getFullYear(),dt.getMonth(),dt.getDate())); const dn=(d.getUTCDay()+6)%7; d.setUTCDate(d.getUTCDate()-dn+3); const ft=new Date(Date.UTC(d.getUTCFullYear(),0,4)); const fn=(ft.getUTCDay()+6)%7; ft.setUTCDate(ft.getUTCDate()-fn+3); return 1+Math.round((d-ft)/604800000); };
 const PHASES12=[{n:"Accumulation",f:"Volume, base"},{n:"Accumulation",f:"Volume"},{n:"Accumulation",f:"Volume +"},{n:"Intensification",f:"Charges +"},{n:"Intensification",f:"Charges ++"},{n:"Intensification",f:"Lourd"},{n:"Réalisation",f:"Explosif"},{n:"Réalisation",f:"Puissance"},{n:"Réalisation",f:"Pic de force"},{n:"Deload",f:"Récupération"},{n:"Test / PR",f:"Validation"},{n:"Test / PR",f:"Nouveaux maxs"}];
 const programWeek=()=>((weekNumber()-1)%12)+1;
@@ -419,7 +419,8 @@ import { sessionRecord } from "./session-record.js";
 import { pauseOn, projectedEnd, shiftDate } from "./training-pause.js";
 import PauseSettings from "./PauseSettings.jsx";
 import WorkoutComposer from "./WorkoutComposer.jsx";
-import { customWorkoutDay, normalizeWorkout } from "./custom-workouts.js";
+import { customWorkoutDay, normalizeWorkout, workoutSummary } from "./custom-workouts.js";
+import { HOUSE_WORKOUTS } from "./house-workouts.js";
 import { HEROES, heroFits, heroById, heroSummary } from "./heroes.js";
 
 const REGION={push_h:"haut",push_v:"haut",pull_h:"haut",pull_v:"haut",arm_push:"haut",arm_pull:"haut",squat:"bas",hinge:"bas",core:"core",cardio:"cardio"};
@@ -1387,6 +1388,9 @@ function CircuitPlayer({mode,exos,onClose,defMin,blocks,onAllDone,startBlock,log
   const [si,setSi]=useState(0);
   const [stour,setStour]=useState(1);
   const [resting,setResting]=useState(0);
+  // Pour le temps : durée réelle, figée quand le dernier tour est validé.
+  const [forTime,setForTime]=useState(null);
+  const target=Number(cur.targetRounds)||0;
   const ref=useRef(null); const lastMin=useRef(0); const lastStep=useRef(0); const restRef=useRef(null); const restEndRef=useRef(null); const recoveryRef=useRef("");
   const occRef=useRef({});
   const logOccurrence=(ex)=>{
@@ -1403,7 +1407,7 @@ function CircuitPlayer({mode,exos,onClose,defMin,blocks,onAllDone,startBlock,log
   useEffect(()=>{
     clearInterval(ref.current);clearInterval(restRef.current);
     runningRef.current=false;
-    setRunning(false);setElapsed(0);setRounds(0);setSi(0);setStour(1);setResting(0);lastMin.current=0;
+    setRunning(false);setElapsed(0);setRounds(0);setSi(0);setStour(1);setResting(0);setForTime(null);lastMin.current=0;
     // Le compteur d'occurrences repartait de zero a chaque ouverture du lecteur : reprendre un
     // bloc interrompu reecrivait par-dessus les tours deja valides. On repart de ce qui est
     // reellement enregistre dans le log.
@@ -1550,7 +1554,17 @@ function CircuitPlayer({mode,exos,onClose,defMin,blocks,onAllDone,startBlock,log
     if(!running||done||!cexos.length)return;
     logOccurrence(cexos[si]);
     if(si<cexos.length-1){setSi(si+1);return;}
-    setSi(0);setRounds(r=>r+1);play("clic");buzz(25);
+    const r=rounds+1;
+    setSi(0);setRounds(r);play("clic");buzz(25);
+    if(target&&r>=target){
+      // Séance pour le temps : le chrono s'arrête sur le dernier mouvement, le
+      // temps réalisé est gardé dans le journal.
+      clearInterval(ref.current);runningRef.current=false;setRunning(false);
+      const t=Math.min(total,elRef.current);setForTime(t);
+      persistTimer({elapsed:t,running:false,completed:true,forTime:t});
+      if(onLogSet&&sDate) onLogSet(`${sDate}__block_${bi}_time`,{kind:"for_time",block:bi,seconds:t,date:sDate});
+      setTimeout(()=>finishBlock(),700);
+    }
   };
   // Meme grammaire d'en-tete que l'ecran d'exercice : retour a gauche, intitule au centre,
   // emplacement d'action a droite. Les deux ecrans presentaient une croix ou une fleche
@@ -1599,7 +1613,7 @@ function CircuitPlayer({mode,exos,onClose,defMin,blocks,onAllDone,startBlock,log
       ))}
     </div>
   );
-  const exSub=(e)=>e?`${e.kg>0?e.kg+" kg · ":""}${e.reps} reps`:"";
+  const exSub=(e)=>{if(!e)return "";const r=String(e.reps??"");const q=/^\d+$/.test(r)?`${r} reps`:r;return [e.kg>0?e.kg+" kg":"",q].filter(Boolean).join(" · ");};
   const Now=({ex,sub})=>(
     <div style={{textAlign:"center"}}>
       <div style={{fontSize:34,fontWeight:600,color:C.ink,letterSpacing:"-.02em",lineHeight:1.15}}>{ex?ex.n:"—"}</div>
@@ -1652,7 +1666,8 @@ function CircuitPlayer({mode,exos,onClose,defMin,blocks,onAllDone,startBlock,log
     BODY=(<div style={WRAP}>
       <Ring pct={total>0?elapsed/total:0} value={done?"FINI":fmtMSS(remaining)} label={done?"terminé":"restant"}/>
       <div style={{textAlign:"center",fontSize:14,color:C.ink3}}>
-        <span style={{fontWeight:600,color:C.ink}}>{rounds}</span> tour{rounds>1?"s":""} complet{rounds>1?"s":""}
+        {target?<>Tour <span style={{fontWeight:600,color:C.ink}}>{Math.min(target,rounds+1)}</span> sur {target}</>
+          :<><span style={{fontWeight:600,color:C.ink}}>{rounds}</span> tour{rounds>1?"s":""} complet{rounds>1?"s":""}</>}
         {running&&!done?(manualRounds?" · valide chaque mouvement à ton rythme":` · changement automatique dans ${untilNext}s`):""}
       </div>
       {running&&!done&&<><Now ex={curEx} sub={exSub(curEx)}/><Dots n={cexos.length} at={si}/><NextUp label={manualRounds?"Puis":"Ensuite"} ex={nextEx}/></>}
@@ -1663,7 +1678,7 @@ function CircuitPlayer({mode,exos,onClose,defMin,blocks,onAllDone,startBlock,log
       {done
         ? <Btn label={lastBlock?"Terminer":"Bloc suivant"} act={finishBlock} bg={C.done}/>
         : manualRounds&&running
-          ? <Btn label={si<cexos.length-1?"Suivant":"Valider le tour"} act={advanceManualRound}/>
+          ? <Btn label={si<cexos.length-1?"Suivant":(target&&rounds+1>=target?"J'ai fini":"Valider le tour")} act={advanceManualRound}/>
           : <Btn label={running?"Cadence automatique":(elapsed>0?"Reprendre":"Démarrer le bloc")} act={running?undefined:startTimer} bg={running?C.s2:undefined} fg={running?C.ink3:undefined}/>}
     </div>);
   } else {
@@ -1689,6 +1704,7 @@ function CircuitPlayer({mode,exos,onClose,defMin,blocks,onAllDone,startBlock,log
           <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.45)",zIndex:Z.fullscreen+50,display:"flex",alignItems:"flex-end",justifyContent:"center",animation:`fadeIn 200ms ${EO} both`}}>
             <div style={{width:"100%",maxWidth:600,maxHeight:"92vh",overflowY:"auto",background:C.bg,borderTopLeftRadius:22,borderTopRightRadius:22,padding:"22px 20px calc(22px + env(safe-area-inset-bottom))",animation:`sheetIn ${DUR.modal} ${ED} both`}}>
               <div style={{fontSize:21,fontWeight:600,color:C.ink}}>{cur.label||"Bloc"} terminé</div>
+              {forTime!=null&&<div style={{fontSize:34,fontWeight:500,color:C.ink,marginTop:6,fontVariantNumeric:"tabular-nums"}}>{fmtMSS(forTime)}</div>}
               <div style={{fontSize:12.5,color:C.ink4,marginTop:4,marginBottom:6}}>Ta réponse ajuste les charges des prochaines séances.</div>
               <div style={{fontSize:11.5,color:C.ink4,marginBottom:16}}>{cexos.map(e=>e.n).join(" · ")}</div>
               {[[6,"Trop léger","La charge était sous-évaluée"],
@@ -2626,7 +2642,7 @@ const heroRecords=(sessions)=>{
   return out;
 };
 
-function HeroSheet({equipment,sessions,onPick,onClose,title}) {
+function HeroSheet({equipment,sessions,onPick,onClose,title,custom=[],onPickCustom}) {
   const rec=heroRecords(sessions);
   // A la main, on autorise aussi les seances a corde, traineau ou piscine :
   // c'est a toi de voir si tu peux les faire. Elles sont signalees.
@@ -2655,6 +2671,26 @@ function HeroSheet({equipment,sessions,onPick,onClose,title}) {
               userSelect:"text",WebkitUserSelect:"text"}}/>
         </div>
         <div style={{flex:1,overflowY:"auto",padding:"0 18px 24px",WebkitOverflowScrolling:"touch"}}>
+          {(()=>{
+            // Séances maison et créations personnelles : choisies comme un Hero.
+            // Le format classique n'a pas de bloc chronométré, il reste dans Réglages.
+            const mine=(onPickCustom?custom:[]).filter(w=>w&&w.format!=="classique"&&(!q||w.name.toLowerCase().includes(q.toLowerCase())));
+            if(!mine.length) return null;
+            return <div style={{marginBottom:14}}>
+              <div style={{fontSize:11.5,fontWeight:500,color:C.ink4,textTransform:"uppercase",letterSpacing:".06em",margin:"4px 2px 9px"}}>Séances maison</div>
+              {mine.map(w=>(
+                <Tap key={w.id} label={w.name} onTap={()=>onPickCustom(w)}
+                  style={{display:"block",background:C.card,border:`1px solid ${C.s2}`,boxShadow:`0 3px 16px ${C.ink5}`,borderRadius:22,padding:"14px 16px",marginBottom:9}}>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:10}}>
+                    <span style={{fontSize:15,fontWeight:600,color:C.ink}}>{w.name}</span>
+                    <span style={{fontSize:10,fontWeight:600,padding:"4px 10px",borderRadius:999,background:C.accentSoft,color:C.ink3,whiteSpace:"nowrap"}}>{workoutSummary(w)}</span>
+                  </div>
+                  <div style={{fontSize:11.5,color:C.ink4,marginTop:4,lineHeight:1.45}}>
+                    {w.moves.map((m,k)=>(k?(m.link?" + ":" · "):"")+(m.link?"":m.quantity+" ")+m.name).join("")}</div>
+                </Tap>))}
+              <div style={{fontSize:11.5,fontWeight:500,color:C.ink4,textTransform:"uppercase",letterSpacing:".06em",margin:"14px 2px 9px"}}>Hero WODs</div>
+            </div>;
+          })()}
           {shown.map(h=>{
             const r=rec[h.id];
             return (
@@ -4922,6 +4958,15 @@ export default function SomaApp() {
     if(profile?.equipment?.length) c=adaptEquip(c,profile.equipment);
     return personalizeDay(c,profile,sessionWeek,perf);
   };
+  // Une séance maison ou personnelle s'ajoute comme un Hero : un bloc de plus
+  // sous la séance du jour, joué par le lecteur adapté à son format.
+  const pickCustomHero=(w)=>{
+    let d=null;try{d=customWorkoutDay(w,tabDate);}catch(_error){return;}
+    const block=d.blocks[0];if(!block) return;
+    setHeroExtra({hero:{id:w.id,name:w.name,cap:block.durationMin,tribute:workoutSummary(w)},tag:"Séance maison",
+      exercises:block.exercises,block:{...block,label:workoutSummary(w)}});
+    setShowHeroes(false);
+  };
   const pickHero=(h)=>{
     const makeHeroBlock=(entry,blockIdx)=>({heroId:entry.id,heroName:entry.name,
       label:`Hero ${blockIdx+1} · ${entry.name} · AMRAP ${entry.cap}`,kind:"amrap",execution:"manual_rounds",cadenceSec:0,durationMin:entry.cap,rounds:0,
@@ -5418,7 +5463,7 @@ const NAV=[{id:"home",l:"Accueil"},{id:"seance",l:"Séances"},{id:"stats",l:"Sta
                     {sessionMode!=="classique"&&!locked&&<Tap onTap={()=>setShowCircuit(true)} style={{display:"flex",alignItems:"center",justifyContent:"center",gap:8,padding:"16px",borderRadius:12,background:C.accentSoft,border:`1px solid ${C.accent}`}}><span style={{fontSize:15}}>⏱</span><span style={{fontSize:15,fontWeight:600,color:C.accent}}>Démarrer le circuit {sessionMode==="amrap"?"AMRAP":"EMOM"}</span></Tap>}
                   </div>}
                   <div>
-                    {day.metcon&&!locked&&<div style={{marginBottom:16}}><div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}><span style={{fontSize:12.5,fontWeight:600,color:C.ink}}>{day.label} · {day.blocks.length} bloc{day.blocks.length>1?"s":""}</span><span style={{fontSize:12.5,fontWeight:600,color:C.onAccent,background:C.accent,padding:"2px 10px",borderRadius:12}}>~{day.blocks.reduce((sum,block)=>sum+(Number(block.durationMin)||0),0)} min</span></div><div style={{fontSize:11.5,color:C.ink4,marginBottom:10}}>Touchez un bloc pour le démarrer</div>{day.blocks.map((bl,bi)=>(<Tap key={bi} onTap={()=>{if(locked)return;setCircuitStart(bi);setShowCircuit(true);}} style={{marginBottom:10,background:C.s1,borderRadius:22,padding:"12px 14px"}}><div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}><span style={{fontSize:14,fontWeight:600,color:C.ink}}>{bl.label}</span><span style={{fontSize:11.5,fontWeight:600,color:C.ink3}}>{bl.kind==="emom"?bl.durationMin+" min · "+bl.rounds+" tours":(day.customWorkout?.format==="rounds"&&bl.rounds)?bl.rounds+" tours · limite "+bl.durationMin+" min":bl.durationMin+" min"}</span></div>{bl.exercises.map((ex,ei)=>(<div key={ei} style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"5px 0",borderTop:ei?`1px solid ${C.s2}`:"none"}}><span style={{fontSize:14,color:C.ink2}}>{bl.kind==="emom"?("Min "+(ei+1)+" · "):""}{ex.n}</span><span style={{fontSize:12.5,fontWeight:600,color:C.ink3}}>{ex.kg>0?ex.kg+"kg · ":""}{ex.reps}{bl.kind==="emom"?"/min":"/tour"}</span></div>))}</Tap>))}</div>}
+                    {day.metcon&&!locked&&<div style={{marginBottom:16}}><div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}><span style={{fontSize:12.5,fontWeight:600,color:C.ink}}>{day.label} · {day.blocks.length} bloc{day.blocks.length>1?"s":""}</span><span style={{fontSize:12.5,fontWeight:600,color:C.onAccent,background:C.accent,padding:"2px 10px",borderRadius:12}}>~{day.blocks.reduce((sum,block)=>sum+(Number(block.durationMin)||0),0)} min</span></div><div style={{fontSize:11.5,color:C.ink4,marginBottom:10}}>Touchez un bloc pour le démarrer</div>{day.blocks.map((bl,bi)=>(<Tap key={bi} onTap={()=>{if(locked)return;setCircuitStart(bi);setShowCircuit(true);}} style={{marginBottom:10,background:C.s1,borderRadius:22,padding:"12px 14px"}}><div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}><span style={{fontSize:14,fontWeight:600,color:C.ink}}>{bl.label}</span><span style={{fontSize:11.5,fontWeight:600,color:C.ink3}}>{day.customWorkout?workoutSummary(day.customWorkout):bl.kind==="emom"?bl.durationMin+" min · "+bl.rounds+" tours":bl.durationMin+" min"}</span></div>{bl.exercises.map((ex,ei)=>(<div key={ei} style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"5px 0",borderTop:ei?`1px solid ${C.s2}`:"none"}}><span style={{fontSize:14,color:C.ink2}}>{bl.kind==="emom"?("Min "+(ei+1)+" · "):""}{ex.n}</span><span style={{fontSize:12.5,fontWeight:600,color:C.ink3}}>{ex.kg>0?ex.kg+"kg · ":""}{ex.reps}{ex.reps?(bl.kind==="emom"?"/min":bl.targetRounds===1?"":"/tour"):""}</span></div>))}</Tap>))}</div>}
                     {!day.metcon&&mainBlocks.map((blk,bi)=>{
                       // Une CARTE par bloc, comme la maquette : en-tete "Bloc N · type",
                       // pastille de tours ou mention Lourd, puis les exercices en lignes
@@ -5490,7 +5535,7 @@ const NAV=[{id:"home",l:"Accueil"},{id:"seance",l:"Séances"},{id:"stats",l:"Sta
                       padding:"14px 16px",marginBottom:11,boxShadow:`0 3px 16px ${C.ink5}`}}>
                       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,marginBottom:4}}>
                         <span style={{fontSize:11.5,fontWeight:500,color:C.ink4}}>
-                          Hero · {heroExtra.hero.name}</span>
+                          {heroExtra.tag||"Hero"} · {heroExtra.hero.name}</span>
                         <span style={{fontSize:10.5,fontWeight:600,padding:"4px 11px",borderRadius:999,
                           background:C.accentSoft,color:C.ink3,whiteSpace:"nowrap"}}>{heroExtra.block.label}</span>
                       </div>
@@ -5507,10 +5552,10 @@ const NAV=[{id:"home",l:"Accueil"},{id:"seance",l:"Séances"},{id:"stats",l:"Sta
                         </div>
                       ))}
                       <div style={{display:"flex",gap:8,marginTop:11}}>
-                        <Tap label="Démarrer le Hero" onTap={()=>setSupBlock({label:heroExtra.hero.name,
-                          kind:"amrap",exercises:heroExtra.exercises,defMin:heroExtra.hero.cap,
-                          durationMin:heroExtra.hero.cap,restSec:0,
-                          tours:heroExtra.block.rounds||1,no:1,total:1})}
+                        <Tap label="Démarrer le Hero" onTap={()=>setSupBlock({...heroExtra.block,label:heroExtra.hero.name,
+                          kind:heroExtra.block.kind||"amrap",exercises:heroExtra.exercises,defMin:heroExtra.hero.cap,
+                          durationMin:heroExtra.hero.cap,restSec:heroExtra.block.restSec||0,
+                          tours:heroExtra.block.tours||heroExtra.block.rounds||1,no:1,total:1})}
                           style={{flex:1,padding:"12px",borderRadius:14,background:C.accent,
                             display:"flex",alignItems:"center",justifyContent:"center"}}>
                           <span style={{fontSize:14,fontWeight:600,color:C.onAccent}}>Démarrer</span></Tap>
@@ -5621,7 +5666,8 @@ const NAV=[{id:"home",l:"Accueil"},{id:"seance",l:"Séances"},{id:"stats",l:"Sta
       {showInjuryReport&&<InjuryReportSheet onClose={()=>setShowInjuryReport(false)} onReport={reportInjury}/>}
       {showHeroes&&<HeroSheet equipment={profile?.equipment} sessions={sessions}
         title={heroPickerMode?.type==="replace"?`Remplacer Hero ${(heroPickerMode.blockIndex||0)+1}`:undefined}
-        onPick={pickHero} onClose={()=>{setHeroPickerMode({type:"append",blockIndex:null});setShowHeroes(false);}}/>}
+        onPick={pickHero} custom={heroPickerMode?.type==="replace"?[]:[...HOUSE_WORKOUTS,...(profile?.custom_workouts||[])]}
+        onPickCustom={heroPickerMode?.type==="replace"?undefined:pickCustomHero} onClose={()=>{setHeroPickerMode({type:"append",blockIndex:null});setShowHeroes(false);}}/>}
       {showAI&&<AISheet onClose={()=>setShowAI(false)} onResult={o=>{setAiOverride(o);setShowAI(false);}} excluded={excluded}/>}
       {/* Alertes : jusqu'ici tout echec partait dans la console et l'utilisateur n'en savait rien. */}
       {toasts.length>0&&(
