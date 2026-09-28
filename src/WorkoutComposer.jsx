@@ -1,78 +1,221 @@
-import React,{useState} from 'react';
+import React,{useMemo,useState} from 'react';
 import {normalizeWorkout,validateWorkout} from './custom-workouts.js';
-const movement=()=>({name:'',quantity:10,unit:'reps',kg:0,sets:3,restSec:60});
-export default function WorkoutComposer({workouts=[],onSave,onLaunch,colors:C}) {
-  const [draft,setDraft]=useState(null),[step,setStep]=useState(0),[busy,setBusy]=useState(false),[message,setMessage]=useState('');
-  const [launchId,setLaunchId]=useState(null);
-  const field={width:'100%',boxSizing:'border-box',padding:12,borderRadius:12,border:`1px solid ${C.div}`,background:C.s1,color:C.ink,font:'inherit'};
-  const button={...field,cursor:'pointer',fontWeight:600,marginTop:10};
-  const edit=(key,value)=>setDraft(d=>({...d,[key]:value}));
-  const editMove=(index,key,value)=>setDraft(d=>({...d,moves:d.moves.map((m,i)=>i===index?{...m,[key]:value}:m)}));
-  function open(workout) {setDraft(workout?structuredClone(workout):{id:crypto.randomUUID(),name:'',format:'classique',durationMin:45,moves:[movement()]});setStep(0);setMessage('');setLaunchId(null);}
+import {DB} from './catalog.js';
+
+const FORMATS=[
+  {id:'classique',label:'Classique',tag:'SÉRIES',hint:'Séries et repos, chaque série se valide à la main.'},
+  {id:'amrap',label:'AMRAP',tag:'AMRAP',hint:'Un maximum de tours dans le temps imparti. Tu comptes tes tours.'},
+  {id:'emom',label:'EMOM',tag:'EMOM',hint:'Une station par minute, le chrono passe tout seul à la suivante.'},
+  {id:'rounds',label:'Tours',tag:'TOURS',hint:'Un nombre de tours à boucler le plus vite possible, avec un temps limite.'},
+];
+const UNITS=[{id:'reps',label:'reps'},{id:'s',label:'sec'},{id:'m',label:'m'},{id:'cal',label:'cal'}];
+const fmtOf=id=>FORMATS.find(f=>f.id===id)||FORMATS[0];
+const blank=()=>({id:crypto.randomUUID(),name:'',format:'amrap',durationMin:20,rounds:5,moves:[]});
+const fromCatalog=e=>{const n=parseInt(e.reps,10);const sec=/s$/i.test(String(e.reps||''));
+  return {name:e.n,quantity:Number.isFinite(n)&&n>0?n:10,unit:sec?'s':'reps',kg:e.eq==='bw'?0:(e.kg||0),sets:3,restSec:e.rest||60};};
+const plain=s=>s.normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase();
+const moveLine=(m,format)=>`${format==='classique'?`${m.sets} × `:''}${m.quantity} ${UNITS.find(u=>u.id===m.unit)?.label||m.unit}${Number(m.kg)?` · ${m.kg} kg`:''}`;
+export const workoutSummary=w=>{const f=fmtOf(w.format);
+  if(w.format==='rounds') return `${w.rounds} tours · limite ${w.durationMin} min`;
+  if(w.format==='classique') return `${w.moves.length} exercice${w.moves.length>1?'s':''} · ~${w.durationMin} min`;
+  return `${f.label} ${w.durationMin} min`;};
+
+function Stepper({value,onChange,min,max,step=1,suffix,C,label}) {
+  const n=Number(value)||0,set=v=>onChange(Math.min(max,Math.max(min,Math.round(v*2)/2)));
+  const b={width:36,height:36,borderRadius:999,border:0,background:C.s1,color:C.ink,font:'inherit',fontSize:15,cursor:'pointer'};
+  return <div style={{display:'flex',alignItems:'center',gap:6}} aria-label={label}>
+    <button type="button" aria-label={`Moins — ${label}`} style={b} onClick={()=>set(n-step)} disabled={n<=min}>−</button>
+    <input inputMode="decimal" aria-label={label} value={value} onChange={e=>onChange(e.target.value.replace(',','.'))}
+      onBlur={e=>{const v=Number(e.target.value);set(Number.isFinite(v)?v:min);}}
+      style={{width:52,height:36,textAlign:'center',border:0,borderRadius:12,background:'transparent',color:C.ink,font:'inherit',fontSize:16,fontVariantNumeric:'tabular-nums'}}/>
+    <button type="button" aria-label={`Plus — ${label}`} style={b} onClick={()=>set(n+step)} disabled={n>=max}>+</button>
+    {suffix&&<span style={{fontSize:12.5,color:C.ink3}}>{suffix}</span>}
+  </div>;
+}
+
+function Picker({C,onPick,onClose}) {
+  const [q,setQ]=useState('');
+  const hits=useMemo(()=>{const k=plain(q.trim());
+    const seen=new Set();
+    // Le catalogue contient des homonymes (deux « Burpee ») : un seul par nom.
+    const all=DB.filter(e=>{const n=plain(e.n);if(seen.has(n)) return false;seen.add(n);return !k||plain(e.n+' '+(e.m||'')).includes(k);});return all.slice(0,60);},[q]);
+  const exact=hits.some(e=>plain(e.n)===plain(q.trim()));
+  return <div role="dialog" aria-label="Choisir un exercice" style={{position:'fixed',inset:0,zIndex:1300,background:C.scrim,display:'flex',alignItems:'flex-end'}} onClick={onClose}>
+    <div onClick={e=>e.stopPropagation()} style={{width:'100%',maxWidth:560,margin:'0 auto',maxHeight:'82vh',display:'flex',flexDirection:'column',background:C.bg,borderRadius:'22px 22px 0 0',paddingBottom:'env(safe-area-inset-bottom)'}}>
+      <div style={{padding:16,display:'grid',gap:10}}>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+          <span style={{fontSize:15,fontWeight:600,color:C.ink}}>Ajouter un exercice</span>
+          <button type="button" onClick={onClose} style={{border:0,background:'transparent',color:C.ink3,font:'inherit',fontSize:14,cursor:'pointer'}}>Fermer</button>
+        </div>
+        <input autoFocus placeholder="Rechercher : burpee, squat, rameur…" value={q} onChange={e=>setQ(e.target.value)}
+          style={{height:48,padding:'0 14px',borderRadius:12,border:`1px solid ${C.s3}`,background:C.s1,color:C.ink,font:'inherit',fontSize:16}}/>
+      </div>
+      <div style={{overflowY:'auto',padding:'0 16px 16px',display:'grid',gap:6}}>
+        {q.trim()&&!exact&&<button type="button" onClick={()=>onPick({name:q.trim().slice(0,100),quantity:10,unit:'reps',kg:0,sets:3,restSec:60})}
+          style={{textAlign:'left',padding:'12px 14px',borderRadius:12,border:`1px dashed ${C.accent}`,background:'transparent',color:C.ink,font:'inherit',cursor:'pointer'}}>
+          <div style={{fontSize:14,fontWeight:500}}>Créer « {q.trim()} »</div>
+          <div style={{fontSize:11.5,color:C.ink3}}>Exercice libre, hors catalogue</div></button>}
+        {hits.map(e=><button key={e.id} type="button" onClick={()=>onPick(fromCatalog(e))}
+          style={{textAlign:'left',padding:'10px 14px',borderRadius:12,border:0,background:C.card,color:C.ink,font:'inherit',cursor:'pointer'}}>
+          <div style={{fontSize:14,fontWeight:500}}>{e.n}</div>
+          <div style={{fontSize:11.5,color:C.ink3}}>{e.m}</div></button>)}
+        {!hits.length&&!q.trim()&&<div style={{fontSize:12.5,color:C.ink3}}>Catalogue vide.</div>}
+      </div>
+    </div>
+  </div>;
+}
+
+function Editor({initial,isNew,C,onSave,onDelete,onClose}) {
+  const [w,setW]=useState(initial),[picker,setPicker]=useState(false),[busy,setBusy]=useState(false),[errors,setErrors]=useState([]),[confirmDel,setConfirmDel]=useState(false);
+  const set=(k,v)=>setW(d=>({...d,[k]:v}));
+  const setMove=(i,k,v)=>setW(d=>({...d,moves:d.moves.map((m,j)=>j===i?{...m,[k]:v}:m)}));
+  const move=(i,dir)=>setW(d=>{const m=[...d.moves],j=i+dir;if(j<0||j>=m.length) return d;[m[i],m[j]]=[m[j],m[i]];return {...d,moves:m};});
+  const f=fmtOf(w.format),n=w.moves.length;
+  // EMOM : une station par minute, la durée reste un multiple du nombre de stations.
+  const emomFix=w.format==='emom'&&n&&Number(w.durationMin)%n?Math.max(n,Math.round(Number(w.durationMin)/n)*n):null;
   async function save() {
-    setBusy(true);setMessage('');
-    try {const workout=normalizeWorkout(draft);const result=await onSave({custom_workouts:[...workouts.filter(w=>w.id!==workout.id),workout]});
-      if(result?.error) throw result.error;setDraft(null);setMessage('Entraînement enregistré dans ta bibliothèque. Aucune séance du programme n’a été validée.');
-    } catch(error) {setMessage(error.message||'Enregistrement impossible.');} finally {setBusy(false);}
+    const errs=validateWorkout(w);setErrors(errs);if(errs.length) return;
+    setBusy(true);try {await onSave(normalizeWorkout(w));} catch(e) {setErrors([e.message||'Enregistrement impossible.']);} finally {setBusy(false);}
   }
-  async function launch(workout) {
+  const cap={fontSize:11.5,color:C.ink3,letterSpacing:'.04em',textTransform:'uppercase',fontWeight:500};
+  const card={background:C.card,borderRadius:22,padding:16};
+  const iconBtn={height:32,padding:'0 10px',borderRadius:999,border:`1px solid ${C.s3}`,background:'transparent',color:C.ink2,font:'inherit',fontSize:12.5,cursor:'pointer'};
+  return <div role="dialog" aria-label="Créateur d’entraînement" style={{position:'fixed',inset:0,zIndex:1200,background:C.bg,color:C.ink,display:'flex',flexDirection:'column'}}>
+    <header style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'calc(env(safe-area-inset-top) + 12px) 16px 12px',gap:10}}>
+      <button type="button" onClick={onClose} style={{border:0,background:'transparent',color:C.ink3,font:'inherit',fontSize:14,cursor:'pointer',padding:0}}>Fermer</button>
+      <span style={{fontSize:14,fontWeight:600}}>{isNew?'Nouvel entraînement':'Modifier'}</span>
+      <span style={{width:44}}/>
+    </header>
+    <div style={{flex:1,overflowY:'auto',padding:'0 16px 120px'}}><div style={{maxWidth:560,margin:'0 auto',display:'grid',gap:10}}>
+      <input aria-label="Nom de l’entraînement" placeholder="Nom de l’entraînement" maxLength={80} value={w.name} onChange={e=>set('name',e.target.value)}
+        style={{width:'100%',boxSizing:'border-box',border:0,borderBottom:`1px solid ${C.s3}`,background:'transparent',color:C.ink,font:'inherit',fontSize:34,fontWeight:500,padding:'8px 0 10px',outline:'none'}}/>
+
+      <div style={card}>
+        <div style={cap}>Format</div>
+        <div role="radiogroup" aria-label="Format" style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:4,padding:4,marginTop:10,borderRadius:999,background:C.s1}}>
+          {FORMATS.map(x=>{const on=w.format===x.id;return <button key={x.id} type="button" role="radio" aria-checked={on} onClick={()=>set('format',x.id)}
+            style={{height:38,borderRadius:999,border:0,background:on?C.fill:'transparent',color:on?C.onFill:C.ink2,font:'inherit',fontSize:12.5,fontWeight:on?600:500,cursor:'pointer'}}>{x.label}</button>;})}
+        </div>
+        <p style={{margin:'10px 0 0',fontSize:12.5,color:C.ink2,lineHeight:1.5}}>{f.hint}</p>
+        <div style={{display:'grid',gap:12,marginTop:14}}>
+          {w.format==='rounds'&&<div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+            <span style={{fontSize:14}}>Tours</span><Stepper C={C} label="Nombre de tours" value={w.rounds??5} min={1} max={100} onChange={v=>set('rounds',v)}/></div>}
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+            <span style={{fontSize:14}}>{w.format==='classique'?'Durée estimée':w.format==='rounds'?'Temps limite':'Durée'}</span>
+            <Stepper C={C} label="Durée en minutes" value={w.durationMin} min={1} max={240} step={w.format==='emom'&&n?n:1} suffix="min" onChange={v=>set('durationMin',v)}/></div>
+          {w.format==='emom'&&n>0&&!emomFix&&<div style={{fontSize:12.5,color:C.ink3}}>{Number(w.durationMin)/n} tour{Number(w.durationMin)/n>1?'s':''} de {n} minute{n>1?'s':''}.</div>}
+          {emomFix&&<button type="button" onClick={()=>set('durationMin',emomFix)} style={{...iconBtn,justifySelf:'start',borderColor:C.accent,color:C.ink}}>
+            Ajuster à {emomFix} min pour {n} stations</button>}
+        </div>
+      </div>
+
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',marginTop:6}}>
+        <span style={cap}>{w.format==='emom'?'Stations':'Exercices'} · {n}</span>
+        {w.format!=='classique'&&n>0&&<span style={{fontSize:11.5,color:C.ink3}}>{w.format==='emom'?'une par minute':'= un tour'}</span>}
+      </div>
+
+      {w.moves.map((m,i)=><div key={i} style={{...card,display:'grid',gap:12}}>
+        <div style={{display:'flex',alignItems:'center',gap:10}}>
+          <span style={{width:28,height:28,borderRadius:999,background:C.accentSoft,color:C.ink,fontSize:12.5,fontWeight:600,display:'grid',placeItems:'center',flexShrink:0}}>{i+1}</span>
+          <input aria-label={`Nom de l’exercice ${i+1}`} value={m.name} maxLength={100} onChange={e=>setMove(i,'name',e.target.value)}
+            style={{flex:1,minWidth:0,border:0,background:'transparent',color:C.ink,font:'inherit',fontSize:16,fontWeight:500,outline:'none'}}/>
+        </div>
+        <div style={{display:'flex',flexWrap:'wrap',justifyContent:'space-between',alignItems:'center',gap:10}}>
+          <Stepper C={C} label={`Quantité exercice ${i+1}`} value={m.quantity} min={1} max={10000} step={m.unit==='m'?50:m.unit==='s'?5:1} onChange={v=>setMove(i,'quantity',v)}/>
+          <div role="radiogroup" aria-label="Unité" style={{display:'flex',gap:2,padding:3,borderRadius:999,background:C.s1}}>
+            {UNITS.map(u=>{const on=m.unit===u.id;return <button key={u.id} type="button" role="radio" aria-checked={on} onClick={()=>setMove(i,'unit',u.id)}
+              style={{height:30,padding:'0 10px',borderRadius:999,border:0,background:on?C.fill:'transparent',color:on?C.onFill:C.ink3,font:'inherit',fontSize:12.5,fontWeight:on?600:500,cursor:'pointer'}}>{u.label}</button>;})}
+          </div>
+        </div>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+          <span style={{fontSize:12.5,color:C.ink3}}>Charge</span>
+          <Stepper C={C} label={`Charge exercice ${i+1}`} value={m.kg} min={0} max={500} step={2.5} suffix="kg" onChange={v=>setMove(i,'kg',v)}/></div>
+        {w.format==='classique'&&<>
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+            <span style={{fontSize:12.5,color:C.ink3}}>Séries</span>
+            <Stepper C={C} label={`Séries exercice ${i+1}`} value={m.sets} min={1} max={30} onChange={v=>setMove(i,'sets',v)}/></div>
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+            <span style={{fontSize:12.5,color:C.ink3}}>Repos</span>
+            <Stepper C={C} label={`Repos exercice ${i+1}`} value={m.restSec} min={0} max={600} step={15} suffix="s" onChange={v=>setMove(i,'restSec',v)}/></div>
+        </>}
+        <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
+          <button type="button" style={iconBtn} disabled={i===0} onClick={()=>move(i,-1)} aria-label="Monter">↑</button>
+          <button type="button" style={iconBtn} disabled={i===n-1} onClick={()=>move(i,1)} aria-label="Descendre">↓</button>
+          <button type="button" style={iconBtn} disabled={n>=20} onClick={()=>setW(d=>({...d,moves:[...d.moves.slice(0,i+1),{...m},...d.moves.slice(i+1)]}))}>Dupliquer</button>
+          <button type="button" style={{...iconBtn,marginLeft:'auto'}} onClick={()=>setW(d=>({...d,moves:d.moves.filter((_,j)=>j!==i)}))}>Retirer</button>
+        </div>
+      </div>)}
+
+      <button type="button" disabled={n>=20} onClick={()=>setPicker(true)}
+        style={{height:56,borderRadius:22,border:`1px dashed ${C.accent}`,background:'transparent',color:C.ink,font:'inherit',fontSize:14,fontWeight:600,cursor:'pointer'}}>
+        + Ajouter un exercice</button>
+
+      {!isNew&&<div style={{marginTop:14,textAlign:'center'}}>
+        {!confirmDel?<button type="button" onClick={()=>setConfirmDel(true)} style={{border:0,background:'transparent',color:C.ink3,font:'inherit',fontSize:12.5,cursor:'pointer'}}>Supprimer cet entraînement</button>
+          :<div style={{display:'flex',gap:10,justifyContent:'center'}}>
+            <button type="button" style={{...iconBtn,borderColor:C.ink}} onClick={()=>onDelete(w.id)}>Confirmer la suppression</button>
+            <button type="button" style={iconBtn} onClick={()=>setConfirmDel(false)}>Garder</button></div>}
+      </div>}
+    </div></div>
+
+    <footer style={{position:'absolute',left:0,right:0,bottom:0,padding:'12px 16px calc(env(safe-area-inset-bottom) + 12px)',background:C.bg,borderTop:`1px solid ${C.s2}`}}>
+      <div style={{maxWidth:560,margin:'0 auto',display:'grid',gap:8}}>
+        {errors.length>0&&<div role="alert" style={{fontSize:12.5,color:C.ink2,lineHeight:1.4}}>{errors[0]}{errors.length>1?` (+${errors.length-1})`:''}</div>}
+        <div style={{display:'flex',alignItems:'center',gap:12}}>
+          <div style={{flex:1,minWidth:0}}>
+            <div style={{fontSize:14,fontWeight:500,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{w.name.trim()||'Sans nom'}</div>
+            <div style={{fontSize:11.5,color:C.ink3}}>{workoutSummary(w)} · {n} exercice{n>1?'s':''}</div>
+          </div>
+          <button type="button" disabled={busy} onClick={save} style={{height:48,padding:'0 22px',borderRadius:999,border:0,background:C.fill,color:C.onFill,font:'inherit',fontSize:14,fontWeight:600,cursor:'pointer',opacity:busy?.6:1}}>
+            {busy?'Enregistrement…':'Enregistrer'}</button>
+        </div>
+      </div>
+    </footer>
+    {picker&&<Picker C={C} onClose={()=>setPicker(false)} onPick={m=>{setW(d=>({...d,moves:[...d.moves,m]}));setPicker(false);setErrors([]);}}/>}
+  </div>;
+}
+
+export default function WorkoutComposer({workouts=[],onSave,onLaunch,colors:C}) {
+  const [editing,setEditing]=useState(null),[launchId,setLaunchId]=useState(null),[busy,setBusy]=useState(false),[message,setMessage]=useState('');
+  const list=Array.isArray(workouts)?workouts:[];
+  async function persist(next,done) {
+    const result=await onSave({custom_workouts:next});if(result?.error) throw result.error;setEditing(null);setMessage(done);
+  }
+  async function launch(w) {
     setBusy(true);setMessage('');
-    try {await onLaunch(workout);} catch(error) {setMessage(error.message||'Impossible de préparer la séance.');}
+    try {await onLaunch(w);} catch(e) {setMessage(e.message||'Impossible de préparer la séance.');}
     finally {setBusy(false);setLaunchId(null);}
   }
-  function next() {
-    const errors=validateWorkout(draft);
-    if(step===0) {
-      const basics=errors.filter(e=>e.startsWith('Donne')||e.startsWith('Choisis')||e.startsWith('La durée'));
-      if(basics.length){setMessage(basics.join(' '));return;}
-    } else if(errors.length){setMessage(errors.join(' '));return;}
-    setMessage('');setStep(s=>s+1);
-  }
-  return <section aria-label="Compositeur d’entraînement" style={{padding:18,borderRadius:22,background:C.card,color:C.ink,marginBottom:12,border:`1px solid ${C.s2}`}}>
-    <h3 style={{margin:'0 0 8px'}}>Mes entraînements</h3>
-    {!draft?<>
-      <p style={{fontSize:13}}>Compose une séance classique, un AMRAP ou un EMOM. La création seule ne change pas ta progression.</p>
-      <button style={{...button,background:C.accent}} disabled={busy} onClick={()=>open(null)}>Créer un entraînement</button>
-      {workouts.map(w=><article key={w.id} style={{marginTop:14,padding:12,borderRadius:14,background:C.s1}}>
-        <strong>{w.name}</strong><div>{w.format.toUpperCase()} · {w.durationMin} min{w.format==='classique'?' estimées':''} · {w.moves.length} exercices</div>
-        <button style={button} disabled={busy} onClick={()=>open(w)}>Modifier</button>
-        {launchId!==w.id?<button style={button} disabled={busy} onClick={()=>setLaunchId(w.id)}>Utiliser aujourd’hui</button>:<>
-          <p>Cette séance remplacera la séance du programme en attente pour aujourd’hui. À sa validation, elle comptera comme une séance du programme. Aucun changement avant confirmation.</p>
-          <button style={{...button,background:C.accent}} disabled={busy} onClick={()=>launch(w)}>Confirmer le remplacement</button>
-          <button style={button} disabled={busy} onClick={()=>setLaunchId(null)}>Annuler</button>
-        </>}
-      </article>)}
-    </>:<>
-      <p>Étape {step+1}/3 · {['Format et durée','Exercices','Vérification'][step]}</p>
-      <fieldset disabled={busy} style={{border:0,padding:0,margin:0,display:'grid',gap:12}}>
-      {step===0&&<>
-        <label>Nom<input style={field} maxLength={80} value={draft.name} onChange={e=>edit('name',e.target.value)}/></label>
-        <label>Format<select style={field} value={draft.format} onChange={e=>edit('format',e.target.value)}><option value="classique">Classique — séries et repos</option><option value="amrap">AMRAP — tours libres</option><option value="emom">EMOM — une station par minute</option></select></label>
-        <label>{draft.format==='classique'?'Durée prévue (indicative)':'Durée du bloc chronométré'} en minutes<input style={field} type="number" min="1" max="240" step="1" value={draft.durationMin} onChange={e=>edit('durationMin',e.target.value)}/></label>
-        <p style={{fontSize:13}}>{draft.format==='emom'?'Passage automatique à l’exercice suivant toutes les 60 secondes. Prévois des objectifs réalisables avec du temps pour la transition.':draft.format==='amrap'?'Le chrono continue ; tu valides les mouvements et les tours réalisés manuellement.':'Chaque série se valide manuellement ; le repos utilise son propre minuteur. La durée prévue ne coupe pas la séance.'}</p>
-      </>}
-      {step===1&&<>
-        {draft.moves.map((m,i)=><div key={i} style={{border:`1px solid ${C.div}`,borderRadius:14,padding:12,display:'grid',gap:10}}>
-          <strong>Exercice {i+1}{draft.format==='emom'?` · minute ${i+1}`:''}</strong>
-          <label>Nom<input style={field} maxLength={100} value={m.name} onChange={e=>editMove(i,'name',e.target.value)}/></label>
-          <label>Quantité<input style={field} type="number" min="1" step="1" value={m.quantity} onChange={e=>editMove(i,'quantity',e.target.value)}/></label>
-          <label>Unité<select style={field} value={m.unit} onChange={e=>editMove(i,'unit',e.target.value)}><option value="reps">Répétitions</option><option value="s">Secondes</option><option value="m">Mètres</option><option value="cal">Calories</option></select></label>
-          <label>Charge additionnelle (kg, 0 = sans charge)<input style={field} type="number" min="0" max="500" step="0.5" value={m.kg} onChange={e=>editMove(i,'kg',e.target.value)}/></label>
-          {draft.format==='classique'&&<><label>Séries<input style={field} type="number" min="1" max="30" value={m.sets} onChange={e=>editMove(i,'sets',e.target.value)}/></label><label>Repos entre séries (secondes)<input style={field} type="number" min="0" max="600" value={m.restSec} onChange={e=>editMove(i,'restSec',e.target.value)}/></label></>}
-          <button style={button} disabled={i===0} onClick={()=>{const moves=[...draft.moves];[moves[i-1],moves[i]]=[moves[i],moves[i-1]];edit('moves',moves);}}>Monter</button>
-          <button style={button} onClick={()=>edit('moves',draft.moves.filter((_,j)=>j!==i))}>Retirer cet exercice</button>
-        </div>)}
-        <button style={button} disabled={draft.moves.length>=20} onClick={()=>edit('moves',[...draft.moves,movement()])}>Ajouter un exercice</button>
-      </>}
-      {step===2&&<div><h4>{draft.name}</h4><p>{draft.format.toUpperCase()} · {draft.durationMin} min{draft.format==='classique'?' estimées, hors échauffement':''}</p>
-        <ol>{draft.moves.map((m,i)=><li key={i}>{m.name} — {draft.format==='classique'?`${m.sets} × `:''}{m.quantity} {m.unit} · {m.kg} kg{draft.format==='classique'?` · repos ${m.restSec} s`:''}</li>)}</ol>
-        <p>Un échauffement standard sera proposé séparément. Les objectifs saisis ne sont pas une validation de leur adéquation à une blessure.</p>
-      </div>}
-      {step>0&&<button style={button} onClick={()=>{setMessage('');setStep(s=>s-1);}}>Précédent</button>}
-      {step<2?<button style={{...button,background:C.accent}} onClick={next}>Continuer</button>:<button style={{...button,background:C.accent}} onClick={save}>Enregistrer l’entraînement</button>}
-      <button style={button} onClick={()=>{setDraft(null);setMessage('Brouillon abandonné, bibliothèque inchangée.');}}>Annuler les modifications</button>
-      </fieldset>
-    </>}
-    <p role="status" aria-live="polite">{busy?'Enregistrement…':message}</p>
+  const pill=(primary)=>({height:36,padding:'0 14px',borderRadius:999,border:primary?0:`1px solid ${C.s3}`,background:primary?C.fill:'transparent',color:primary?C.onFill:C.ink,font:'inherit',fontSize:12.5,fontWeight:600,cursor:'pointer'});
+  return <section aria-label="Mes entraînements" style={{background:C.card,color:C.ink,padding:16,borderRadius:22,marginBottom:10}}>
+    <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:10}}>
+      <span style={{fontSize:15,fontWeight:600}}>Mes entraînements</span>
+      <button type="button" style={pill(true)} onClick={()=>{setMessage('');setEditing({w:blank(),isNew:true});}}>Créer</button>
+    </div>
+    <p style={{margin:'6px 0 0',fontSize:12.5,lineHeight:1.5,color:C.ink3}}>Compose tes propres séances : classique, AMRAP, EMOM ou tours pour le temps.</p>
+    {list.length>0&&<div style={{display:'grid',gap:8,marginTop:14}}>
+      {list.map(w=><div key={w.id} style={{padding:12,borderRadius:12,background:C.s1}}>
+        <button type="button" onClick={()=>{setMessage('');setEditing({w:structuredClone({rounds:5,...w}),isNew:false});}}
+          style={{display:'flex',width:'100%',alignItems:'center',gap:10,border:0,padding:0,background:'transparent',color:C.ink,font:'inherit',textAlign:'left',cursor:'pointer'}}>
+          <span style={{fontSize:10,fontWeight:600,letterSpacing:'.06em',padding:'4px 8px',borderRadius:999,background:C.accentSoft}}>{fmtOf(w.format).tag}</span>
+          <span style={{flex:1,minWidth:0}}>
+            <span style={{display:'block',fontSize:14,fontWeight:500,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{w.name}</span>
+            <span style={{display:'block',fontSize:11.5,color:C.ink3,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{workoutSummary(w)} · {w.moves.map(m=>m.name).join(', ')}</span>
+          </span>
+        </button>
+        {launchId!==w.id?<div style={{display:'flex',gap:8,marginTop:10}}>
+          <button type="button" style={pill(false)} disabled={busy} onClick={()=>setLaunchId(w.id)}>Faire aujourd’hui</button></div>
+          :<div style={{marginTop:10,display:'grid',gap:8}}>
+            <span style={{fontSize:12.5,color:C.ink2,lineHeight:1.5}}>Elle remplace la séance prévue aujourd’hui et comptera dans ton programme une fois terminée.</span>
+            <div style={{display:'flex',gap:8}}>
+              <button type="button" style={pill(true)} disabled={busy} onClick={()=>launch(w)}>{busy?'Préparation…':'Lancer'}</button>
+              <button type="button" style={pill(false)} disabled={busy} onClick={()=>setLaunchId(null)}>Annuler</button></div>
+          </div>}
+      </div>)}
+    </div>}
+    {message&&<p role="status" aria-live="polite" style={{margin:'12px 0 0',fontSize:12.5,color:C.ink2}}>{message}</p>}
+    {editing&&<Editor C={C} initial={editing.w} isNew={editing.isNew} onClose={()=>setEditing(null)}
+      onSave={w=>persist(list.some(x=>x.id===w.id)?list.map(x=>x.id===w.id?w:x):[...list,w],'Entraînement enregistré.')}
+      onDelete={id=>persist(list.filter(x=>x.id!==id),'Entraînement supprimé.').catch(e=>setMessage(e.message||'Suppression impossible.'))}/>}
   </section>;
 }

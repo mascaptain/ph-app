@@ -19,3 +19,14 @@ test('identities remain stable across reloads and distinct across repeated exerc
  const original=JSON.stringify(base);const a=customWorkoutDay(base),b=customWorkoutDay(JSON.parse(original));
  assert.deepEqual(a,b);assert.equal(JSON.stringify(base),original);assert.notEqual(a.exercises[0].id,a.exercises[1].id);
 });
+
+test('rounds-for-time plays as manual rounds with a round target and time cap', () => {
+  const w={id:'r1',name:'Murph maison',format:'rounds',rounds:5,durationMin:40,moves:[{name:'Tractions',quantity:10,unit:'reps',kg:0}]};
+  const day=customWorkoutDay(w,'2026-09-29');
+  assert.equal(day.blocks[0].kind,'amrap');
+  assert.equal(day.blocks[0].execution,'manual_rounds');
+  assert.equal(day.blocks[0].rounds,5);
+  assert.equal(day.blocks[0].cadenceSec,0);
+  assert.equal(day.timeCapMin,40);
+  assert.ok(validateWorkout({...w,rounds:0}).some(e=>e.includes('tours')));
+});
