@@ -4,6 +4,7 @@
 import { DB } from "./catalog.js";
 import { HEROES, heroFits } from "./heroes.js";
 import { metaOf } from "./classify.js";
+import { selectHeroCombination } from "./program-selection.js";
 
 const find = (id) => DB.find((ex) => ex.id === id) || null;
 const INJURY_RULES = {
@@ -68,29 +69,29 @@ const prescribed = (ex, sets, reps, role, ctx, intensity = 1) => {
 // cadence de 60 s, et la décharge garde la priorité.
 const kbProgression = (ctx = {}) => {
   const feedback = ctx.kbFeedback || {};
-  const intensity = Number(feedback.intensity);
-  const rpe = Number(feedback.rpe);
-  let repBump = 1;
-  let loadFactor = 1.025;
-  if ((Number.isFinite(intensity) && intensity <= 3) || (Number.isFinite(rpe) && rpe <= 7)) {
-    repBump = 3; loadFactor = 1.075;
-  } else if ((Number.isFinite(intensity) && intensity === 4) || (Number.isFinite(rpe) && rpe === 8)) {
-    repBump = 2; loadFactor = 1.05;
-  } else if ((Number.isFinite(intensity) && intensity >= 5) || (Number.isFinite(rpe) && rpe >= 9)) {
+  const intensity = feedback.intensity == null ? NaN : Number(feedback.intensity);
+  const rpe = feedback.rpe == null ? NaN : Number(feedback.rpe);
+  let repBump = 0;
+  let loadFactor = 1;
+  if (intensity >= 5 || rpe >= 9) {
     repBump = -1; loadFactor = .975;
+  } else if ((intensity >= 1 && intensity <= 2) || (rpe >= 1 && rpe <= 6)) {
+    repBump = 2;
+  } else if ((Number.isFinite(intensity) && intensity === 4) || (Number.isFinite(rpe) && rpe === 8)) {
+    repBump = 0;
   }
-  if (ctx.deload) { repBump = -2; loadFactor = .85; }
+  if (ctx.deload) { repBump = -2; loadFactor = 1; }
   return { repBump, loadFactor };
 };
-const kbRep = (value, bump, profile, slot) => {
+const kbRep = (value, bump, ex) => {
   if (typeof value === "string" && /m|s/i.test(value)) return value;
   const base = Number(value);
   if (!Number.isFinite(base)) return String(value || "8");
   // Les mouvements techniques lourds restent faisables sous une minute, les
   // swings/carries et les mouvements simples prennent réellement du volume.
-  const technical = profile === 0 && slot === 0;
-  const min = technical ? 5 : 8;
-  const max = technical ? 10 : 20;
+  const technical = /get.up|turkish|windmill/i.test(ex.n);
+  const min = technical ? 1 : Math.min(base, 5);
+  const max = technical ? 3 : /snatch|clean|press/i.test(ex.n) ? 12 : 20;
   return String(Math.max(min, Math.min(max, Math.round(base + bump))));
 };
 
@@ -179,8 +180,9 @@ const strengthDay = (kind, ctx, template = 0) => {
 const kbDay = (variant, ctx, template = 0) => {
   const equipment = programEquipment(ctx.equipment || []), zones = ctx.injuryZones || [], excluded = ctx.excluded || [];
   const response = kbProgression(ctx);
-  const build = (ids, reps, profile) => ids.map(find).filter((ex) => has(ex, equipment, zones, excluded))
-    .map((ex, i) => prescribed(ex, 1, kbRep(reps[i], response.repBump, profile, i), "density", {...ctx,kbLoadFactor:response.loadFactor}, .65));
+  const build = (ids, reps) => ids.map((id, i) => ({ex:find(id),reps:reps[i]}))
+    .filter(({ex}) => has(ex, equipment, zones, excluded))
+    .map(({ex,reps}) => prescribed(ex, 1, kbRep(reps, response.repBump, ex), "density", {...ctx,kbLoadFactor:response.loadFactor}, .65));
   // 12 prescriptions réparties en 4 profils : technique/force, puissance/densité,
   // unilatéral/stabilité et complexe/carry. Les répétitions utiles au sein d'un
   // entraînement restent possibles ; ce qui est interdit est de resservir la même
@@ -215,16 +217,26 @@ const kbDay = (variant, ctx, template = 0) => {
   ];
   const index=(template+(variant === "capacity" ? 1 : 0))%plans.length;
   const profileIndex=index % 4;
-  const [technical, capacity, finisher]=plans[index].map((ids,i)=>build(ids,repPlans[index][i],profileIndex));
+  const prescribedMoves=build(plans[index].flat(),repPlans[index].flat());
   const kbProfiles = ["Technique & force", "Puissance & densité", "Unilatéral & stabilité", "Complexe & carry"];
   const profile = kbProfiles[profileIndex];
-  const blocks = variant === "power"
-    ? [{ label: "Bloc 1 · Technique sous cadence", kind: "emom", durationMin: 15, cadenceSec: 60, rounds: 5, exercises: technical },
-       { label: "Bloc 2 · Capacité de travail", kind: "amrap", execution: "auto_cadence", durationMin: 15, cadenceSec: 60, rounds: 5, exercises: capacity },
-       { label: "Bloc 3 · Finisseur", kind: "amrap", execution: "auto_cadence", durationMin: 15, cadenceSec: 60, rounds: 5, exercises: finisher }]
-    : [{ label: "Bloc 1 · Volume continu", kind: "amrap", execution: "auto_cadence", durationMin: 15, cadenceSec: 60, rounds: 5, exercises: technical },
-       { label: "Bloc 2 · Puissance répétée", kind: "emom", durationMin: 15, cadenceSec: 60, rounds: 5, exercises: capacity },
-       { label: "Bloc 3 · Finisseur", kind: "amrap", execution: "auto_cadence", durationMin: 15, cadenceSec: 60, rounds: 5, exercises: finisher }];
+  // The training intent defines the block size and density, not a fixed three-slot UI.
+  const structures = [
+    [{size:2,kind:"emom",minutes:12},{size:4,kind:"amrap",minutes:18},{size:3,kind:"amrap",minutes:15}],
+    [{size:4,kind:"emom",minutes:16},{size:2,kind:"amrap",minutes:12},{size:3,kind:"amrap",minutes:17}],
+    [{size:3,kind:"amrap",minutes:15},{size:4,kind:"emom",minutes:16},{size:2,kind:"amrap",minutes:14}],
+    [{size:2,kind:"emom",minutes:12},{size:2,kind:"amrap",minutes:13},{size:5,kind:"amrap",minutes:20}],
+  ];
+  let cursor=0;
+  const blocks=structures[profileIndex].map((spec,i)=>{
+    const exercises=prescribedMoves.slice(cursor,cursor+spec.size); cursor+=spec.size;
+    const durationMin=spec.kind==="emom" && exercises.length
+      ? Math.ceil(spec.minutes/exercises.length)*exercises.length : spec.minutes;
+    return {label:`Bloc ${i+1} · ${["Mise en charge","Capacité de travail","Consolidation"][i]}`,
+      kind:spec.kind,execution:spec.kind==="emom"?"guided":"manual_rounds",
+      durationMin,cadenceSec:spec.kind==="emom"?60:0,
+      rounds:spec.kind==="emom"?durationMin/Math.max(1,exercises.length):0,exercises};
+  }).filter(block=>block.exercises.length);
   blocks.forEach((block, blockIdx) => block.exercises.forEach((ex) => { ex.blockIdx = blockIdx; }));
   const moves = blocks.flatMap((block) => block.exercises);
   const durationMin = blocks.reduce((sum, block) => sum + block.durationMin, 0);
@@ -247,7 +259,8 @@ const heroDay = (ctx, template = 0) => {
   // Hortman demeure accessible dans le catalogue manuel, mais n'est pas injecté
   // automatiquement : 800 m + 80 squats + 8 muscle-ups est un benchmark expert,
   // pas un Hero raisonnable à prescrire par défaut.
-  const HYBRID_HERO_IDS = new Set(["danny", "havana", "jack", "jennifer", "laura", "mcghee", "rah oi", "rahoi", "rankel", "ricky", "tk", "viola"]);
+  const HYBRID_HERO_IDS = new Set(["danny", "havana", "jack", "jennifer", "laura", "mcghee", "rahoi", "rankel", "ricky", "tk", "viola"]);
+  if (ctx.allowAdvancedHeroes) HYBRID_HERO_IDS.add("hortman");
   const pool = HEROES.filter((h) => HYBRID_HERO_IDS.has(String(h.id).toLowerCase())
     && heroFits(h, equipment) && h.cap >= 12 && h.cap <= 60 && h.kind === "amrap"
     && h.moves.length >= 3 && h.moves.length <= 4
@@ -258,13 +271,9 @@ const heroDay = (ctx, template = 0) => {
   // taille du pool distribue les benchmarks sur le cycle complet.
   const previousHeroIds = new Set(ctx.previousHeroIds || []);
   const heroUses = ctx.heroUses || {};
-  const heroSeed = Math.max(0, Number(ctx.heroSeed) || 0);
-  const hero = pool.length ? pool.filter((entry) => !previousHeroIds.has(entry.id)).sort((a, b) => {
-    const usage = (heroUses[a.id] || 0) - (heroUses[b.id] || 0);
-    const order = (entry) => (pool.indexOf(entry) - ((template * 5 + heroSeed) % pool.length) + pool.length) % pool.length;
-    return usage || order(a) - order(b);
-  })[0] || null : null;
-  if (!hero) return kbDay("capacity", ctx, template);
+  const picks = selectHeroCombination(pool,{previous:[...previousHeroIds],uses:heroUses,occurrence:template});
+  const hero=picks[0];
+  if (!hero) throw new Error("Aucune combinaison Hero compatible : adapter les contraintes avant de programmer.");
   const toBlock = (entry, blockIdx) => {
     const exercises = entry.moves.map((m, i) => ({ id: `hero_${entry.id}_${blockIdx}_${i}`, n: m.n, m: "Full body", eq: "bw", kg: m.kg || 0,
       sets: 1, reps: String(m.reps), rest: 0, role: "density", v5: true, blockIdx }));
@@ -272,26 +281,8 @@ const heroDay = (ctx, template = 0) => {
     // avance manuellement et valide ses tours, comme sur un chronomètre WOD.
     return { heroId: entry.id, heroName: entry.name, label: `Hero ${blockIdx + 1} · ${entry.name} · AMRAP ${entry.cap}`, kind: "amrap", execution: "manual_rounds", durationMin: entry.cap, cadenceSec: 0, rounds: 0, exercises };
   };
-  const picks = [hero];
   // Un ou plusieurs Hero selon leur format, mais les blocs eux-mêmes totalisent
   // toujours au moins 45 min. Un Hero long peut suffire ; des courts se combinent.
-  const moveNames = (entry) => new Set(entry.moves.map((move) => String(move.n).toLowerCase()));
-  const priority = [4, 7, 2, 9, 5, 1, 8, 3, 6, 10, 11, 12];
-  for (let attempt = 0; picks.reduce((sum, entry) => sum + entry.cap, 0) < 45 && attempt < pool.length; attempt += 1) {
-    const usedMoves = new Set(picks.flatMap((entry) => [...moveNames(entry)]));
-    const candidates = pool.filter((candidate) => !previousHeroIds.has(candidate.id) && !picks.some((entry) => entry.id === candidate.id));
-    if (!candidates.length) break;
-    candidates.sort((a, b) => {
-      const overlap = (entry) => [...moveNames(entry)].filter((name) => usedMoves.has(name)).length;
-      const order = (entry) => {
-        const offset = (pool.indexOf(entry) - pool.indexOf(hero) + pool.length) % pool.length;
-        const rank = priority.indexOf(offset);
-        return rank < 0 ? priority.length + offset : rank;
-      };
-      return overlap(a) - overlap(b) || (heroUses[a.id] || 0) - (heroUses[b.id] || 0) || order(a) - order(b);
-    });
-    picks.push(candidates[0]);
-  }
   const blocks = picks.map(toBlock);
   const exercises = blocks.flatMap((block) => block.exercises);
   const workMin = blocks.reduce((sum, block) => sum + block.durationMin, 0);
@@ -346,7 +337,7 @@ const conditioningDay = (ctx, template = 0, slot = 0) => {
     exercises.forEach((ex) => { ex.blockIdx = blockIdx; });
     // Hero = manuel. Les autres AMRAP/EMOM SOMA sont cadencés à exactement une
     // transition par minute pour que l'athlète puisse rester en mouvement.
-    return { label: spec.label, kind: spec.kind, execution: spec.kind === "amrap" ? "auto_cadence" : "guided", durationMin: 15, cadenceSec: 60, rounds: 5, exercises };
+    return { label: spec.label, kind: spec.kind, execution: spec.kind === "amrap" ? "manual_rounds" : "guided", durationMin: 15, cadenceSec: spec.kind === "emom" ? 60 : 0, rounds: spec.kind === "emom" ? 5 : 0, exercises };
   });
   const exercises = blocks.flatMap((block) => block.exercises);
   return complete({ label: "Conditionnement - Corps entier", short: "COND · HYB", muscle: "Cardio · Charge · Poids du corps",
@@ -401,22 +392,20 @@ const validateDay = (day, ctx) => {
     if (!formats.has("emom") || !formats.has("amrap")) fail("kettlebell sans EMOM et AMRAP");
     if (exercises.length < 5 || exercises.some((ex) => ex.eq !== "kb")) fail(`kettlebell non pure: ${names(day)}`);
     if (day.blocks.some((block) => !block.exercises.length || block.durationMin < 8)) fail("bloc kettlebell trop court ou vide");
-    if (!adaptedForInjury&&exercises.length !== 9) fail("kettlebell sans neuf mouvements prescrits");
     if (adaptedForInjury&&exercises.length < 6) fail("kettlebell blessure sans alternatives suffisantes");
     if (day.blocks.some((block) => block.kind === "emom" && block.cadenceSec !== 60)) fail("cadence EMOM kettlebell différente d'une minute");
-    if (day.blocks.some((block) => block.kind === "amrap" && (block.execution !== "auto_cadence" || block.cadenceSec !== 60))) fail("AMRAP kettlebell sans cadence automatique par minute");
+    if (day.blocks.some((block) => block.kind === "amrap" && (block.execution !== "manual_rounds" || block.cadenceSec !== 0))) fail("AMRAP kettlebell doit rester libre");
     const numericReps = exercises.map((ex) => Number.parseInt(String(ex.reps), 10)).filter(Number.isFinite);
     if (!adaptedForInjury&&(numericReps.length < 7 || new Set(numericReps).size < 3)) fail("kettlebell sans variété de répétitions");
     // Même après un retour « très dur », une KB complète conserve un volume de
     // travail minimal ; elle baisse sans devenir une séance de 6/8 répétitions.
-    if (!adaptedForInjury&&numericReps.filter((reps) => reps >= 8).length < 5) fail("kettlebell sous-dosé en volume");
   }
   if (day.archetype === "conditioning") {
     const adaptedForInjury=(ctx.injuryZones||[]).length>0;
     if (!Array.isArray(day.blocks) || day.blocks.length !== 3 || day.blocks.some((block) => block.durationMin !== 15 || (!adaptedForInjury&&block.exercises.length !== 3) || block.exercises.length < 1)) fail("conditionnement sans trois blocs de quinze minutes");
     const formats = new Set(day.blocks.map((block) => block.kind));
     if (!formats.has("emom") || !formats.has("amrap")) fail("conditionnement sans EMOM et AMRAP");
-    if (day.blocks.some((block) => block.kind === "amrap" && (block.execution !== "auto_cadence" || block.cadenceSec !== 60))) fail("AMRAP conditionnement sans cadence automatique par minute");
+    if (day.blocks.some((block) => block.kind === "amrap" && (block.execution !== "manual_rounds" || block.cadenceSec !== 0))) fail("AMRAP conditionnement doit rester libre");
     if (!adaptedForInjury&&new Set(exercises.map((ex) => ex.eq)).size < 2) fail("conditionnement sans variété de matériel");
   }
   if (day.archetype === "hero") {
@@ -466,15 +455,10 @@ export const validateV5Program = (program, frequency, ctx = {}) => {
 // semaines vient donc du programme (intensité/volume/contrôle/consolidation),
 // sur 12 semaines, jamais d'une rotation aléatoire d'exercices.
 export const buildV5Program = (ctx = {}) => {
-  const frequency = Math.max(2, Math.min(7, Number(ctx.frequency) || 5));
+  // Availability schedules this sequence; it must never redefine its contents.
+  const frequency = 5;
   const total = Number(ctx.total) || 60;
-  const base = frequency === 7
-    ? ["upper", "kb_power", "hero", "lower", "conditioning", "kb_capacity", "conditioning"]
-    : frequency === 6 ? ["upper", "kb_power", "hero", "lower", "conditioning", "kb_capacity"]
-    : frequency === 5 ? ["upper", "kb_power", "hero", "lower", "conditioning"]
-    : frequency === 4 ? ["upper", "kb_power", "hero", "lower"]
-    : frequency === 3 ? ["upper", "kb_power", "hero"]
-    : ["upper", "lower"];
+  const base = ["upper", "kb_power", "hero", "lower", "conditioning"];
   const microcycles = Array.from({ length: 12 }, (_, template) => base.map((kind) => ({ kind, template })));
   let previousHeroIds = new Set();
   let heroUses = {};
@@ -503,9 +487,10 @@ export const buildV5Program = (ctx = {}) => {
 
 const CACHE = new Map();
 export const v5Session = (index, ctx = {}) => {
-  const key = JSON.stringify({ frequency: ctx.frequency || 5, equipment: ctx.equipment || [], total: ctx.total || 60,
+  const key = JSON.stringify({ allowAdvancedHeroes:!!ctx.allowAdvancedHeroes, scale:ctx.scale||1, strength:ctx.strength||{}, equipment: ctx.equipment || [], total: ctx.total || 60,
     rms: ctx.rms || {}, perf: ctx.perf || {}, kbFeedback: ctx.kbFeedback || {}, excluded: ctx.excluded || [], injuryZones: ctx.injuryZones || [] });
   let program = CACHE.get(key);
   if (!program) { program = buildV5Program(ctx); CACHE.set(key, program); }
-  return program[Math.max(0, index) % program.length] || null;
+  const day=program[Math.max(0, index)];
+  return day ? structuredClone(day) : null;
 };
