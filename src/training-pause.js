@@ -27,6 +27,15 @@ export function resumePause(pauses,id,today) {
   return pauses.map(p=>p.id!==id?p:p.start>=today?{...p,cancelled:true}
     :{...p,end:shiftDate(today,-1)});
 }
+export function editPause(pauses,id,dates) {
+  const current=pauses.find(p=>p.id===id);
+  if(!current) throw new Error('Cette pause n’existe plus. Recharge les réglages.');
+  if(dates.end!==null&&!validDate(dates.end)) throw new Error('Indique une date de fin ou coche « Sans date de fin ».');
+  const replacement={...current,start:dates.start,end:dates.end,cancelled:false};
+  // Reuse creation validation, excluding only the pause being edited.
+  addPause(pauses.filter(p=>p.id!==id),replacement);
+  return pauses.map(p=>p.id===id?replacement:p);
+}
 export function projectedEnd({from,remaining,trainingDays,pauses=[]}) {
   if(!validDate(from)||!trainingDays.length) return null;
   if(remaining<=0) return from;
