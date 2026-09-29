@@ -10,6 +10,7 @@
 // Un mouvement marqué `link` s'enchaîne avec le précédent : « 5 squats + arnold
 // press » forme UNE station, faite d'une traite. Sans cette notion, un complexe
 // devenait deux exercices séparés et le compte des tours était faux.
+import {estimateLoad} from './load-estimate.js';
 const formats=['classique','amrap','emom','rounds','fortime'];
 const units=['reps','s','m','cal'];
 const UNIT_LABEL={reps:'',s:' s',m:' m',cal:' cal'};
@@ -54,7 +55,9 @@ export function parseQuickEntry(text) {
       const unit=withQty?unitOf(m[2]):last?last.unit:'reps';
       const name=(withQty?m[3]:part).trim().replace(/^de\s+/i,'');
       if(!q||!name){skipped.push(part);return;}
-      last={name:name.charAt(0).toUpperCase()+name.slice(1),quantity:q,unit,kg:0,sets:3,restSec:60,link:k>0};
+      // « rdl », « kb » : un mot sans voyelle est un sigle, il passe en capitales.
+      const pretty=name.split(' ').map((wd,j)=>/^[b-df-hj-np-tv-z]{2,4}$/i.test(wd)?wd.toUpperCase():j?wd:wd.charAt(0).toUpperCase()+wd.slice(1)).join(' ');
+      last={name:pretty,quantity:q,unit,kg:0,sets:3,restSec:60,link:k>0};
       moves.push(last);
     });
   });
@@ -89,15 +92,28 @@ export function normalizeWorkout(w) {
   return {id:w.id,name:w.name.trim(),format:w.format,durationMin:Number(w.durationMin),
     ...(hasRounds(w.format)?{rounds:Number(w.rounds)}:{}),
     ...(w.format==='rounds'?{roundRestSec:Number(w.roundRestSec??0)}:{}),
-    moves:w.moves.map((m,i)=>({name:m.name.trim(),quantity:Number(m.quantity),unit:m.unit,kg:Number(m.kg),
+    moves:w.moves.map((m,i)=>({name:m.name.trim(),quantity:Number(m.quantity),unit:m.unit,kg:Number(m.kg),...(['bar','db','kb','mc'].includes(m.eq)?{eq:m.eq}:{}),
       sets:classic?Number(m.sets)||1:1,restSec:classic?Number(m.restSec)||0:0,...(m.link&&i>0?{link:true}:{})}))};
 }
-export function customWorkoutDay(input,day='') {
+// Charge d'un mouvement laissé à 0 kg : calculée depuis ta force (load-estimate.js).
+// Une charge saisie à la main est toujours respectée.
+export function withLoads(workout,ctx) {
+  if(!ctx) return workout;
+  const metcon=workout.format!=='classique';
+  return {...workout,moves:workout.moves.map(m=>{
+    if(Number(m.kg)>0) return m;
+    const est=estimateLoad(m,ctx,metcon);
+    return est&&est.kg>0?{...m,kg:est.kg,eq:est.eq,autoKg:true}:m;
+  })};
+}
+export function customWorkoutDay(input,day='',ctx=null) {
   const workout=normalizeWorkout(input),f=workout.format,timed=f!=='classique';
-  const stations=stationsOf(workout.moves);
+  const stations=stationsOf(withLoads(workout,ctx).moves);
   // Une station devient un « exercice » du lecteur : un complexe se valide d'un geste.
-  const exercises=stations.map((st,i)=>{const {name,reps}=stationLabel(st);const kg=Math.max(...st.map(m=>m.kg||0));
-    return {id:`custom_${workout.id}_${i}`,n:name,m:'Personnalisé',eq:kg?'db':'bw',kg,
+  const exercises=stations.map((st,i)=>{const {name,reps}=stationLabel(st);// Un complexe se fait avec le même outil : la charge est celle du mouvement le plus faible.
+    const loads=st.map(m=>Number(m.kg)||0).filter(k=>k>0);const kg=loads.length?Math.min(...loads):0;
+    const eq=kg?(st.find(m=>m.eq)?.eq||'db'):'bw';
+    return {id:`custom_${workout.id}_${i}`,n:name,m:'Personnalisé',eq,kg,
       sets:st[0].sets,reps,rest:st[0].restSec,role:'custom',v5:true,
       ...(timed?{blockIdx:0,modeTag:{amrap:'AMRAP',emom:'EMOM',rounds:'TOURS',fortime:'CHRONO'}[f],[f==='emom'?'repsPerMinute':'repsPerRound']:st[0].quantity}:{})};});
   const kind=f==='emom'?'emom':f==='rounds'?'circuit':'amrap';

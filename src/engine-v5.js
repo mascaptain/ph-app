@@ -5,6 +5,7 @@ import { DB } from "./catalog.js";
 import { HEROES, heroFits } from "./heroes.js";
 import { metaOf } from "./classify.js";
 import { selectHeroCombination } from "./program-selection.js";
+import { heroLoad } from "./load-estimate.js";
 
 const find = (id) => DB.find((ex) => ex.id === id) || null;
 const INJURY_RULES = {
@@ -48,11 +49,17 @@ const prescribed = (ex, sets, reps, role, ctx, intensity = 1) => {
       // Sans RPE explicite, une série validée est considérée comme tolérée : le
       // prochain pilier progresse d'un incrément, jamais en dessous hors décharge.
       const factor=Number.isFinite(rpe) && rpe >= 10 ? .9 : Number.isFinite(rpe) && rpe >= 8 ? 1 : 1.025;
-      kg=perf.kg*factor;
+      // Une charge tenue sur 5 reps ne se reprend pas telle quelle sur 10 (ni
+      // l'inverse) : on la ramène au nombre de répétitions prescrit (Epley).
+      const done=Number(perf.reps), target=parseInt(reps,10);
+      const repAdj=done>0 && target>0 && done!==target ? (1+done/30)/(1+target/30) : 1;
+      kg=perf.kg*factor*repAdj;
       if (role === "pillar" && !ctx.deload && (!Number.isFinite(rpe) || rpe <= 7) && kg <= perf.kg) kg=perf.kg+(ex.eq === "bar" ? 2.5 : 2);
     }
     else if (rm > 0) kg = rm * intensity;
-    else kg *= ctx.scale || 1;
+    // Jamais fait : le rapport de force mesuré sur le même schéma (squat,
+    // charnière, poussée…) est plus juste que le seul gabarit.
+    else kg *= (ctx.strength && ctx.strength[metaOf(ex).pattern]) || ctx.scale || 1;
     // Les séances KB ne doivent pas rester figées à la même cloche et aux mêmes
     // répétitions. Le bilan de la dernière séance KB pilote une progression
     // prudente de la charge, indépendante des 1RM de barre.
@@ -275,7 +282,9 @@ const heroDay = (ctx, template = 0) => {
   const hero=picks[0];
   if (!hero) throw new Error("Aucune combinaison Hero compatible : adapter les contraintes avant de programmer.");
   const toBlock = (entry, blockIdx) => {
-    const exercises = entry.moves.map((m, i) => ({ id: `hero_${entry.id}_${blockIdx}_${i}`, n: m.n, m: "Full body", eq: "bw", kg: m.kg || 0,
+    const exercises = entry.moves.map((m, i) => ({ id: `hero_${entry.id}_${blockIdx}_${i}`, n: m.n, m: "Full body", eq: m.kg > 0 ? "bar" : "bw",
+      // Charge de référence CrossFit ramenée à ta force, jamais au-dessus.
+      kg: heroLoad(m, ctx), rxKg: m.kg || 0,
       sets: 1, reps: String(m.reps), rest: 0, role: "density", v5: true, blockIdx }));
     // Le chrono borne le Hero ; il ne cadence pas les mouvements. L'athlète
     // avance manuellement et valide ses tours, comme sur un chronomètre WOD.

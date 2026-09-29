@@ -45,3 +45,24 @@ test('house workouts are valid and match the prescriptions', () => {
   assert.equal(stationsOf(duo.moves).length,5);assert.deepEqual(workoutVolume(duo).total,{reps:400});
   assert.deepEqual(workoutVolume(chip).total,{reps:280});assert.equal(chip.durationMin,20);
 });
+
+test('loads left at 0 kg are computed from strength; manual loads are kept; bodyweight stays bodyweight', () => {
+  const [duo,chip]=HOUSE_WORKOUTS;
+  const avg=customWorkoutDay(chip,'',{scale:1}),light=customWorkoutDay(chip,'',{scale:0.62});
+  const th=d=>d.exercises.find(e=>e.n==='Thrusters');
+  assert.ok(th(avg).kg>0);assert.ok(th(light).kg<th(avg).kg);
+  assert.equal(avg.exercises.find(e=>/knee to elbow/.test(e.n)).kg,0);
+  const manual=customWorkoutDay({...chip,moves:chip.moves.map(m=>m.name==='Thrusters'?{...m,kg:22,eq:'db'}:m)},'',{scale:1});
+  assert.equal(th(manual).kg,22);
+  // Complexe : même outil, charge du mouvement le plus faible.
+  const combo=customWorkoutDay(duo,'',{scale:1,strength:{squat:2}}).exercises[0];
+  assert.ok(combo.kg>0);assert.ok(combo.kg<=customWorkoutDay(duo,'',{scale:1,strength:{squat:2}}).exercises[2].kg*2);
+  // Sans contexte : aucune invention, les charges restent celles saisies.
+  assert.equal(th(customWorkoutDay(chip)).kg,0);
+});
+test('more reps means a lighter load, and quick entry keeps acronyms', () => {
+  const five=customWorkoutDay({id:'a',name:'A',format:'fortime',rounds:1,durationMin:10,moves:[{name:'Thrusters',quantity:5,unit:'reps',kg:0}]},'',{scale:1}).exercises[0].kg;
+  const forty=customWorkoutDay({id:'b',name:'B',format:'fortime',rounds:1,durationMin:10,moves:[{name:'Thrusters',quantity:40,unit:'reps',kg:0}]},'',{scale:1}).exercises[0].kg;
+  assert.ok(five>forty);
+  assert.equal(parseQuickEntry('5 rdl + front squats').moves[0].name,'RDL');
+});

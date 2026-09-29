@@ -2,6 +2,7 @@ import React,{useMemo,useState} from 'react';
 import {normalizeWorkout,validateWorkout,parseQuickEntry,stationsOf,workoutVolume,workoutSummary} from './custom-workouts.js';
 import {HOUSE_WORKOUTS} from './house-workouts.js';
 import {DB} from './catalog.js';
+import {estimateLoad} from './load-estimate.js';
 
 const FORMATS=[
   {id:'rounds',label:'Tours',tag:'TOURS',hint:'La séquence N fois, avec un repos après chaque tour.'},
@@ -66,8 +67,10 @@ function Picker({C,title,onPick,onClose}) {
 }
 
 // Une ligne de mouvement : quantité, unité, nom, charge. Tout tient sur deux lignes.
-function MoveRow({m,C,onChange,onRemove}) {
-  const [kgOpen,setKgOpen]=useState(Number(m.kg)>0);
+// La charge laissée vide est calculée depuis ta force ; la toucher la fixe à la main.
+function MoveRow({m,C,onChange,onRemove,estimate}) {
+  const manual=Number(m.kg)>0;
+  const est=manual?null:estimate(m);
   const chip={height:32,padding:'0 10px',borderRadius:999,border:0,background:C.s1,color:C.ink2,font:'inherit',fontSize:12.5,cursor:'pointer'};
   return <div style={{display:'grid',gap:8}}>
     <div style={{display:'flex',alignItems:'center',gap:8}}>
@@ -81,13 +84,18 @@ function MoveRow({m,C,onChange,onRemove}) {
         style={{width:32,height:32,borderRadius:999,border:0,background:'transparent',color:C.ink3,font:'inherit',fontSize:16,cursor:'pointer'}}>×</button>
     </div>
     <div style={{display:'flex',alignItems:'center',gap:8,paddingLeft:64}}>
-      {kgOpen?<Stepper C={C} label={`Charge ${m.name}`} value={m.kg} min={0} max={500} step={2.5} suffix="kg" onChange={v=>onChange({kg:v})}/>
-        :<button type="button" style={chip} onClick={()=>setKgOpen(true)}>+ charge</button>}
+      {manual?<>
+          <Stepper C={C} label={`Charge ${m.name}`} value={m.kg} min={0} max={500} step={m.eq==='kb'||m.eq==='db'||!m.eq?2:2.5} suffix="kg" onChange={v=>onChange({kg:v})}/>
+          <button type="button" style={{...chip,background:'transparent'}} onClick={()=>onChange({kg:0})}>Auto</button></>
+        :est?.bw?<span style={{fontSize:12.5,color:C.ink3}}>Poids du corps</span>
+        :est?.kg>0?<button type="button" style={chip} aria-label={`Charge calculée ${est.kg} kg, toucher pour la modifier`}
+            onClick={()=>onChange({kg:est.kg,eq:est.eq})}>≈ {est.kg} kg · ta force</button>
+        :<button type="button" style={chip} onClick={()=>onChange({kg:10})}>+ charge</button>}
     </div>
   </div>;
 }
 
-function Editor({initial,isNew,C,onSave,onDelete,onClose}) {
+function Editor({initial,isNew,C,onSave,onDelete,onClose,loadCtx}) {
   const [w,setW]=useState(()=>withDefaults(initial));
   const [picker,setPicker]=useState(null),[busy,setBusy]=useState(false),[errors,setErrors]=useState([]),[confirmDel,setConfirmDel]=useState(false);
   const [quick,setQuick]=useState(''),[quickOpen,setQuickOpen]=useState(isNew&&!(initial.moves||[]).length),[quickNote,setQuickNote]=useState('');
@@ -96,6 +104,12 @@ function Editor({initial,isNew,C,onSave,onDelete,onClose}) {
   const setStations=fn=>setW(d=>({...d,moves:flatten(fn(stationsOf(d.moves).map(st=>[...st])))}));
   const f=fmtOf(w.format),n=stations.length,rounded=w.format==='rounds'||w.format==='fortime';
   const vol=workoutVolume(w);
+  const estimate=m=>estimateLoad(m,loadCtx||{},w.format!=='classique');
+  // Un complexe se fait avec le même outil : chaque mouvement affiche la charge de
+  // la station (celle du plus faible), exactement ce que le lecteur prescrira.
+  const stationEstimate=st=>m=>{const e=estimate(m);if(!(e?.kg>0)||st.length<2) return e;
+    const loads=st.map(x=>Number(x.kg)>0?Number(x.kg):estimate(x)?.kg||0).filter(k=>k>0);
+    return {...e,kg:Math.min(...loads)};};
   const emomFix=w.format==='emom'&&n&&Number(w.durationMin)%n?Math.max(n,Math.round(Number(w.durationMin)/n)*n):null;
   function addQuick() {
     const {moves,skipped}=parseQuickEntry(quick);
@@ -179,7 +193,7 @@ function Editor({initial,isNew,C,onSave,onDelete,onClose}) {
             <span style={{width:56,textAlign:'center',fontSize:15,color:C.accent}}>+</span>
             <button type="button" style={{...ghost,height:26,fontSize:11.5}} onClick={()=>setStations(s=>{const a=s[i].slice(0,k),b=s[i].slice(k);s.splice(i,1,a,b);return s;})}>Séparer</button>
           </div>}
-          <MoveRow C={C} m={m} onChange={patch=>setStations(s=>{s[i][k]={...s[i][k],...patch};return s;})}
+          <MoveRow C={C} m={m} estimate={stationEstimate(st)} onChange={patch=>setStations(s=>{s[i][k]={...s[i][k],...patch};return s;})}
             onRemove={()=>setStations(s=>{s[i].splice(k,1);return s.filter(x=>x.length);})}/>
         </React.Fragment>)}
         {w.format==='classique'&&<div style={{display:'grid',gap:10,paddingTop:10,borderTop:`1px solid ${C.s2}`}}>
@@ -226,7 +240,7 @@ function Editor({initial,isNew,C,onSave,onDelete,onClose}) {
   </div>;
 }
 
-export default function WorkoutComposer({workouts=[],onSave,onLaunch,colors:C}) {
+export default function WorkoutComposer({workouts=[],onSave,onLaunch,colors:C,loadCtx}) {
   const [editing,setEditing]=useState(null),[launchId,setLaunchId]=useState(null),[busy,setBusy]=useState(false),[message,setMessage]=useState('');
   const list=Array.isArray(workouts)?workouts:[];
   async function persist(next,done) {
@@ -269,7 +283,7 @@ export default function WorkoutComposer({workouts=[],onSave,onLaunch,colors:C}) 
     <div style={{fontSize:11.5,color:C.ink3,letterSpacing:'.04em',textTransform:'uppercase',fontWeight:500,margin:'16px 0 8px'}}>Modèles</div>
     <div style={{display:'grid',gap:8}}>{HOUSE_WORKOUTS.map(w=>item(w,true))}</div>
     {message&&<p role="status" aria-live="polite" style={{margin:'12px 0 0',fontSize:12.5,color:C.ink2}}>{message}</p>}
-    {editing&&<Editor C={C} initial={editing.w} isNew={editing.isNew} onClose={()=>setEditing(null)}
+    {editing&&<Editor C={C} loadCtx={loadCtx} initial={editing.w} isNew={editing.isNew} onClose={()=>setEditing(null)}
       onSave={w=>persist(list.some(x=>x.id===w.id)?list.map(x=>x.id===w.id?w:x):[...list,w],'Entraînement enregistré.')}
       onDelete={id=>persist(list.filter(x=>x.id!==id),'Entraînement supprimé.').catch(e=>setMessage(e.message||'Suppression impossible.'))}/>}
   </section>;

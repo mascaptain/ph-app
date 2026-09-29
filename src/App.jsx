@@ -209,7 +209,7 @@ const resolveDay = ({rawDay, doneDay, beforeStart, past, queueSession}) => {
 const SESSION_TEMPLATES = [...PROGRAM.filter(d=>d.salle).map(d=>({label:d.label,salle:d.salle,muscle:d.muscle,exercises:d.exercises,abs:d.abs,ids:d.ids})), REST_TPL];
 
 // Rotation hebdo - mesocycle hybride (Volume -> Intensite -> Puissance -> Deload)
-const VERSION="5.10.0";
+const VERSION="5.11.0";
 const weekNumber = () => { const dt=new Date(); const d=new Date(Date.UTC(dt.getFullYear(),dt.getMonth(),dt.getDate())); const dn=(d.getUTCDay()+6)%7; d.setUTCDate(d.getUTCDate()-dn+3); const ft=new Date(Date.UTC(d.getUTCFullYear(),0,4)); const fn=(ft.getUTCDay()+6)%7; ft.setUTCDate(ft.getUTCDate()-fn+3); return 1+Math.round((d-ft)/604800000); };
 const PHASES12=[{n:"Accumulation",f:"Volume, base"},{n:"Accumulation",f:"Volume"},{n:"Accumulation",f:"Volume +"},{n:"Intensification",f:"Charges +"},{n:"Intensification",f:"Charges ++"},{n:"Intensification",f:"Lourd"},{n:"Réalisation",f:"Explosif"},{n:"Réalisation",f:"Puissance"},{n:"Réalisation",f:"Pic de force"},{n:"Deload",f:"Récupération"},{n:"Test / PR",f:"Validation"},{n:"Test / PR",f:"Nouveaux maxs"}];
 const programWeek=()=>((weekNumber()-1)%12)+1;
@@ -318,7 +318,7 @@ const perfIndex=(sessions)=>{
   (sessions||[]).slice().sort((a,b)=>String(a.date).localeCompare(String(b.date))).forEach(s=>{
     (s.exercises||[]).forEach(e=>{
       if(!e||!e.id||!(Number(e.weight)>0)||!(Number(e.completedSets)>0)) return;
-      m[e.id]={kg:Number(e.weight),rpe:(e.rpe!=null?Number(e.rpe):null),date:s.date};
+      m[e.id]={kg:Number(e.weight),rpe:(e.rpe!=null?Number(e.rpe):null),reps:(parseInt(e.reps,10)||null),date:s.date};
     });
   });
   return m;
@@ -421,6 +421,7 @@ import PauseSettings from "./PauseSettings.jsx";
 import WorkoutComposer from "./WorkoutComposer.jsx";
 import { customWorkoutDay, normalizeWorkout, workoutSummary } from "./custom-workouts.js";
 import { HOUSE_WORKOUTS } from "./house-workouts.js";
+import { heroLoad } from "./load-estimate.js";
 import { HEROES, heroFits, heroById, heroSummary } from "./heroes.js";
 
 const REGION={push_h:"haut",push_v:"haut",pull_h:"haut",pull_v:"haut",arm_push:"haut",arm_pull:"haut",squat:"bas",hinge:"bas",core:"core",cardio:"cardio"};
@@ -1532,7 +1533,7 @@ function CircuitPlayer({mode,exos,onClose,defMin,blocks,onAllDone,startBlock,log
   },[bi,log,total]);
   const safeElapsed=Math.min(total,safeSeconds(elapsed));
   const remaining=Math.max(0,total-safeElapsed);
-  const done=total>0&&safeElapsed>=total;
+  const done=(total>0&&safeElapsed>=total)||forTime!=null;
   const curMin=Math.min(durMin,Math.floor(safeElapsed/60)+1);
   const secInMin=done?0:60-(safeElapsed%60);
   const emomEx=cexos.length?cexos[(curMin-1)%cexos.length]:null;
@@ -1664,9 +1665,9 @@ function CircuitPlayer({mode,exos,onClose,defMin,blocks,onAllDone,startBlock,log
     const amrapCadence=60;
     const untilNext=done?0:amrapCadence-(safeElapsed%amrapCadence);
     BODY=(<div style={WRAP}>
-      <Ring pct={total>0?elapsed/total:0} value={done?"FINI":fmtMSS(remaining)} label={done?"terminé":"restant"}/>
+      <Ring pct={forTime!=null||total<=0?1:elapsed/total} value={forTime!=null?fmtMSS(forTime):done?"FINI":fmtMSS(remaining)} label={forTime!=null?"ton temps":done?"terminé":"restant"}/>
       <div style={{textAlign:"center",fontSize:14,color:C.ink3}}>
-        {target?<>Tour <span style={{fontWeight:600,color:C.ink}}>{Math.min(target,rounds+1)}</span> sur {target}</>
+        {target?(forTime!=null?<>Tous les tours bouclés</>:<>Tour <span style={{fontWeight:600,color:C.ink}}>{Math.min(target,rounds+1)}</span> sur {target}</>)
           :<><span style={{fontWeight:600,color:C.ink}}>{rounds}</span> tour{rounds>1?"s":""} complet{rounds>1?"s":""}</>}
         {running&&!done?(manualRounds?" · valide chaque mouvement à ton rythme":` · changement automatique dans ${untilNext}s`):""}
       </div>
@@ -3458,7 +3459,7 @@ function ScheduleEditor({schedule,onChange,onReset,onClose,autoRotate,onToggleAu
 // l'objectif d'entrainement. La frontiere est desormais nette —
 //   Moi       ce qui te decrit et ce qui nourrit le moteur
 //   Reglages  ce qui habille l'application et le compte
-function SettingsTab({user,excluded,onToggleExclude,onSignOut,onReset,onOpenLibrary,profile,schedule,avatarUrl,onUpdateConfig,onOpenScheduleEditor,onRedoOnboarding,progDone,busyWorkout,onLaunchCustom}) {
+function SettingsTab({user,excluded,onToggleExclude,onSignOut,onReset,onOpenLibrary,profile,schedule,avatarUrl,onUpdateConfig,onOpenScheduleEditor,onRedoOnboarding,progDone,busyWorkout,onLaunchCustom,loadCtx}) {
   const[view,setView]=useState("moi");
   const[showLib,setShowLib]=useState(false);
   const[w,setW]=useState(profile?.weight_kg!=null?String(profile.weight_kg):"");
@@ -3689,7 +3690,7 @@ function SettingsTab({user,excluded,onToggleExclude,onSignOut,onReset,onOpenLibr
       {view==="reglages"&&(
       <div key="reglages" style={{animation:`riseIn 300ms ${EO} both`}}>
         <PauseSettings pauses={profile?.training_pauses||[]} today={todayKey()} onSave={onUpdateConfig} colors={C} busyWorkout={busyWorkout}/>
-        <WorkoutComposer workouts={profile?.custom_workouts||[]} onSave={onUpdateConfig} onLaunch={onLaunchCustom} colors={C}/>
+        <WorkoutComposer workouts={profile?.custom_workouts||[]} onSave={onUpdateConfig} onLaunch={onLaunchCustom} loadCtx={loadCtx} colors={C}/>
 
         <div style={{...CARD,padding:"16px",marginBottom:10}}>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:10,marginBottom:10}}>
@@ -4903,7 +4904,7 @@ export default function SomaApp() {
   })();
   const isLate=overdueCount>0;
   const engineCtx={frequency:trainingDaysPerWeek,rms:profile?.rms||{},perf,kbFeedback:kbFeedbackIndex(sessions),
-    strength:patternStrength(profile?.rms||{}),scale:engineScale(profile),
+    strength:patternStrength(profile?.rms||{}),scale:engineScale(profile),equipment:profile?.equipment||[],
     excluded,total:totalSessions};
   const pendingTemplate=(!programDone&&!isBeforeProgramStart)
     ?pendingSessionFor(profile?.goal||"hybride",sessionIndex,profile?.equipment,engineCtx):null;
@@ -4961,7 +4962,7 @@ export default function SomaApp() {
   // Une séance maison ou personnelle s'ajoute comme un Hero : un bloc de plus
   // sous la séance du jour, joué par le lecteur adapté à son format.
   const pickCustomHero=(w)=>{
-    let d=null;try{d=customWorkoutDay(w,tabDate);}catch(_error){return;}
+    let d=null;try{d=customWorkoutDay(w,tabDate,engineCtx);}catch(_error){return;}
     const block=d.blocks[0];if(!block) return;
     setHeroExtra({hero:{id:w.id,name:w.name,cap:block.durationMin,tribute:workoutSummary(w)},tag:"Séance maison",
       exercises:block.exercises,block:{...block,label:workoutSummary(w)}});
@@ -4970,7 +4971,7 @@ export default function SomaApp() {
   const pickHero=(h)=>{
     const makeHeroBlock=(entry,blockIdx)=>({heroId:entry.id,heroName:entry.name,
       label:`Hero ${blockIdx+1} · ${entry.name} · AMRAP ${entry.cap}`,kind:"amrap",execution:"manual_rounds",cadenceSec:0,durationMin:entry.cap,rounds:0,
-      exercises:entry.moves.map((m,k)=>({id:`hero_${entry.id}_${blockIdx}_${k}`,n:m.n,m:"Full body",eq:"bw",kg:m.kg||0,sets:1,reps:String(m.reps),rest:0,role:"density",v5:true,blockIdx}))});
+      exercises:entry.moves.map((m,k)=>({id:`hero_${entry.id}_${blockIdx}_${k}`,n:m.n,m:"Full body",eq:m.kg>0?"bar":"bw",kg:heroLoad(m,engineCtx),rxKg:m.kg||0,sets:1,reps:String(m.reps),rest:0,role:"density",v5:true,blockIdx}))});
     if(heroPickerMode?.type==="replace"){
       // Chaque carte Hero porte son propre index. Remplacer Hero 2 ne touche donc
       // jamais Hero 1, ni l'ordre ni l'identité des autres benchmarks.
@@ -5015,7 +5016,7 @@ export default function SomaApp() {
   const currentQueueKey=sessionIndex+queueOffset(dayIdx);
   const customDraft=log[`${tabDate}__custom_workout`];
   const customDay=(!isDayDone&&!selectedPause&&!isBeforeProgramStart&&customDraft)?(()=>{
-    try {return customWorkoutDay(customDraft,rawDay0?.day);} catch(_error) {return null;}
+    try {return customWorkoutDay(customDraft,rawDay0?.day,engineCtx);} catch(_error) {return null;}
   })():null;
   const day0=customDay||(heroOverride&&heroOverride.key===currentQueueKey&&queuedDay?.archetype==="hero"
     ?{...queuedDay,...heroOverride.day,day:queuedDay.day}:queuedDay);
@@ -5031,7 +5032,7 @@ export default function SomaApp() {
     if(trBeforeStart) return {...REST_TPL,day:trRaw?.day};
     const custom=log[`${trDate}__custom_workout`];
     if(custom&&!sessions.some(s=>s.date===trDate)) {
-      try {return customWorkoutDay(custom,trRaw?.day);} catch(_error) {/* Ignore a malformed snapshot, keep the program available. */}
+      try {return customWorkoutDay(custom,trRaw?.day,engineCtx);} catch(_error) {/* Ignore a malformed snapshot, keep the program available. */}
     }
     // Meme regle que l'onglet Seance : un jour desactive n'a pas de seance.
     const postponed=injuryReports.some(r=>r&&!r.completed_at&&r.to&&r.to<=trDate)&&!sessions.some(s=>s.date===trDate);
@@ -5576,7 +5577,7 @@ const NAV=[{id:"home",l:"Accueil"},{id:"seance",l:"Séances"},{id:"stats",l:"Sta
             </div>
           )}
           {tab==="stats"&&<StatsTab sessions={sessions} weights={weights} accent={accent} trainingDaysPerWeek={trainingDaysPerWeek} profile={profile} weighIns={weighIns} onSaveWeighIn={saveWeighIn} onOpenPhotos={()=>setShowPhotos(true)} photos={photos} photoUrls={photoUrls} pinnedPBs={profile?.pinned_pbs} onManagePBs={()=>setShowPBManager(true)} activeSkills={profile?.active_skills} onManageSkills={()=>setShowSkillManager(true)} onOpenRewards={()=>setShowRewardsManager(true)}><HistoryTab sessions={sessions} onSelect={setShowReport} accent={accent}/></StatsTab>}
-          {tab==="settings"&&<SettingsTab onLaunchCustom={launchCustom} busyWorkout={(clock.sec>0||Object.keys(log).some(k=>k.startsWith(todayKey())&&!k.endsWith('__custom_workout')))&&!sessions.some(s=>s.date===todayKey())} progDone={sessionIndex} user={user} excluded={excluded} onToggleExclude={toggleExclude} onOpenLibrary={()=>setShowLibrary(true)} profile={profile} schedule={schedule} avatarUrl={avatarUrl} onUpdateConfig={updateConfig} onOpenScheduleEditor={()=>setShowSched(true)} onRedoOnboarding={()=>setShowOnboardingRedo(true)}
+          {tab==="settings"&&<SettingsTab onLaunchCustom={launchCustom} loadCtx={engineCtx} busyWorkout={(clock.sec>0||Object.keys(log).some(k=>k.startsWith(todayKey())&&!k.endsWith('__custom_workout')))&&!sessions.some(s=>s.date===todayKey())} progDone={sessionIndex} user={user} excluded={excluded} onToggleExclude={toggleExclude} onOpenLibrary={()=>setShowLibrary(true)} profile={profile} schedule={schedule} avatarUrl={avatarUrl} onUpdateConfig={updateConfig} onOpenScheduleEditor={()=>setShowSched(true)} onRedoOnboarding={()=>setShowOnboardingRedo(true)}
             onSignOut={async()=>{await supabase.auth.signOut();setUser(null);setLog({});setWeights({});setSessions([]);setExcluded([]);setStreak(0);}}
             onReset={async()=>{
               const uid=user?.id;
