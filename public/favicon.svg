@@ -1,9 +1,1 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
-  <!-- Le mot entier est illisible a 16 px : l'icone ne garde que le Ō, la lettre
-       qui porte le macron et qui identifie la marque. -->
-  <rect width="64" height="64" rx="14" fill="#1C1C2B"/>
-  <g fill="none" stroke="#FFFFFF" stroke-width="3.4">
-    <circle cx="32" cy="36" r="15"/>
-    <path d="M20 14H44"/>
-  </g>
-</svg>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-125 -393 1060 1060" role="img" aria-label="SŌMA"><rect x="-125" y="-393" width="1060" height="1060" fill="#ffffff"/><g fill="none" stroke="#111111" stroke-width="11.5" stroke-linejoin="miter"><path d="M158 66 C133 43 106 41 88 41 C48 41 23 60 23 92 C23 125 48 137 88 147 C133 158 162 168 162 199 C162 235 134 254 92 254 C60 254 32 244 12 218"/><path d="M389 256 V45 H397 L487 188 L581 45 H585 V256"/><path d="M585 256 L688 45 H694 L793 256 M618 187 H759"/><circle cx="277" cy="149" r="107"/></g><rect x="221" y="6" width="113" height="11.5" fill="#111111"/></svg>
