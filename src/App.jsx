@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { supabase } from "./supabase.js";
+import BrandWordmark from "./BrandWordmark.jsx";
 import { DB } from "./catalog.js";
 
 // ─── DESIGN TOKENS ───────────────────────────────────────────────────────────
@@ -209,7 +210,7 @@ const resolveDay = ({rawDay, doneDay, beforeStart, past, queueSession}) => {
 const SESSION_TEMPLATES = [...PROGRAM.filter(d=>d.salle).map(d=>({label:d.label,salle:d.salle,muscle:d.muscle,exercises:d.exercises,abs:d.abs,ids:d.ids})), REST_TPL];
 
 // Rotation hebdo - mesocycle hybride (Volume -> Intensite -> Puissance -> Deload)
-const VERSION="5.11.0";
+const VERSION="5.11.1";
 const weekNumber = () => { const dt=new Date(); const d=new Date(Date.UTC(dt.getFullYear(),dt.getMonth(),dt.getDate())); const dn=(d.getUTCDay()+6)%7; d.setUTCDate(d.getUTCDate()-dn+3); const ft=new Date(Date.UTC(d.getUTCFullYear(),0,4)); const fn=(ft.getUTCDay()+6)%7; ft.setUTCDate(ft.getUTCDate()-fn+3); return 1+Math.round((d-ft)/604800000); };
 const PHASES12=[{n:"Accumulation",f:"Volume, base"},{n:"Accumulation",f:"Volume"},{n:"Accumulation",f:"Volume +"},{n:"Intensification",f:"Charges +"},{n:"Intensification",f:"Charges ++"},{n:"Intensification",f:"Lourd"},{n:"Réalisation",f:"Explosif"},{n:"Réalisation",f:"Puissance"},{n:"Réalisation",f:"Pic de force"},{n:"Deload",f:"Récupération"},{n:"Test / PR",f:"Validation"},{n:"Test / PR",f:"Nouveaux maxs"}];
 const programWeek=()=>((weekNumber()-1)%12)+1;
@@ -3787,20 +3788,7 @@ function SettingsTab({user,excluded,onToggleExclude,onSignOut,onReset,onOpenLibr
 // Ō laissait la barre a la merci de la police installee : longueur, epaisseur et
 // hauteur changeaient d'un appareil a l'autre.
 function Wordmark({h=22,color}) {
-  const c=color||C.ink;
-  return (
-    <span role="img" aria-label="SŌMA" style={{display:"inline-flex",alignItems:"baseline",
-      fontFamily:F,fontSize:h,fontWeight:400,letterSpacing:".2em",color:c,lineHeight:1,
-      whiteSpace:"nowrap"}}>
-      <span>S</span>
-      <span style={{position:"relative",display:"inline-block"}}>
-        O
-        <span style={{position:"absolute",left:0,width:"1em",height:Math.max(1,h*0.045),
-          top:"-.30em",background:c,borderRadius:0}}/>
-      </span>
-      <span>MA</span>
-    </span>
-  );
+  return <BrandWordmark h={h} color={color||C.ink}/>;
 }
 
 function TabContent({tab,prevTab,children}) {
