@@ -66,3 +66,18 @@ test('more reps means a lighter load, and quick entry keeps acronyms', () => {
   assert.ok(five>forty);
   assert.equal(parseQuickEntry('5 rdl + front squats').moves[0].name,'RDL');
 });
+
+import {effectiveIndex,swapPositions,swapCandidates,pruneSwaps} from '../src/session-swaps.js';
+test('swapping two queue positions exchanges contents without loss, and swapping back restores', () => {
+  const s=swapPositions({},3,6);
+  assert.equal(effectiveIndex(s,3),6);assert.equal(effectiveIndex(s,6),3);assert.equal(effectiveIndex(s,4),4);
+  assert.deepEqual(swapPositions(s,3,6),{});
+  // Chaîne : 3↔6 puis 3↔5 → 3 joue 5, 5 joue 6, 6 joue 3 (permutation, aucune séance dupliquée).
+  const c=swapPositions(s,3,5);
+  assert.deepEqual([3,4,5,6].map(p=>effectiveIndex(c,p)).sort(),[3,4,5,6]);
+  assert.equal(effectiveIndex(c,3),5);
+});
+test('candidates are the next five sessions, bounded by the program; played positions are pruned', () => {
+  assert.deepEqual(swapCandidates(10,60),[11,12,13,14,15]);assert.deepEqual(swapCandidates(58,60),[59]);
+  assert.deepEqual(pruneSwaps({2:5,5:2,9:12},6),{9:12});
+});

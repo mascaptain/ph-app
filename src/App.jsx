@@ -210,7 +210,7 @@ const resolveDay = ({rawDay, doneDay, beforeStart, past, queueSession}) => {
 const SESSION_TEMPLATES = [...PROGRAM.filter(d=>d.salle).map(d=>({label:d.label,salle:d.salle,muscle:d.muscle,exercises:d.exercises,abs:d.abs,ids:d.ids})), REST_TPL];
 
 // Rotation hebdo - mesocycle hybride (Volume -> Intensite -> Puissance -> Deload)
-const VERSION="5.11.1";
+const VERSION="5.12.0";
 const weekNumber = () => { const dt=new Date(); const d=new Date(Date.UTC(dt.getFullYear(),dt.getMonth(),dt.getDate())); const dn=(d.getUTCDay()+6)%7; d.setUTCDate(d.getUTCDate()-dn+3); const ft=new Date(Date.UTC(d.getUTCFullYear(),0,4)); const fn=(ft.getUTCDay()+6)%7; ft.setUTCDate(ft.getUTCDate()-fn+3); return 1+Math.round((d-ft)/604800000); };
 const PHASES12=[{n:"Accumulation",f:"Volume, base"},{n:"Accumulation",f:"Volume"},{n:"Accumulation",f:"Volume +"},{n:"Intensification",f:"Charges +"},{n:"Intensification",f:"Charges ++"},{n:"Intensification",f:"Lourd"},{n:"Réalisation",f:"Explosif"},{n:"Réalisation",f:"Puissance"},{n:"Réalisation",f:"Pic de force"},{n:"Deload",f:"Récupération"},{n:"Test / PR",f:"Validation"},{n:"Test / PR",f:"Nouveaux maxs"}];
 const programWeek=()=>((weekNumber()-1)%12)+1;
@@ -422,6 +422,7 @@ import PauseSettings from "./PauseSettings.jsx";
 import WorkoutComposer from "./WorkoutComposer.jsx";
 import { customWorkoutDay, normalizeWorkout, workoutSummary } from "./custom-workouts.js";
 import { HOUSE_WORKOUTS } from "./house-workouts.js";
+import { effectiveIndex, swapCandidates, swapPositions, pruneSwaps } from "./session-swaps.js";
 import { heroLoad } from "./load-estimate.js";
 import { HEROES, heroFits, heroById, heroSummary } from "./heroes.js";
 
@@ -1329,7 +1330,7 @@ function HomeTab({profile,streak,sessions,weights,todaySession,onStartToday,acce
   </div>);
 }
 
-function SessionSettingsSheet({day,curMode,onClose,onApply}) {
+function SessionSettingsSheet({day,curMode,onClose,onApply,swapOptions=[],swapped=false,onSwap}) {
   const[mode,setMode]=useState(curMode||"classique");
   const[injury,setInjury]=useState([]);
   const[equipMode,setEquipMode]=useState("all");
@@ -1342,6 +1343,21 @@ function SessionSettingsSheet({day,curMode,onClose,onApply}) {
   return (<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.4)",zIndex:Z.fullscreen,display:"flex",alignItems:"flex-end",justifyContent:"center",fontFamily:F}} onClick={onClose}>
     <div onClick={e=>e.stopPropagation()} style={{width:"100%",maxWidth:600,maxHeight:"88vh",overflowY:"auto",background:C.bg,borderTopLeftRadius:22,borderTopRightRadius:22,padding:"20px 20px calc(20px + env(safe-area-inset-bottom))"}}>
       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:18}}><span style={{fontSize:15,fontWeight:600,color:C.ink}}>Réglages de la séance</span><Tap onTap={onClose} style={{width:36,height:36,borderRadius:12,background:C.s2,display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{fontSize:14,color:C.ink3}}>✕</span></Tap></div>
+      {swapOptions.length>0&&<div style={{marginBottom:22}}>
+        <div style={{fontSize:11.5,fontWeight:600,color:C.ink4,textTransform:"uppercase",letterSpacing:".08em",marginBottom:6}}>Changer de séance</div>
+        <div style={{fontSize:12.5,color:C.ink3,lineHeight:1.5,marginBottom:10}}>Fais une autre séance du moteur aujourd'hui : la tienne prend sa place plus tard, rien n'est perdu.</div>
+        <div style={{display:"grid",gap:8}}>
+          {swapOptions.map(o=>(
+            <Tap key={o.position} label={`Faire ${o.label} aujourd'hui`} onTap={()=>onSwap(o.position)} style={{display:"flex",alignItems:"center",gap:12,padding:"12px 14px",borderRadius:12,background:C.s1,border:`1px solid ${C.div}`}}>
+              <span style={{flex:1,minWidth:0}}>
+                <span style={{display:"block",fontSize:14,fontWeight:600,color:C.ink}}>{o.label}</span>
+                <span style={{display:"block",fontSize:11.5,color:C.ink3,marginTop:2,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{o.detail}</span>
+              </span>
+              <span style={{fontSize:11.5,fontWeight:600,color:C.ink3,flexShrink:0}}>{o.when}</span>
+            </Tap>))}
+        </div>
+        {swapped&&<Tap onTap={()=>onSwap(null)} style={{marginTop:10,padding:"12px 14px",borderRadius:12,border:`1px solid ${C.div}`,textAlign:"center"}}><span style={{fontSize:14,fontWeight:600,color:C.ink3}}>Revenir à l'ordre du moteur</span></Tap>}
+      </div>}
       <div style={{fontSize:11.5,color:C.ink4,marginBottom:18}}>Ces réglages ne s'appliquent qu'à cette séance, pas au reste du programme.</div>
       <div style={{fontSize:11.5,fontWeight:600,color:C.ink4,textTransform:"uppercase",letterSpacing:".08em",marginBottom:10}}>Format</div>
       <div style={{display:"flex",gap:8,marginBottom:22}}>{[["classique","Classique"],["amrap","AMRAP"],["emom","EMOM"]].map(([m,l])=><div key={m} style={{flex:1}}><Chip on={mode===m} label={l} onTap={()=>setMode(m)}/></div>)}</div>
@@ -4582,11 +4598,11 @@ export default function SomaApp() {
 
   const toggleFav=useCallback(id=>{setFavorites(prev=>{const next=prev.includes(id)?prev.filter(x=>x!==id):[...prev,id];persist(user?.id,{favorites:next});return next;});},[persist]);
   const updateConfig=useCallback((updates)=>{
-    if('training_pauses' in updates || 'custom_workouts' in updates) {
+    if('training_pauses' in updates || 'custom_workouts' in updates || 'session_swaps' in updates) {
       return (async()=>{
         try {
           const patch={updated_at:new Date().toISOString()};
-          for(const key of ['training_pauses','custom_workouts']) if(key in updates) patch[key]=updates[key];
+          for(const key of ['training_pauses','custom_workouts','session_swaps']) if(key in updates) patch[key]=updates[key];
           const {error}=await supabase.from('profiles').update(patch).eq('id',user?.id).select('id').single();
           if(error) return {error};
           profileRef.current={...profileRef.current,...patch};
@@ -4895,7 +4911,7 @@ export default function SomaApp() {
     strength:patternStrength(profile?.rms||{}),scale:engineScale(profile),equipment:profile?.equipment||[],
     excluded,total:totalSessions};
   const pendingTemplate=(!programDone&&!isBeforeProgramStart)
-    ?pendingSessionFor(profile?.goal||"hybride",sessionIndex,profile?.equipment,engineCtx):null;
+    ?pendingSessionFor(profile?.goal||"hybride",effectiveIndex(profile?.session_swaps,sessionIndex),profile?.equipment,engineCtx):null;
   // Une journee DEJA ENREGISTREE s'affiche telle qu'elle a ete faite : intitule, muscles et
   // exercices viennent de la seance sauvegardee, qui est la seule verite sur ce qui s'est passe
   // ce jour-la. Auparavant l'entete etait toujours recalculee - depuis la seance suivante en
@@ -4941,7 +4957,7 @@ export default function SomaApp() {
   };
   const sessionFromQueue=(idx,rawDay)=>{
     const tpl=(!programDone&&!isBeforeProgramStart)
-      ?pendingSessionFor(profile?.goal||"hybride",sessionIndex+idx,profile?.equipment,engineCtx):null;
+      ?pendingSessionFor(profile?.goal||"hybride",effectiveIndex(profile?.session_swaps,sessionIndex+idx),profile?.equipment,engineCtx):null;
     if(!tpl) return rawDay;
     let c={...tpl,day:rawDay?.day};
     if(profile?.equipment?.length) c=adaptEquip(c,profile.equipment);
@@ -5037,6 +5053,29 @@ export default function SomaApp() {
   // exercices tires au sort) par-dessus une seance deja faite.
   const day=isDayDone?day0:applyMode(day0,effMode,profile,sessionWeek,dayIdx,perf);
   const sDate=tabDate;
+  // Échange de séance : seulement sur une séance du programme encore à faire.
+  const swapPosition=sessionIndex+queueOffset(dayIdx);
+  const canSwap=!!(day?.salle&&!isDayDone&&!selectedPause&&!isBeforeProgramStart&&!programDone&&!customDraft);
+  const swapOptions=canSwap?swapCandidates(swapPosition,totalSessions).map((pos,k)=>{
+    let t=null;try{t=pendingSessionFor(profile?.goal||"hybride",effectiveIndex(profile?.session_swaps,pos),profile?.equipment,engineCtx);}catch(_e){t=null;}
+    if(!t) return null;
+    return {position:pos,label:t.label,detail:t.badge||t.muscle||"",when:k===0?"Prochaine":`Dans ${k+1} séances`};
+  }).filter(Boolean):[];
+  const isSwapped=canSwap&&effectiveIndex(profile?.session_swaps,swapPosition)!==swapPosition;
+  const doSwap=async(target)=>{
+    if(clock.sec>0||Object.keys(log).some(k=>k.startsWith(tabDate)&&!k.endsWith('__custom_workout'))){
+      notify("Termine ou abandonne la séance en cours avant d'en changer.");return;
+    }
+    const current=profile?.session_swaps||{};
+    let next;
+    if(target==null){ const e=effectiveIndex(current,swapPosition); next=e===swapPosition?current:swapPositions(current,swapPosition,e); }
+    else next=swapPositions(current,swapPosition,target);
+    next=pruneSwaps(next,sessionIndex);
+    const r=await updateConfig({session_swaps:next});
+    if(r&&r.error){notify("Changement impossible, réessaie.");return;}
+    setAiOverride(null);setModeOverride(null);setHeroOverride(null);setHeroExtra(null);setShowSettings(false);
+    notify(target==null?"Ordre du moteur rétabli.":"Séance changée. L'autre passe plus tard.");
+  };
   const launchCustom=async(input)=>{
     const date=todayKey();
     if(pauseOn(profileRef.current?.training_pauses,date)) throw new Error('Le programme est en pause. Reprends-le dans les réglages avant de lancer un entraînement.');
@@ -5651,7 +5690,7 @@ const NAV=[{id:"home",l:"Accueil"},{id:"seance",l:"Séances"},{id:"stats",l:"Sta
       {!showRestFull&&rest.sec>0&&<MiniRest timer={rest} label={restLabel} onExpand={()=>setShowRestFull(true)}/>}
       {detailEx&&<ExerciseSheet ex={detailEx} fav={favorites.includes(detailEx.id)} onToggleFav={toggleFav} onClose={()=>setDetailEx(null)} sessions={sessions}/>}
       {showFeedback&&<FeedbackSheet onClose={()=>{if(!savingSession)setShowFeedback(false);}} onSave={handleFeedbackSave} saving={savingSession}/>}
-      {showSettings&&<SessionSettingsSheet day={day} curMode={effMode} onClose={()=>setShowSettings(false)} onApply={({mode,cons})=>{setModeOverride(mode);setDayCons(cons);setShowSettings(false);}}/>}
+      {showSettings&&<SessionSettingsSheet day={day} curMode={effMode} swapOptions={swapOptions} swapped={isSwapped} onSwap={doSwap} onClose={()=>setShowSettings(false)} onApply={({mode,cons})=>{setModeOverride(mode);setDayCons(cons);setShowSettings(false);}}/>}
       {showInjuryReport&&<InjuryReportSheet onClose={()=>setShowInjuryReport(false)} onReport={reportInjury}/>}
       {showHeroes&&<HeroSheet equipment={profile?.equipment} sessions={sessions}
         title={heroPickerMode?.type==="replace"?`Remplacer Hero ${(heroPickerMode.blockIndex||0)+1}`:undefined}
