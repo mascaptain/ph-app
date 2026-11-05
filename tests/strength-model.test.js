@@ -22,3 +22,12 @@ test('history on a catalogue twin counts for the exercise (same name, same equip
   assert.deepEqual(historyFor({x002:{kg:55}},bb09),{kg:55});
   assert.equal(historyFor({x060:{kg:20}},bb09),null);
 });
+test('pillar progression is applied to the rep-equivalent load, not the raw last load', () => {
+  const base={equipment:['bar','db','kb','mc','cd','bw'],frequency:5,total:60,scale:1,strength:{},rms:{}};
+  // Séance 15 = force haut (développé couché, pilier).
+  const at=(reps)=>{const d=v5Session(15,{...base,perf:{bb01:{kg:62.5,rpe:null,reps}}});return {ex:d.exercises.find(e=>e.id==='bb01'),d};};
+  const same=at(null);assert.ok(same.ex,'développé couché attendu');
+  const targetReps=parseInt(same.ex.reps,10);
+  const fewer=at(targetReps-1).ex.kg, more=at(targetReps+3).ex.kg;
+  assert.ok(more>fewer,`plus de reps la dernière fois (${targetReps+3}) => charge plus haute aujourd'hui : ${more} vs ${fewer}`);
+});

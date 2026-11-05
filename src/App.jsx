@@ -210,7 +210,7 @@ const resolveDay = ({rawDay, doneDay, beforeStart, past, queueSession}) => {
 const SESSION_TEMPLATES = [...PROGRAM.filter(d=>d.salle).map(d=>({label:d.label,salle:d.salle,muscle:d.muscle,exercises:d.exercises,abs:d.abs,ids:d.ids})), REST_TPL];
 
 // Rotation hebdo - mesocycle hybride (Volume -> Intensite -> Puissance -> Deload)
-const VERSION="5.13.0";
+const VERSION="5.13.1";
 const weekNumber = () => { const dt=new Date(); const d=new Date(Date.UTC(dt.getFullYear(),dt.getMonth(),dt.getDate())); const dn=(d.getUTCDay()+6)%7; d.setUTCDate(d.getUTCDate()-dn+3); const ft=new Date(Date.UTC(d.getUTCFullYear(),0,4)); const fn=(ft.getUTCDay()+6)%7; ft.setUTCDate(ft.getUTCDate()-fn+3); return 1+Math.round((d-ft)/604800000); };
 const PHASES12=[{n:"Accumulation",f:"Volume, base"},{n:"Accumulation",f:"Volume"},{n:"Accumulation",f:"Volume +"},{n:"Intensification",f:"Charges +"},{n:"Intensification",f:"Charges ++"},{n:"Intensification",f:"Lourd"},{n:"Réalisation",f:"Explosif"},{n:"Réalisation",f:"Puissance"},{n:"Réalisation",f:"Pic de force"},{n:"Deload",f:"Récupération"},{n:"Test / PR",f:"Validation"},{n:"Test / PR",f:"Nouveaux maxs"}];
 const programWeek=()=>((weekNumber()-1)%12)+1;
@@ -837,24 +837,17 @@ const migrateLocalToServer=async(uid)=>{
 // Chrono pilote de l'exterieur : l'etat est persiste cote serveur (table active_session)
 // par le composant parent. Une seance peut donc etre commencee sur un appareil et
 // terminee sur un autre, et survit a un rechargement.
+// Le chrono ne fait plus redessiner l'application chaque seconde : le hook gardait
+// un compteur qui relançait le rendu de TOUT SomaApp (cartes, moteur, listes) une
+// fois par seconde pendant la séance. Seul <LiveClock> se met à jour ; « sec » est
+// lu à la demande, toujours exact au moment où on le lit.
 function useStopwatch(onPersist) {
   const[st,setSt]=useState(null);
-  const[,tick]=useState(0);
   const stRef=useRef(null);
   const persistRef=useRef(onPersist);
   useEffect(()=>{persistRef.current=onPersist;},[onPersist]);
   useEffect(()=>{stRef.current=st;},[st]);
-  const sec=clockSec(st);
   const running=!!(st&&st.running);
-  useEffect(()=>{
-    if(!running) return undefined;
-    const id=setInterval(()=>tick(t=>t+1),1000);
-    // Au retour au premier plan, le temps est recalcule immediatement (pas de rattrapage progressif).
-    const sync=()=>tick(t=>t+1);
-    document.addEventListener("visibilitychange",sync);
-    window.addEventListener("focus",sync);
-    return()=>{clearInterval(id);document.removeEventListener("visibilitychange",sync);window.removeEventListener("focus",sync);};
-  },[running]);
   const apply=useCallback((next)=>{setSt(next);stRef.current=next;if(persistRef.current)persistRef.current(next);},[]);
   const start=useCallback(()=>apply({startedAt:Date.now(),acc:0,running:true,day:todayKey()}),[apply]);
   const resume=useCallback(()=>apply({startedAt:Date.now(),acc:clockSec(stRef.current),running:true,day:(stRef.current&&stRef.current.day)||todayKey()}),[apply]);
@@ -862,7 +855,20 @@ function useStopwatch(onPersist) {
   const reset=useCallback(()=>apply(null),[apply]);
   // Rehydratation depuis le serveur : ne doit PAS re-declencher une ecriture.
   const hydrate=useCallback((next)=>{setSt(next);stRef.current=next;},[]);
-  return{sec,running,start,resume,stop,reset,hydrate};
+  return{get sec(){return clockSec(stRef.current);},state:st,running,start,resume,stop,reset,hydrate};
+}
+function LiveClock({st}) {
+  const[,tick]=useState(0);
+  const running=!!(st&&st.running);
+  useEffect(()=>{
+    if(!running) return undefined;
+    const id=setInterval(()=>tick(t=>t+1),1000);
+    const sync=()=>tick(t=>t+1);
+    document.addEventListener("visibilitychange",sync);
+    window.addEventListener("focus",sync);
+    return()=>{clearInterval(id);document.removeEventListener("visibilitychange",sync);window.removeEventListener("focus",sync);};
+  },[running]);
+  return fmtDur(clockSec(st));
 }
 
 function useCountdown(onDone) {
@@ -5249,7 +5255,7 @@ const NAV=[{id:"home",l:"Accueil"},{id:"seance",l:"Séances"},{id:"stats",l:"Sta
           </div>
           <div style={{display:"flex",alignItems:"center",gap:10}}>
             {pending>0&&<span title="Enregistrement en attente de réseau" style={{fontSize:11.5,fontWeight:600,color:C.ink3,background:C.s2,padding:"3px 10px",borderRadius:999,marginRight:8}}>⟳ {pending}</span>}
-            {sessionActive&&(clock.running||clock.sec>0)&&<span style={{fontSize:15,fontWeight:600,color:C.alert}}>{fmtDur(clock.sec)}</span>}
+            {sessionActive&&(clock.running||clock.sec>0)&&<span style={{fontSize:15,fontWeight:600,color:C.alert}}><LiveClock st={clock.state}/></span>}
             {streak>0&&<span style={{fontSize:12.5,fontWeight:600,color:C.ink,padding:"4px 12px",borderRadius:999,background:C.s2}}>{streak}j</span>}
             {sbReady&&<div style={{width:6,height:6,borderRadius:"50%",background:C.done}}/>}
           </div>
@@ -5401,7 +5407,7 @@ const NAV=[{id:"home",l:"Accueil"},{id:"seance",l:"Séances"},{id:"stats",l:"Sta
                     <div style={{display:"flex",gap:10,marginBottom:24}}>
                       <Tap onTap={()=>{if(clock.running){clock.stop();}else if(clock.sec>0){clock.resume();}else{clock.start();}}} style={{flex:1,padding:"16px",borderRadius:12,background:clock.running?C.alertSoft:C.s2,border:`1px solid ${clock.running?C.alert:C.div}`,display:"flex",alignItems:"center",justifyContent:"center",gap:8}}>
                         <span style={{fontSize:12.5}}>{clock.running?"⏸":"▶"}</span>
-                        <span style={{fontSize:15,fontWeight:600,color:clock.running?C.alert:C.ink2}}>{clock.sec>0||clock.running?fmtDur(clock.sec):"Chrono"}</span>
+                        <span style={{fontSize:15,fontWeight:600,color:clock.running?C.alert:C.ink2}}>{clock.sec>0||clock.running?<LiveClock st={clock.state}/>:"Chrono"}</span>
                       </Tap>
                       <Tap onTap={()=>{clock.stop();setShowFeedback(true);}} style={{flex:2,padding:"16px",borderRadius:12,background:C.accent,border:"none",display:"flex",alignItems:"center",justifyContent:"center"}}>
                         <span style={{fontSize:15,fontWeight:600,color:C.onAccent}}>Fin de séance</span>

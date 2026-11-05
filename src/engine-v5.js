@@ -56,7 +56,11 @@ const prescribed = (ex, sets, reps, role, ctx, intensity = 1) => {
       const done=Number(perf.reps), target=parseInt(reps,10);
       const repAdj=done>0 && target>0 && done!==target ? (1+done/30)/(1+target/30) : 1;
       kg=perf.kg*factor*repAdj;
-      if (role === "pillar" && !ctx.deload && (!Number.isFinite(rpe) || rpe <= 7) && kg <= perf.kg) kg=perf.kg+(ex.eq === "bar" ? 2.5 : 2);
+      // Le pilier progresse d'un incrément au-dessus de la charge ÉQUIVALENTE aux
+      // reps du jour : comparer à la charge brute annulait la conversion (62,5 kg
+      // × 5 devenait 65 kg × 6 au lieu d'environ 62,5 kg × 6).
+      const base=perf.kg*repAdj;
+      if (role === "pillar" && !ctx.deload && (!Number.isFinite(rpe) || rpe <= 7) && kg <= base) kg=base+(ex.eq === "bar" ? 2.5 : 2);
     }
     // Un 1RM est un maximum : on le ramène au nombre de reps prescrit. Il était
     // auparavant prescrit tel quel, soit une série de 5 à ta charge maximale.
@@ -505,7 +509,13 @@ export const v5Session = (index, ctx = {}) => {
   const key = JSON.stringify({ allowAdvancedHeroes:!!ctx.allowAdvancedHeroes, scale:ctx.scale||1, strength:ctx.strength||{}, equipment: ctx.equipment || [], total: ctx.total || 60,
     rms: ctx.rms || {}, perf: ctx.perf || {}, kbFeedback: ctx.kbFeedback || {}, excluded: ctx.excluded || [], injuryZones: ctx.injuryZones || [] });
   let program = CACHE.get(key);
-  if (!program) { program = buildV5Program(ctx); CACHE.set(key, program); }
+  if (!program) {
+    program = buildV5Program(ctx);
+    // Chaque séance enregistrée change l'historique, donc la clé : sans borne, le
+    // cache gardait un programme complet par version de l'historique.
+    if (CACHE.size >= 6) CACHE.delete(CACHE.keys().next().value);
+    CACHE.set(key, program);
+  }
   const day=program[Math.max(0, index)];
   return day ? structuredClone(day) : null;
 };
