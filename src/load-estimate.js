@@ -79,7 +79,7 @@ export function estimateLoad({ name, quantity, unit = "reps" }, ctx = {}, metcon
     // Ta dernière série réelle sur cet exercice, ramenée au nombre de reps voulu.
     kg = perf.kg * repFactor(Number(perf.reps) > 0 ? Number(perf.reps) : ref.reps, reps);
   } else {
-    const factor = (ctx.strength && ctx.strength[ref.pattern]) || ctx.scale || 1;
+    const factor = (ctx.strength && (ctx.strength[ref.pattern] || ctx.strength._global)) || ctx.scale || 1;
     kg = ref.kg * factor * repFactor(ref.reps, reps);
   }
   if (metcon) kg *= 0.8;
@@ -93,7 +93,7 @@ export function heroLoad(move, ctx = {}) {
   const rx = Number(move && move.kg) || 0;
   if (!(rx > 0) || /wall.?ball|balle|gilet|vest|sac|sandbag/i.test(noAccent(move.n))) return rx;
   const pattern = patternOf({ n: move.n });
-  const factor = (ctx.strength && ctx.strength[pattern]) || ctx.scale || 1;
+  const factor = (ctx.strength && (ctx.strength[pattern] || ctx.strength._global)) || ctx.scale || 1;
   const n = noAccent(move.n);
   const eq = /halt|dumbbell|\bdb\b/.test(n) ? "db" : /kettlebell|\bkb\b|swing|goblet|turkish/.test(n) ? "kb" : "bar";
   // L'arrondi au matériel ne doit jamais faire dépasser la référence.

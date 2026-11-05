@@ -210,7 +210,7 @@ const resolveDay = ({rawDay, doneDay, beforeStart, past, queueSession}) => {
 const SESSION_TEMPLATES = [...PROGRAM.filter(d=>d.salle).map(d=>({label:d.label,salle:d.salle,muscle:d.muscle,exercises:d.exercises,abs:d.abs,ids:d.ids})), REST_TPL];
 
 // Rotation hebdo - mesocycle hybride (Volume -> Intensite -> Puissance -> Deload)
-const VERSION="5.12.0";
+const VERSION="5.13.0";
 const weekNumber = () => { const dt=new Date(); const d=new Date(Date.UTC(dt.getFullYear(),dt.getMonth(),dt.getDate())); const dn=(d.getUTCDay()+6)%7; d.setUTCDate(d.getUTCDate()-dn+3); const ft=new Date(Date.UTC(d.getUTCFullYear(),0,4)); const fn=(ft.getUTCDay()+6)%7; ft.setUTCDate(ft.getUTCDate()-fn+3); return 1+Math.round((d-ft)/604800000); };
 const PHASES12=[{n:"Accumulation",f:"Volume, base"},{n:"Accumulation",f:"Volume"},{n:"Accumulation",f:"Volume +"},{n:"Intensification",f:"Charges +"},{n:"Intensification",f:"Charges ++"},{n:"Intensification",f:"Lourd"},{n:"Réalisation",f:"Explosif"},{n:"Réalisation",f:"Puissance"},{n:"Réalisation",f:"Pic de force"},{n:"Deload",f:"Récupération"},{n:"Test / PR",f:"Validation"},{n:"Test / PR",f:"Nouveaux maxs"}];
 const programWeek=()=>((weekNumber()-1)%12)+1;
@@ -1330,7 +1330,7 @@ function HomeTab({profile,streak,sessions,weights,todaySession,onStartToday,acce
   </div>);
 }
 
-function SessionSettingsSheet({day,curMode,onClose,onApply,swapOptions=[],swapped=false,onSwap}) {
+function SessionSettingsSheet({day,curMode,onClose,onApply,swapOptions=[],swapped=false,onSwap,onHero,onInjury}) {
   const[mode,setMode]=useState(curMode||"classique");
   const[injury,setInjury]=useState([]);
   const[equipMode,setEquipMode]=useState("all");
@@ -1343,6 +1343,16 @@ function SessionSettingsSheet({day,curMode,onClose,onApply,swapOptions=[],swappe
   return (<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.4)",zIndex:Z.fullscreen,display:"flex",alignItems:"flex-end",justifyContent:"center",fontFamily:F}} onClick={onClose}>
     <div onClick={e=>e.stopPropagation()} style={{width:"100%",maxWidth:600,maxHeight:"88vh",overflowY:"auto",background:C.bg,borderTopLeftRadius:22,borderTopRightRadius:22,padding:"20px 20px calc(20px + env(safe-area-inset-bottom))"}}>
       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:18}}><span style={{fontSize:15,fontWeight:600,color:C.ink}}>Réglages de la séance</span><Tap onTap={onClose} style={{width:36,height:36,borderRadius:12,background:C.s2,display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{fontSize:14,color:C.ink3}}>✕</span></Tap></div>
+      {(onHero||onInjury)&&<div style={{display:"grid",gap:8,marginBottom:22}}>
+        {onHero&&<Tap label="Ajouter un Hero WOD" onTap={onHero} style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,padding:"13px 14px",borderRadius:12,background:C.s1,border:`1px solid ${C.div}`}}>
+          <span><span style={{display:"block",fontSize:14,fontWeight:600,color:C.ink}}>Ajouter un Hero WOD</span>
+            <span style={{display:"block",fontSize:11.5,color:C.ink3,marginTop:2}}>Un bloc de plus, ou une séance maison</span></span>
+          <span style={{fontSize:14,color:C.ink4}}>›</span></Tap>}
+        {onInjury&&<Tap label="Indisponible ou blessé" onTap={onInjury} style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,padding:"13px 14px",borderRadius:12,background:C.s1,border:`1px solid ${C.div}`}}>
+          <span><span style={{display:"block",fontSize:14,fontWeight:600,color:C.ink}}>Indisponible ou blessé</span>
+            <span style={{display:"block",fontSize:11.5,color:C.ink3,marginTop:2}}>Reporter la séance à demain</span></span>
+          <span style={{fontSize:14,color:C.ink4}}>›</span></Tap>}
+      </div>}
       {swapOptions.length>0&&<div style={{marginBottom:22}}>
         <div style={{fontSize:11.5,fontWeight:600,color:C.ink4,textTransform:"uppercase",letterSpacing:".08em",marginBottom:6}}>Changer de séance</div>
         <div style={{fontSize:12.5,color:C.ink3,lineHeight:1.5,marginBottom:10}}>Fais une autre séance du moteur aujourd'hui : la tienne prend sa place plus tard, rien n'est perdu.</div>
@@ -1409,6 +1419,18 @@ function CircuitPlayer({mode,exos,onClose,defMin,blocks,onAllDone,startBlock,log
   // Pour le temps : durée réelle, figée quand le dernier tour est validé.
   const [forTime,setForTime]=useState(null);
   const target=Number(cur.targetRounds)||0;
+  // Exercice en temps (« 30s », « 1 min ») dans un circuit : un gainage se tient
+  // chrono en main, il ne se « valide » pas au jugé.
+  const [hold,setHold]=useState(0);
+  const holdRef=useRef(null); const validateRef=useRef(null);
+  const blockStartRef=useRef(Date.now());
+  const [,setTick]=useState(0);
+  useEffect(()=>{
+    if(kind!=="circuit"&&kind!=="superset") return undefined;
+    const t=setInterval(()=>setTick(x=>x+1),1000);
+    return ()=>clearInterval(t);
+  },[kind]);
+  useEffect(()=>()=>clearInterval(holdRef.current),[]);
   const ref=useRef(null); const lastMin=useRef(0); const lastStep=useRef(0); const restRef=useRef(null); const restEndRef=useRef(null); const recoveryRef=useRef("");
   const occRef=useRef({});
   const logOccurrence=(ex)=>{
@@ -1425,7 +1447,7 @@ function CircuitPlayer({mode,exos,onClose,defMin,blocks,onAllDone,startBlock,log
   useEffect(()=>{
     clearInterval(ref.current);clearInterval(restRef.current);
     runningRef.current=false;
-    setRunning(false);setElapsed(0);setRounds(0);setSi(0);setStour(1);setResting(0);setForTime(null);lastMin.current=0;
+    setRunning(false);setElapsed(0);setRounds(0);setSi(0);setStour(1);setResting(0);setForTime(null);clearInterval(holdRef.current);setHold(0);blockStartRef.current=Date.now();lastMin.current=0;
     // Le compteur d'occurrences repartait de zero a chaque ouverture du lecteur : reprendre un
     // bloc interrompu reecrivait par-dessus les tours deja valides. On repart de ce qui est
     // reellement enregistre dans le log.
@@ -1567,7 +1589,18 @@ function CircuitPlayer({mode,exos,onClose,defMin,blocks,onAllDone,startBlock,log
       signalCountdown(nx); setResting(nx);
     },1000);
   };
-  const validateSup=()=>{if(resting>0)return;logOccurrence(cexos[si]);if(si<cexos.length-1){setSi(si+1);}else{setSi(0);if(stour>=supTours){finishBlock();}else{setStour(stour+1);startRest();}}};
+  const validateSup=()=>{if(resting>0)return;clearInterval(holdRef.current);setHold(0);logOccurrence(cexos[si]);if(si<cexos.length-1){setSi(si+1);}else{setSi(0);if(stour>=supTours){finishBlock();}else{setStour(stour+1);startRest();}}};
+  validateRef.current=validateSup;
+  const holdSecOf=(ex)=>{const r=String(ex&&ex.reps||"").trim();let m=r.match(/^(\d+)\s*(s|sec|secondes?)$/i);if(m) return Number(m[1]);m=r.match(/^(\d+)\s*min$/i);return m?Number(m[1])*60:0;};
+  const startHold=(sec)=>{
+    unlockAudio(); play("top"); buzz(30);
+    const endAt=Date.now()+sec*1000; let last=sec; clearInterval(holdRef.current); setHold(sec);
+    holdRef.current=setInterval(()=>{
+      const left=Math.max(0,Math.ceil((endAt-Date.now())/1000));
+      if(left<=0){clearInterval(holdRef.current);setHold(0);signalRestOver();validateRef.current&&validateRef.current();return;}
+      if(left!==last){last=left;signalCountdown(left);setHold(left);}
+    },250);
+  };
   const advanceManualRound=()=>{
     if(!running||done||!cexos.length)return;
     logOccurrence(cexos[si]);
@@ -1664,9 +1697,10 @@ function CircuitPlayer({mode,exos,onClose,defMin,blocks,onAllDone,startBlock,log
         <NextUp label="Reprend par" ex={cexos[0]}/>
       </>):(<>
         <div>
-          <div style={{textAlign:"center",fontSize:11.5,fontWeight:600,color:C.ink4,textTransform:"uppercase",letterSpacing:".12em",marginBottom:10}}>Tour {stour} sur {supTours}</div>
+          <div style={{textAlign:"center",fontSize:11.5,fontWeight:600,color:C.ink4,textTransform:"uppercase",letterSpacing:".12em",marginBottom:10}}>Tour {stour} sur {supTours} · {fmtMSS(Math.floor((Date.now()-blockStartRef.current)/1000))}</div>
           <TourBar d={stour-1} t={supTours}/>
         </div>
+        {hold>0&&<Ring pct={holdSecOf(curEx)>0?(holdSecOf(curEx)-hold)/holdSecOf(curEx):0} value={fmtMSS(hold)} label="tiens"/>}
         <Now ex={curEx} sub={exSub(curEx)}/>
         <Dots n={cexos.length} at={si}/>
         <NextUp label={nextEx?"Enchaîner sans repos":"Puis"} ex={nextEx}/>
@@ -1675,7 +1709,9 @@ function CircuitPlayer({mode,exos,onClose,defMin,blocks,onAllDone,startBlock,log
     FOOT=(<div style={BAR}>
       {resting>0
         ? <Btn label="Passer le repos" act={skipRest} bg={C.s2} fg={C.ink2}/>
-        : <Btn label={si<cexos.length-1?"Fait · exercice suivant":(stour>=supTours?"Terminer le bloc":"Fait · repos")} act={validateSup}/>}
+        : holdSecOf(curEx)>0&&hold===0
+          ? <><Btn label="Fait" act={validateSup} bg={C.s2} fg={C.ink2} flex={0}/><Btn label={`Lancer · ${holdSecOf(curEx)} s`} act={()=>startHold(holdSecOf(curEx))}/></>
+          : <Btn label={hold>0?"Arrêter · valider":si<cexos.length-1?"Fait · exercice suivant":(stour>=supTours?"Terminer le bloc":"Fait · repos")} act={validateSup}/>}
     </div>);
   } else if(kind==="amrap"){
     const curEx=cexos[si],nextEx=cexos.length?cexos[(si+1)%cexos.length]:null;
@@ -5370,20 +5406,10 @@ const NAV=[{id:"home",l:"Accueil"},{id:"seance",l:"Séances"},{id:"stats",l:"Sta
                       <Tap onTap={()=>{clock.stop();setShowFeedback(true);}} style={{flex:2,padding:"16px",borderRadius:12,background:C.accent,border:"none",display:"flex",alignItems:"center",justifyContent:"center"}}>
                         <span style={{fontSize:15,fontWeight:600,color:C.onAccent}}>Fin de séance</span>
                       </Tap>
-                      <Tap label="Ajouter un Hero WOD" onTap={()=>setShowHeroes(true)}
-                        style={{padding:"15px 16px",borderRadius:22,border:`1px solid ${C.div}`,
-                          display:"flex",alignItems:"center",justifyContent:"center"}}>
-                        <span style={{fontSize:12.5,fontWeight:600,color:C.ink3}}>Hero</span>
-                      </Tap>
                       <Tap onTap={()=>setShowSettings(true)} style={{padding:"16px",borderRadius:12,border:`1px solid ${C.div}`,display:"flex",alignItems:"center",justifyContent:"center"}}>
                         <span style={{fontSize:12.5,fontWeight:600,color:C.ink3}}>Réglages</span>
                       </Tap>
                     </div>
-                  )}
-                  {!isDayDone&&!sessionActive&&isViewingToday&&(
-                    <Tap onTap={()=>setShowInjuryReport(true)} style={{width:"100%",marginTop:-14,marginBottom:18,padding:"12px 14px",borderRadius:12,background:C.s1,border:`1px solid ${C.div}`,display:"flex",justifyContent:"center"}}>
-                      <span style={{fontSize:12.5,fontWeight:600,color:C.ink3}}>Indisponible ou blessé · reporter la séance</span>
-                    </Tap>
                   )}
                   {/* L'echauffement etait une liste de texte : meme carte, mais on ne
                       pouvait rien y faire. Il devient un bloc d'exercices comme les autres,
@@ -5443,9 +5469,13 @@ const NAV=[{id:"home",l:"Accueil"},{id:"seance",l:"Séances"},{id:"stats",l:"Sta
                           background:doneToday?C.doneSoft:C.s2,color:doneToday?C.done:C.ink3}}>
                           {doneToday?"validé":`étape ${as.stepIndex+1}/${sk.steps.length}`}</span>
                       </div>
-                      <ExerciseRowCollapsed ex={ex} idx={0} first barColor={C.accent}
-                        dayIdx={dayIdx} sDate={sDate} log={log} doneSession={doneSession}
-                        onOpen={()=>{if(!locked)setFocusIdx(SKILL_OFF+k);}} onOriginY={setFocusOrigin}/>
+                      <Tap label={`Lancer le bloc apprentissage ${sk.name}`} onTap={()=>{if(locked)return;
+                        setSupBlock({label:`Apprentissage · ${sk.name}`,kind:"circuit",exercises:[ex],
+                          restSec:Number(ex.rest)||90,tours:Number(ex.sets)||4,no:1,total:1});}}
+                        style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,padding:"10px 0"}}>
+                        <span style={{fontSize:14,fontWeight:500,color:C.ink}}>{ex.n}</span>
+                        <span style={{fontSize:12.5,color:C.ink3,flexShrink:0}}>{ex.sets} × {ex.reps} · repos {Number(ex.rest)||90} s</span>
+                      </Tap>
                       {!locked&&(doneToday?(
                         <div style={{marginTop:9,fontSize:11.5,fontWeight:600,color:C.done}}>Validé aujourd'hui</div>
                       ):(
@@ -5473,19 +5503,6 @@ const NAV=[{id:"home",l:"Accueil"},{id:"seance",l:"Séances"},{id:"stats",l:"Sta
                       </div>
                     </div>
                   )}
-                  {/* Un Hero se rajoute quand on veut : apres la seance du jour,
-                      un jour de repos, ou a la place de ce qui etait prevu. */}
-                  <Tap label="Faire un Hero WOD" onTap={()=>setShowHeroes(true)}
-                    style={{display:"flex",alignItems:"center",justifyContent:"space-between",
-                      gap:10,background:C.card,border:`1px solid ${C.s2}`,
-                      boxShadow:`0 3px 16px ${C.ink5}`,borderRadius:22,padding:"14px 16px",marginBottom:11}}>
-                    <div style={{minWidth:0}}>
-                      <div style={{fontSize:14,fontWeight:600,color:C.ink}}>Ajouter un Hero WOD</div>
-                      <div style={{fontSize:11.5,color:C.ink4,marginTop:2}}>
-                        250 séances de référence, à faire quand tu veux</div>
-                    </div>
-                    <span style={{fontSize:13,color:C.ink4,flexShrink:0}}>›</span>
-                  </Tap>
                   {day.salle&&<div style={{marginBottom:16}}>
                     <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:sessionMode==="classique"?0:10}}><span style={{fontSize:11.5,fontWeight:600,color:C.ink3,textTransform:"uppercase",letterSpacing:".1em"}}>Séance du jour</span><span style={{fontSize:11.5,fontWeight:600,color:C.onAccent,background:C.accent,padding:"2px 9px",borderRadius:12,textTransform:"uppercase",letterSpacing:".06em"}}>{modeLabel}</span></div>
                     {sessionMode!=="classique"&&!locked&&<Tap onTap={()=>setShowCircuit(true)} style={{display:"flex",alignItems:"center",justifyContent:"center",gap:8,padding:"16px",borderRadius:12,background:C.accentSoft,border:`1px solid ${C.accent}`}}><span style={{fontSize:15}}>⏱</span><span style={{fontSize:15,fontWeight:600,color:C.accent}}>Démarrer le circuit {sessionMode==="amrap"?"AMRAP":"EMOM"}</span></Tap>}
@@ -5540,22 +5557,27 @@ const NAV=[{id:"home",l:"Accueil"},{id:"seance",l:"Séances"},{id:"stats",l:"Sta
                       lisait "4×6" sans jamais pouvoir l'ouvrir ni la valider. */}
                   {absAsExos.length>0&&(()=>{
                     const aDone=auxDone(absAsExos);
+                    // Gainage = circuit : les mouvements s'enchaînent, repos entre les tours,
+                    // compte à rebours sur les tenues. Il se joue comme les autres blocs.
+                    const absTours=Math.max(...absAsExos.map(e=>Number(e.sets)||3));
                     return(
-                    <div style={{background:C.bg,border:`1px solid ${aDone?C.done:C.s2}`,borderRadius:22,
-                      padding:"16px",marginBottom:10,boxShadow:`0 3px 16px ${C.ink5}`,
-                      transition:`border-color 260ms ${EO}`}}>
-                      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,marginBottom:4}}>
+                    <Tap label="Bloc gainage" onTap={()=>{if(locked)return;
+                      setSupBlock({label:"Gainage · abdominaux",kind:"circuit",exercises:absAsExos,
+                        restSec:45,tours:absTours,no:1,total:1});}}
+                      style={{display:"block",background:C.card,border:`1px solid ${aDone?C.done:C.s2}`,
+                        borderRadius:24,padding:"14px 16px",marginBottom:11,
+                        boxShadow:`0 3px 16px ${C.ink5}`,transition:`border-color 260ms ${EO}`}}>
+                      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10}}>
                         <span style={{fontSize:11.5,fontWeight:500,color:C.ink4}}>Bloc gainage · abdominaux</span>
-                        <span style={{fontSize:10,fontWeight:600,padding:"4px 11px",borderRadius:999,whiteSpace:"nowrap",
+                        <span style={{fontSize:10.5,fontWeight:600,padding:"4px 11px",borderRadius:999,whiteSpace:"nowrap",
                           background:aDone?C.doneSoft:C.s2,color:aDone?C.done:C.ink3}}>
-                          {aDone?"terminé":`${absAsExos.length} exercice${absAsExos.length>1?"s":""}`}</span>
+                          {aDone?"terminé":`${absTours} tours · repos 45 s`}</span>
                       </div>
-                      {absAsExos.map((ex,k)=>(
-                        <ExerciseRowCollapsed key={ex.id} ex={ex} idx={k} first={k===0} barColor={C.s4}
-                          dayIdx={dayIdx} sDate={sDate} log={log} doneSession={doneSession}
-                          onOpen={()=>{if(!locked)setFocusIdx(ABS_OFF+k);}} onOriginY={setFocusOrigin}/>
-                      ))}
-                    </div>);
+                      <div style={{fontSize:14,fontWeight:500,color:aDone?C.ink4:C.ink,marginTop:6,
+                        lineHeight:1.5,textDecoration:aDone?"line-through":"none"}}>
+                        {absAsExos.map(e=>`${e.n} ${e.reps}`).join(" · ")}
+                      </div>
+                    </Tap>);
                   })()}
                   {/* Le Hero ajoute a la main : un bloc de plus, en fin de seance. */}
                   {heroExtra&&(
@@ -5690,7 +5712,9 @@ const NAV=[{id:"home",l:"Accueil"},{id:"seance",l:"Séances"},{id:"stats",l:"Sta
       {!showRestFull&&rest.sec>0&&<MiniRest timer={rest} label={restLabel} onExpand={()=>setShowRestFull(true)}/>}
       {detailEx&&<ExerciseSheet ex={detailEx} fav={favorites.includes(detailEx.id)} onToggleFav={toggleFav} onClose={()=>setDetailEx(null)} sessions={sessions}/>}
       {showFeedback&&<FeedbackSheet onClose={()=>{if(!savingSession)setShowFeedback(false);}} onSave={handleFeedbackSave} saving={savingSession}/>}
-      {showSettings&&<SessionSettingsSheet day={day} curMode={effMode} swapOptions={swapOptions} swapped={isSwapped} onSwap={doSwap} onClose={()=>setShowSettings(false)} onApply={({mode,cons})=>{setModeOverride(mode);setDayCons(cons);setShowSettings(false);}}/>}
+      {showSettings&&<SessionSettingsSheet day={day} curMode={effMode} swapOptions={swapOptions} swapped={isSwapped} onSwap={doSwap}
+        onHero={day?.salle&&!isDayDone?()=>{setShowSettings(false);setShowHeroes(true);}:undefined}
+        onInjury={!isDayDone&&!sessionActive&&isViewingToday&&day?.salle?()=>{setShowSettings(false);setShowInjuryReport(true);}:undefined} onClose={()=>setShowSettings(false)} onApply={({mode,cons})=>{setModeOverride(mode);setDayCons(cons);setShowSettings(false);}}/>}
       {showInjuryReport&&<InjuryReportSheet onClose={()=>setShowInjuryReport(false)} onReport={reportInjury}/>}
       {showHeroes&&<HeroSheet equipment={profile?.equipment} sessions={sessions}
         title={heroPickerMode?.type==="replace"?`Remplacer Hero ${(heroPickerMode.blockIndex||0)+1}`:undefined}

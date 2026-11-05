@@ -6,6 +6,7 @@ import { HEROES, heroFits } from "./heroes.js";
 import { metaOf } from "./classify.js";
 import { selectHeroCombination } from "./program-selection.js";
 import { heroLoad } from "./load-estimate.js";
+import { historyFor, FIRST_TIME } from "./strength-model.js";
 
 const find = (id) => DB.find((ex) => ex.id === id) || null;
 const INJURY_RULES = {
@@ -40,8 +41,9 @@ const round = (eq, kg) => {
 
 const prescribed = (ex, sets, reps, role, ctx, intensity = 1) => {
   if (!ex) return null;
-  const perf = ctx.perf && ctx.perf[ex.id];
-  const rm = ctx.rms && ctx.rms[ex.id];
+  // Ton historique sur l'exercice, ou sur son doublon du catalogue (même nom, même matériel).
+  const perf = historyFor(ctx.perf, ex);
+  const rm = historyFor(ctx.rms, ex);
   let kg = ex.kg || 0;
   if (ex.eq !== "bw" && kg > 0) {
     if (perf && perf.kg > 0) {
@@ -56,10 +58,14 @@ const prescribed = (ex, sets, reps, role, ctx, intensity = 1) => {
       kg=perf.kg*factor*repAdj;
       if (role === "pillar" && !ctx.deload && (!Number.isFinite(rpe) || rpe <= 7) && kg <= perf.kg) kg=perf.kg+(ex.eq === "bar" ? 2.5 : 2);
     }
-    else if (rm > 0) kg = rm * intensity;
+    // Un 1RM est un maximum : on le ramène au nombre de reps prescrit. Il était
+    // auparavant prescrit tel quel, soit une série de 5 à ta charge maximale.
+    else if (rm > 0) kg = rm / (1 + (parseInt(reps, 10) || 8) / 30) * intensity;
     // Jamais fait : le rapport de force mesuré sur le même schéma (squat,
     // charnière, poussée…) est plus juste que le seul gabarit.
-    else kg *= (ctx.strength && ctx.strength[metaOf(ex).pattern]) || ctx.scale || 1;
+    // Jamais fait : force sur le même schéma mêlée à ta force globale
+    // (strength-model.js), un cran en dessous pour une première fois.
+    else kg *= ((ctx.strength && (ctx.strength[metaOf(ex).pattern] || ctx.strength._global)) || ctx.scale || 1) * FIRST_TIME;
     // Les séances KB ne doivent pas rester figées à la même cloche et aux mêmes
     // répétitions. Le bilan de la dernière séance KB pilote une progression
     // prudente de la charge, indépendante des 1RM de barre.

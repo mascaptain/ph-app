@@ -253,17 +253,9 @@ const shortTitle = (arch, zone) => {
 // La force de reference se tient PAR SCHEMA, pas par exercice. C'est ce qui
 // permet d'estimer la charge d'un mouvement jamais fait : on part de ce qu'on
 // sait du schema, corrige par le rapport des charges de reference du catalogue.
-export const patternStrength = (rms) => {
-  const best = {};
-  Object.keys(rms || {}).forEach((id) => {
-    const ex = DB.find((e) => e.id === id);
-    if (!ex || !(rms[id] > 0) || !(ex.kg > 0)) return;
-    const p = metaOf(ex).pattern;
-    const ratio = rms[id] / ex.kg;           // combien de fois la reference du catalogue
-    if (!best[p] || ratio > best[p]) best[p] = ratio;
-  });
-  return best;
-};
+// Calcul déplacé dans strength-model.js : il comparait un 1RM à une charge de
+// travail et gardait le maximum, d'où des estimations près de deux fois trop lourdes.
+export { patternStrength } from "./strength-model.js";
 
 const RPE_UP = { 6: 0.05, 7: 0.025, 8: 0, 9: 0, 10: -0.05 };
 const KB_RACK = [6, 8, 10, 12, 16, 20, 24, 32];
