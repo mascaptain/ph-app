@@ -210,7 +210,7 @@ const resolveDay = ({rawDay, doneDay, beforeStart, past, queueSession}) => {
 const SESSION_TEMPLATES = [...PROGRAM.filter(d=>d.salle).map(d=>({label:d.label,salle:d.salle,muscle:d.muscle,exercises:d.exercises,abs:d.abs,ids:d.ids})), REST_TPL];
 
 // Rotation hebdo - mesocycle hybride (Volume -> Intensite -> Puissance -> Deload)
-const VERSION="5.13.1";
+const VERSION="5.13.2";
 const weekNumber = () => { const dt=new Date(); const d=new Date(Date.UTC(dt.getFullYear(),dt.getMonth(),dt.getDate())); const dn=(d.getUTCDay()+6)%7; d.setUTCDate(d.getUTCDate()-dn+3); const ft=new Date(Date.UTC(d.getUTCFullYear(),0,4)); const fn=(ft.getUTCDay()+6)%7; ft.setUTCDate(ft.getUTCDate()-fn+3); return 1+Math.round((d-ft)/604800000); };
 const PHASES12=[{n:"Accumulation",f:"Volume, base"},{n:"Accumulation",f:"Volume"},{n:"Accumulation",f:"Volume +"},{n:"Intensification",f:"Charges +"},{n:"Intensification",f:"Charges ++"},{n:"Intensification",f:"Lourd"},{n:"Réalisation",f:"Explosif"},{n:"Réalisation",f:"Puissance"},{n:"Réalisation",f:"Pic de force"},{n:"Deload",f:"Récupération"},{n:"Test / PR",f:"Validation"},{n:"Test / PR",f:"Nouveaux maxs"}];
 const programWeek=()=>((weekNumber()-1)%12)+1;
@@ -871,22 +871,34 @@ function LiveClock({st}) {
   return fmtDur(clockSec(st));
 }
 
+// Minuteur de repos. Comme le chrono de séance, il ne redessine plus toute
+// l'application chaque seconde : les secondes vivent dans une ref, et seuls les
+// écrans de repos (useTimerTick) se mettent à jour. Le parent ne se redessine
+// qu'au début, à la fin, à la pause et à la remise à zéro.
 function useCountdown(onDone) {
-  const[sec,setSec]=useState(0);const[total,setTotal]=useState(0);const[running,setRunning]=useState(false);const[done,setDone]=useState(false);const ref=useRef(null);
+  const[total,setTotal]=useState(0);const[running,setRunning]=useState(false);const[done,setDone]=useState(false);const ref=useRef(null);
   const left=useRef(0);
+  const listeners=useRef(new Set());
+  const emit=()=>listeners.current.forEach(fn=>fn());
+  const subscribe=useCallback(fn=>{listeners.current.add(fn);return ()=>listeners.current.delete(fn);},[]);
   const start=useCallback(s=>{
-    clearInterval(ref.current);setSec(s);setTotal(s);setRunning(true);setDone(false);left.current=s;
+    clearInterval(ref.current);left.current=s;setTotal(s);setRunning(true);setDone(false);emit();
     ref.current=setInterval(()=>{
-      const nx=left.current-1; left.current=nx;
-      if(nx<=0){clearInterval(ref.current);setSec(0);setRunning(false);setDone(true);signalRestOver();onDone&&onDone();return;}
+      const nx=left.current-1; left.current=Math.max(0,nx);
+      if(nx<=0){clearInterval(ref.current);setRunning(false);setDone(true);emit();signalRestOver();onDone&&onDone();return;}
       signalCountdown(nx);
-      setSec(nx);
+      emit();
     },1000);
   },[onDone]);
   const stop=()=>{clearInterval(ref.current);setRunning(false);};
-  const reset=()=>{clearInterval(ref.current);setRunning(false);setDone(false);setSec(0);setTotal(0);};
+  const reset=()=>{clearInterval(ref.current);left.current=0;setRunning(false);setDone(false);setTotal(0);emit();};
   useEffect(()=>()=>clearInterval(ref.current),[]);
-  return{sec,total,running,done,start,stop,reset};
+  return{get sec(){return left.current;},total,running,done,start,stop,reset,subscribe};
+}
+function useTimerTick(timer) {
+  const[,tick]=useState(0);
+  const subscribe=timer&&timer.subscribe;
+  useEffect(()=>subscribe?subscribe(()=>tick(t=>t+1)):undefined,[subscribe]);
 }
 
 function useCountUp(target,duration=1200) {
@@ -1017,6 +1029,7 @@ function AuthScreen({onAuth}) {
 
 // ─── REST FULL SCREEN — Freeletics-level ─────────────────────────────────────
 function RestFullScreen({timer,label,onSkip,onClose}) {
+  useTimerTick(timer);
   if(!timer.running&&!timer.done&&timer.sec===0) return null;
   const pct=timer.total>0?timer.sec/timer.total:0;
   const R=100,circ=2*Math.PI*R;
@@ -1055,6 +1068,7 @@ function RestFullScreen({timer,label,onSkip,onClose}) {
 
 // ─── MINI REST OVERLAY (when full screen is closed) ──────────────────────────
 function MiniRest({timer,label,onExpand}) {
+  useTimerTick(timer);
   if(!timer.running&&!timer.done&&timer.sec===0) return null;
   const pct=timer.total>0?timer.sec/timer.total:0;
   const R=16,circ=2*Math.PI*R;
