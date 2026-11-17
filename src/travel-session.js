@@ -86,16 +86,20 @@ const PLANS = {
       ["ti_curl_bag", "ti_lat_bottles", "ti_ytw"]],
     lower: [["ti_bss_bed", "ti_pistol_bed"], ["ti_thrust_bed", "ti_bridge_1l"], ["ti_towel_curl", "ti_gm_bag"],
       ["ti_cossack", "ti_slide_lunge"], ["ti_calf_step", "ti_wallsit_bag"]],
-    metcon: ["ti_goblet_bag", "ti_push_bag", "ti_climber_slow", "ti_row_bag", "ti_thruster_bag", "ti_shoulder_tap",
-      "ti_slide_lunge", "ti_hollow", "ti_inchworm", "ti_twist_bag", "ti_bodysaw", "ti_shadow", "ti_bear_hold", "ti_bridge_1l"],
+    // Métabolique : familles alternées dans chaque bloc (jambes, haut, moteur/gainage),
+    // sinon des blocs entiers de gainage sortaient pour un Hero.
+    metcon: [["ti_goblet_bag", "ti_thruster_bag", "ti_slide_lunge", "ti_bridge_1l", "ti_cossack"],
+      ["ti_push_bag", "ti_row_bag", "ti_inchworm", "ti_shoulder_tap", "ti_press_bag", "ti_dips_chairs"],
+      ["ti_climber_slow", "ti_shadow", "ti_hollow", "ti_bodysaw", "ti_twist_bag", "ti_bear_hold"]],
   },
   outdoor: {
     upper: [["to_pullup", "to_pullup_bag"], ["to_push_bench", "to_clap"], ["to_row_bar", "to_hang"],
       ["to_dips_bars", "to_dips_bench"], ["to_pike_bench"]],
     lower: [["to_bss_bench", "to_pistol_bench"], ["to_stepup", "to_walk_lunge"], ["to_broad", "to_jump_lunge"],
       ["to_nordic"], ["to_skater", "to_squat_jump"]],
-    metcon: ["to_burpee", "to_sprint", "to_box_bench", "to_push_bench", "to_walk_lunge", "to_pullup", "to_run",
-      "to_dips_bench", "to_bear", "to_skater", "to_burpee_pull", "to_stepup", "to_knees", "to_squat_jump"],
+    metcon: [["to_walk_lunge", "to_stepup", "to_squat_jump", "to_skater", "to_box_bench"],
+      ["to_pullup", "to_push_bench", "to_dips_bench", "to_burpee_pull", "to_bear"],
+      ["to_burpee", "to_sprint", "to_run", "to_knees"]],
   },
 };
 export const TRAVEL_LABEL = { indoor: "intérieur · sans bruit", outdoor: "extérieur" };
@@ -127,14 +131,15 @@ export function travelDay(day, place = "indoor", seed = 0) {
     return { ...base, recommendedMode: "classique", mode: "classique", blocks: undefined, exercises };
   }
   // Métabolique : mêmes blocs, mêmes formats et durées ; les mouvements tournent.
-  const pool = plan.metcon;
+  const fam = plan.metcon;
+  const used = fam.map((_, f) => seed + f);
   const srcBlocks = Array.isArray(day.blocks) && day.blocks.length ? day.blocks
     : [{ kind: "amrap", durationMin: 15, exercises: [{}, {}, {}] }];
-  let cursor = seed;
   const blocks = srcBlocks.map((b, bi) => {
     const size = Math.max(2, Math.min(5, (b.exercises || []).length || 3));
     const exercises = Array.from({ length: size }, (_, j) => {
-      const e = MOVES[pool[(cursor++) % pool.length]];
+      const f = (j + bi) % fam.length, list = fam[f];
+      const e = MOVES[list[(used[f]++) % list.length]];
       return bw(e, { id: `travel_${e.id}_${bi}_${j}`, baseId: e.id, sets: 1, rest: 0, role: "density", blockIdx: bi });
     });
     const emom = b.kind === "emom";
