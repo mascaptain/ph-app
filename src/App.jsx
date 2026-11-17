@@ -210,7 +210,7 @@ const resolveDay = ({rawDay, doneDay, beforeStart, past, queueSession}) => {
 const SESSION_TEMPLATES = [...PROGRAM.filter(d=>d.salle).map(d=>({label:d.label,salle:d.salle,muscle:d.muscle,exercises:d.exercises,abs:d.abs,ids:d.ids})), REST_TPL];
 
 // Rotation hebdo - mesocycle hybride (Volume -> Intensite -> Puissance -> Deload)
-const VERSION="5.13.2";
+const VERSION="5.14.0";
 const weekNumber = () => { const dt=new Date(); const d=new Date(Date.UTC(dt.getFullYear(),dt.getMonth(),dt.getDate())); const dn=(d.getUTCDay()+6)%7; d.setUTCDate(d.getUTCDate()-dn+3); const ft=new Date(Date.UTC(d.getUTCFullYear(),0,4)); const fn=(ft.getUTCDay()+6)%7; ft.setUTCDate(ft.getUTCDate()-fn+3); return 1+Math.round((d-ft)/604800000); };
 const PHASES12=[{n:"Accumulation",f:"Volume, base"},{n:"Accumulation",f:"Volume"},{n:"Accumulation",f:"Volume +"},{n:"Intensification",f:"Charges +"},{n:"Intensification",f:"Charges ++"},{n:"Intensification",f:"Lourd"},{n:"Réalisation",f:"Explosif"},{n:"Réalisation",f:"Puissance"},{n:"Réalisation",f:"Pic de force"},{n:"Deload",f:"Récupération"},{n:"Test / PR",f:"Validation"},{n:"Test / PR",f:"Nouveaux maxs"}];
 const programWeek=()=>((weekNumber()-1)%12)+1;
@@ -423,6 +423,7 @@ import WorkoutComposer from "./WorkoutComposer.jsx";
 import { customWorkoutDay, normalizeWorkout, workoutSummary } from "./custom-workouts.js";
 import { HOUSE_WORKOUTS } from "./house-workouts.js";
 import { effectiveIndex, swapCandidates, swapPositions, pruneSwaps } from "./session-swaps.js";
+import { travelDay } from "./travel-session.js";
 import { heroLoad } from "./load-estimate.js";
 import { HEROES, heroFits, heroById, heroSummary } from "./heroes.js";
 
@@ -1350,7 +1351,8 @@ function HomeTab({profile,streak,sessions,weights,todaySession,onStartToday,acce
   </div>);
 }
 
-function SessionSettingsSheet({day,curMode,onClose,onApply,swapOptions=[],swapped=false,onSwap,onHero,onInjury}) {
+function SessionSettingsSheet({day,curMode,onClose,onApply,swapOptions=[],swapped=false,onSwap,onHero,onInjury,travel=null,onTravel}) {
+  const[travelOpen,setTravelOpen]=useState(false);
   const[mode,setMode]=useState(curMode||"classique");
   const[injury,setInjury]=useState([]);
   const[equipMode,setEquipMode]=useState("all");
@@ -1372,6 +1374,29 @@ function SessionSettingsSheet({day,curMode,onClose,onApply,swapOptions=[],swappe
           <span><span style={{display:"block",fontSize:14,fontWeight:600,color:C.ink}}>Indisponible ou blessé</span>
             <span style={{display:"block",fontSize:11.5,color:C.ink3,marginTop:2}}>Reporter la séance à demain</span></span>
           <span style={{fontSize:14,color:C.ink4}}>›</span></Tap>}
+      </div>}
+      {onTravel&&<div style={{marginBottom:22}}>
+        <div style={{fontSize:11.5,fontWeight:600,color:C.ink4,textTransform:"uppercase",letterSpacing:".08em",marginBottom:6}}>En voyage</div>
+        {travel?<>
+          <div style={{fontSize:12.5,color:C.ink3,lineHeight:1.5,marginBottom:10}}>Séance au poids du corps · {travel==="outdoor"?"extérieur":"intérieur, sans bruit"}.</div>
+          <div style={{display:"flex",gap:8}}>
+            <div style={{flex:1}}><Chip on={false} label={travel==="outdoor"?"Passer en intérieur":"Passer en extérieur"} onTap={()=>onTravel(travel==="outdoor"?"indoor":"outdoor")}/></div>
+            <div style={{flex:1}}><Chip on={false} label="Séance normale" onTap={()=>onTravel(null)}/></div>
+          </div>
+        </>:!travelOpen?
+          <Tap label="En voyage" onTap={()=>setTravelOpen(true)} style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,padding:"13px 14px",borderRadius:12,background:C.s1,border:`1px solid ${C.div}`}}>
+            <span><span style={{display:"block",fontSize:14,fontWeight:600,color:C.ink}}>Je suis en déplacement</span>
+              <span style={{display:"block",fontSize:11.5,color:C.ink3,marginTop:2}}>La même séance, au poids du corps</span></span>
+            <span style={{fontSize:14,color:C.ink4}}>›</span></Tap>
+        :<>
+          <div style={{fontSize:12.5,color:C.ink3,lineHeight:1.5,marginBottom:10}}>Où vas-tu t'entraîner ?</div>
+          <div style={{display:"grid",gap:8}}>
+            {[["indoor","Intérieur","Sans saut ni course · chambre, hôtel"],["outdoor","Extérieur","Sauts, sprints, course · parc, plage"]].map(([k,l,d])=>(
+              <Tap key={k} label={l} onTap={()=>onTravel(k)} style={{padding:"13px 14px",borderRadius:12,background:C.s1,border:`1px solid ${C.div}`}}>
+                <span style={{display:"block",fontSize:14,fontWeight:600,color:C.ink}}>{l}</span>
+                <span style={{display:"block",fontSize:11.5,color:C.ink3,marginTop:2}}>{d}</span></Tap>))}
+          </div>
+        </>}
       </div>}
       {swapOptions.length>0&&<div style={{marginBottom:22}}>
         <div style={{fontSize:11.5,fontWeight:600,color:C.ink4,textTransform:"uppercase",letterSpacing:".08em",marginBottom:6}}>Changer de séance</div>
@@ -5078,8 +5103,11 @@ export default function SomaApp() {
   const customDay=(!isDayDone&&!selectedPause&&!isBeforeProgramStart&&customDraft)?(()=>{
     try {return customWorkoutDay(customDraft,rawDay0?.day,engineCtx);} catch(_error) {return null;}
   })():null;
-  const day0=customDay||(heroOverride&&heroOverride.key===currentQueueKey&&queuedDay?.archetype==="hero"
+  const programDay0=customDay||(heroOverride&&heroOverride.key===currentQueueKey&&queuedDay?.archetype==="hero"
     ?{...queuedDay,...heroOverride.day,day:queuedDay.day}:queuedDay);
+  // En voyage : la séance prévue, refaite au poids du corps (travel-session.js).
+  const travelPlace=log[`${tabDate}__travel`]?.place||null;
+  const day0=(travelPlace&&!isDayDone&&!customDay&&programDay0?.salle)?travelDay(programDay0,travelPlace,currentQueueKey):programDay0;
   // Seance "aujourd'hui" pour la page Accueil : DOIT utiliser la meme logique de sequence que day0 ci-dessus,
   // independamment de l'onglet jour actuellement affiche (dayIdx peut pointer vers un autre jour que aujourd'hui).
   const todaySessionForHome=(()=>{
@@ -5101,7 +5129,8 @@ export default function SomaApp() {
     let c={...pendingTemplate,day:trDay.day};
     if(profile?.equipment?.length) c=adaptEquip(c,profile.equipment);
     c=personalizeDay(c,profile,sessionWeek,perf);
-    return c;
+    const trTravel=log[`${trDate}__travel`]?.place;
+    return trTravel?travelDay(c,trTravel,sessionIndex):c;
   })();
   const effMode=isDayDone?(doneSession?.mode||"classique"):(modeOverride||day0?.recommendedMode||"classique");
   const sessionMode=effMode;
@@ -5119,7 +5148,7 @@ export default function SomaApp() {
   }).filter(Boolean):[];
   const isSwapped=canSwap&&effectiveIndex(profile?.session_swaps,swapPosition)!==swapPosition;
   const doSwap=async(target)=>{
-    if(clock.sec>0||Object.keys(log).some(k=>k.startsWith(tabDate)&&!k.endsWith('__custom_workout'))){
+    if(clock.sec>0||Object.keys(log).some(k=>k.startsWith(tabDate)&&!k.endsWith('__custom_workout')&&!k.endsWith('__travel'))){
       notify("Termine ou abandonne la séance en cours avant d'en changer.");return;
     }
     const current=profile?.session_swaps||{};
@@ -5132,12 +5161,21 @@ export default function SomaApp() {
     setAiOverride(null);setModeOverride(null);setHeroOverride(null);setHeroExtra(null);setShowSettings(false);
     notify(target==null?"Ordre du moteur rétabli.":"Séance changée. L'autre passe plus tard.");
   };
+  const canTravel=!!(programDay0?.salle&&!isDayDone&&!selectedPause&&!isBeforeProgramStart&&!programDone&&!customDraft);
+  const setTravel=(place)=>{
+    if(clock.sec>0||Object.keys(log).some(k=>k.startsWith(tabDate)&&!k.endsWith('__custom_workout')&&!k.endsWith('__travel'))){
+      notify("Termine ou abandonne la séance en cours avant de changer.");return;
+    }
+    saveLog(`${tabDate}__travel`,{place:place||null});
+    setAiOverride(null);setModeOverride(null);setHeroExtra(null);setShowSettings(false);
+    notify(place?`Séance de voyage prête · ${place==="outdoor"?"extérieur":"intérieur, sans bruit"}.`:"Séance normale rétablie.");
+  };
   const launchCustom=async(input)=>{
     const date=todayKey();
     if(pauseOn(profileRef.current?.training_pauses,date)) throw new Error('Le programme est en pause. Reprends-le dans les réglages avant de lancer un entraînement.');
     if(profile?.program_start>date||programDone) throw new Error('Le programme doit être en cours pour remplacer une séance.');
     if(sessions.some(s=>s.date===date)) throw new Error('La séance d’aujourd’hui est déjà enregistrée. Elle ne sera pas écrasée.');
-    if(clock.sec>0||Object.keys(log).some(k=>k.startsWith(date)&&!k.endsWith('__custom_workout'))) throw new Error('Une séance est déjà en cours. Termine-la avant de changer d’entraînement.');
+    if(clock.sec>0||Object.keys(log).some(k=>k.startsWith(date)&&!k.endsWith('__custom_workout')&&!k.endsWith('__travel'))) throw new Error('Une séance est déjà en cours. Termine-la avant de changer d’entraînement.');
     const workout=normalizeWorkout(input);
     const next={...log,[`${date}__custom_workout`]:workout};
     const {error}=await supabase.from('active_session').upsert({user_id:user.id,date,log:next,updated_at:new Date().toISOString()},{onConflict:'user_id'}).select('user_id').single();
@@ -5646,7 +5684,7 @@ const NAV=[{id:"home",l:"Accueil"},{id:"seance",l:"Séances"},{id:"stats",l:"Sta
             </div>
           )}
           {tab==="stats"&&<StatsTab sessions={sessions} weights={weights} accent={accent} trainingDaysPerWeek={trainingDaysPerWeek} profile={profile} weighIns={weighIns} onSaveWeighIn={saveWeighIn} onOpenPhotos={()=>setShowPhotos(true)} photos={photos} photoUrls={photoUrls} pinnedPBs={profile?.pinned_pbs} onManagePBs={()=>setShowPBManager(true)} activeSkills={profile?.active_skills} onManageSkills={()=>setShowSkillManager(true)} onOpenRewards={()=>setShowRewardsManager(true)}><HistoryTab sessions={sessions} onSelect={setShowReport} accent={accent}/></StatsTab>}
-          {tab==="settings"&&<SettingsTab onLaunchCustom={launchCustom} loadCtx={engineCtx} busyWorkout={(clock.sec>0||Object.keys(log).some(k=>k.startsWith(todayKey())&&!k.endsWith('__custom_workout')))&&!sessions.some(s=>s.date===todayKey())} progDone={sessionIndex} user={user} excluded={excluded} onToggleExclude={toggleExclude} onOpenLibrary={()=>setShowLibrary(true)} profile={profile} schedule={schedule} avatarUrl={avatarUrl} onUpdateConfig={updateConfig} onOpenScheduleEditor={()=>setShowSched(true)} onRedoOnboarding={()=>setShowOnboardingRedo(true)}
+          {tab==="settings"&&<SettingsTab onLaunchCustom={launchCustom} loadCtx={engineCtx} busyWorkout={(clock.sec>0||Object.keys(log).some(k=>k.startsWith(todayKey())&&!k.endsWith('__custom_workout')&&!k.endsWith('__travel')))&&!sessions.some(s=>s.date===todayKey())} progDone={sessionIndex} user={user} excluded={excluded} onToggleExclude={toggleExclude} onOpenLibrary={()=>setShowLibrary(true)} profile={profile} schedule={schedule} avatarUrl={avatarUrl} onUpdateConfig={updateConfig} onOpenScheduleEditor={()=>setShowSched(true)} onRedoOnboarding={()=>setShowOnboardingRedo(true)}
             onSignOut={async()=>{await supabase.auth.signOut();setUser(null);setLog({});setWeights({});setSessions([]);setExcluded([]);setStreak(0);}}
             onReset={async()=>{
               const uid=user?.id;
@@ -5734,7 +5772,8 @@ const NAV=[{id:"home",l:"Accueil"},{id:"seance",l:"Séances"},{id:"stats",l:"Sta
       {showFeedback&&<FeedbackSheet onClose={()=>{if(!savingSession)setShowFeedback(false);}} onSave={handleFeedbackSave} saving={savingSession}/>}
       {showSettings&&<SessionSettingsSheet day={day} curMode={effMode} swapOptions={swapOptions} swapped={isSwapped} onSwap={doSwap}
         onHero={day?.salle&&!isDayDone?()=>{setShowSettings(false);setShowHeroes(true);}:undefined}
-        onInjury={!isDayDone&&!sessionActive&&isViewingToday&&day?.salle?()=>{setShowSettings(false);setShowInjuryReport(true);}:undefined} onClose={()=>setShowSettings(false)} onApply={({mode,cons})=>{setModeOverride(mode);setDayCons(cons);setShowSettings(false);}}/>}
+        onInjury={!isDayDone&&!sessionActive&&isViewingToday&&day?.salle?()=>{setShowSettings(false);setShowInjuryReport(true);}:undefined}
+        travel={travelPlace} onTravel={canTravel?setTravel:undefined} onClose={()=>setShowSettings(false)} onApply={({mode,cons})=>{setModeOverride(mode);setDayCons(cons);setShowSettings(false);}}/>}
       {showInjuryReport&&<InjuryReportSheet onClose={()=>setShowInjuryReport(false)} onReport={reportInjury}/>}
       {showHeroes&&<HeroSheet equipment={profile?.equipment} sessions={sessions}
         title={heroPickerMode?.type==="replace"?`Remplacer Hero ${(heroPickerMode.blockIndex||0)+1}`:undefined}
