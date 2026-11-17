@@ -33,7 +33,7 @@ const MOVES = Object.fromEntries([
   X("ti_bridge_1l", "Pont fessier une jambe pause 2 s", "Fessiers · Ischios", "12", "Talon proche des fesses, l'autre jambe tendue. 12 par côté."),
   X("ti_bridge_far", "Pont fessier talons loin", "Ischios", "12", "Talons loin des fesses : ce sont les ischios qui montent le bassin."),
   X("ti_sl_rdl", "Soulevé de terre une jambe", "Ischios · Équilibre", "10", "Dos plat, la jambe libre part en arrière, mains vers le sol. 10 par côté."),
-  X("ti_wallsit_1l", "Chaise au mur une jambe", "Quads", "30s", "Dos au mur, cuisses parallèles, une jambe tendue devant. 30 s par jambe."),
+  X("ti_wallsit_1l", "Wall sit une jambe", "Quads", "30s", "Assis dans le vide dos au mur, cuisses parallèles, une jambe tendue devant. 30 s par jambe."),
   X("ti_sissy", "Sissy squat", "Quads", "10", "Sur la pointe des pieds, genoux vers l'avant, corps droit des genoux aux épaules."),
   X("ti_calf_1l", "Mollets une jambe", "Mollets", "20", "Sur une jambe, montée complète, pause 1 s en haut."),
   X("ti_squat_tempo", "Squat tempo 4-0-1", "Quads · Fessiers", "15", "Descente 4 s, remontée rapide."),
