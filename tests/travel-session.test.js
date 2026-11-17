@@ -28,3 +28,9 @@ test('rest days and missing days are left untouched; consecutive trips vary', ()
   const d=v5Session(0,ctx);
   assert.notDeepEqual(travelDay(d,'indoor',0).exercises.map(e=>e.n),travelDay(d,'indoor',1).exercises.map(e=>e.n));
 });
+
+test('travel sessions use bodyweight only: no bag, towel, furniture, bench or bar', () => {
+  const GEAR=/b(sac|serviettes?|bouteilles?|chaises?|lit|bureau|table|banc|barre|porte)b/i;
+  for(let i=0;i<10;i++){const d=v5Session(i,ctx);for(const p of ['indoor','outdoor']){
+    travelDay(d,p,i).exercises.forEach(e=>{assert.ok(!GEAR.test(e.n)&&!GEAR.test(e.cue||''),`${p} : ${e.n} — ${e.cue}`);});}}
+});
